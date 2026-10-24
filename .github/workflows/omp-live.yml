@@ -174,27 +174,31 @@ jobs:
       # ubuntu-latest does not preinstall bubblewrap, so every Linux leg runs apt. apt
       # has no overall deadline: when the Azure mirror is unreachable it falls back to
       # archive.ubuntu.com, and one stalled fetch there hung this step for 36 minutes.
-      # Each apt call gets per-request timeouts and a hard deadline, and is retried.
+      # Each apt call gets per-request timeouts and a hard deadline, and update+install
+      # is retried as a unit so a partial index fetch is refreshed before reinstalling.
+      # Worst case (3 x 2 x 130s + 30s backoff) stays inside the 15-minute step limit.
       - name: Ensure a working bubblewrap sandbox (Linux only)
         if: runner.os == 'Linux'
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
           set -euo pipefail
           apt_opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
-          apt_retry() {
+          apt_get() { sudo timeout --kill-after=10 120 apt-get "${apt_opts[@]}" "$@"; }
+          install_bwrap() {
             local attempt
             for attempt in 1 2 3; do
-              if sudo timeout 180 apt-get "${apt_opts[@]}" "$@"; then
+              if apt_get update && apt_get install -y --no-install-recommends bubblewrap; then
                 return 0
               fi
-              echo "::warning::apt-get $1 failed or timed out (attempt $attempt of 3)"
-              sleep $((attempt * 10))
+              echo "::warning::installing bubblewrap failed or timed out (attempt $attempt of 3)"
+              if [ "$attempt" -lt 3 ]; then
+                sleep $((attempt * 10))
+              fi
             done
             return 1
           }
           if ! command -v bwrap >/dev/null 2>&1; then
-            apt_retry update
-            apt_retry install -y --no-install-recommends bubblewrap
+            install_bwrap
           fi
           bwrap --version
           probe() { timeout 30 bwrap --dev-bind / / --unshare-net /bin/true; }
