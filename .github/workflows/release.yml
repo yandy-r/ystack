@@ -69,3 +69,19 @@ jobs:
           artifact="${RUNNER_TEMP}/opencode-npm/yandy-r-ycc-opencode-${GITHUB_REF_NAME#v}.tgz"
           test -f "${artifact}"
           npm publish "${artifact}" --ignore-scripts --provenance --access public
+
+      - name: Wait until npm serves the release as latest
+        # Registry metadata can lag a publish; a green job means a bare-name install resolves this release.
+        run: |
+          expected="${GITHUB_REF_NAME#v}"
+          for attempt in $(seq 1 40); do
+            served="$(npm view @yandy-r/ycc-opencode@latest version --prefer-online 2>/dev/null || true)"
+            if [ "${served}" = "${expected}" ]; then
+              echo "npm serves @yandy-r/ycc-opencode@latest as ${served}"
+              exit 0
+            fi
+            echo "attempt ${attempt}: latest is '${served:-unavailable}', waiting for ${expected}"
+            sleep 15
+          done
+          echo "::error::npm still does not serve ${expected} as latest after 10 minutes"
+          exit 1

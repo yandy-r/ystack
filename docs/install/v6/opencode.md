@@ -90,13 +90,20 @@ directory — not its `index.js` file — with an absolute `file://` entry:
 ```
 
 Only after confirming a version is published to npm, use the registry name in
-your own `opencode.json`:
+your own `opencode.json`, pinned to that exact version (replace `X.Y.Z`):
 
 ```json
 {
-  "plugins": ["@yandy-r/ycc-opencode"]
+  "plugins": ["@yandy-r/ycc-opencode@X.Y.Z"]
 }
 ```
+
+Do not use the bare package name. Right after a release, the npm registry can
+briefly serve stale `latest` metadata, and the package's early `0.0.0-*`
+placeholder versions are not loadable plugins; opencode resolving the bare name
+in that window fails with `Plugin entrypoint not found`. Wait for the release
+workflow to go green, which confirms npm serves the new version as `latest`,
+then bump the pin.
 
 **Choose the npm route deliberately; do not assume file-copy dedupe.** Same-ID
 file-copy skills override package skills, agents field-blend over package
