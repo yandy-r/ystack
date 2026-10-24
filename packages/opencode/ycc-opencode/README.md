@@ -8,11 +8,15 @@ Requires OpenCode `>=2.0.30` (V2 plugin API; V1 hook plugins are not supported).
 
 ## Enable
 
-Add the package to the V2 `plugins` array in your own `opencode.json`:
+Add the package to the V2 `plugins` array in your own `opencode.json`, pinned to an exact release:
 
 ```json
-{ "plugins": ["@yandy-r/ycc-opencode"] }
+{ "plugins": ["@yandy-r/ycc-opencode@6.1.1"] }
 ```
+
+Pin the version instead of using the bare name. Right after a release, the registry can briefly serve
+stale `latest` metadata, and early placeholder versions of this package (`0.0.0-*`) were never
+loadable plugins. Bump the pin when you upgrade.
 
 A local checkout loads with a directory entry (`"file:///abs/path/to/packages/opencode/ycc-opencode"`),
 not the `index.js` file.
