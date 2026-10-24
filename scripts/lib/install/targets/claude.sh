@@ -14,6 +14,9 @@ source "${SCRIPT_DIR}/scripts/lib/install/targets/claude-mods.sh"
 # claude_valid_steps — comma-separated steps Claude accepts for --only.
 claude_valid_steps() { echo "base,skills,agents,commands,settings,rules,mcp,hooks,mods"; }
 
+# claude_dry_run_steps — steps --dry-run can preview (merge helper only).
+claude_dry_run_steps() { echo "mcp"; }
+
 # claude_intent_steps <intent> — steps <intent> maps to; empty means no-op.
 claude_intent_steps() {
     case "$1" in

@@ -63,10 +63,20 @@ valid_steps_for_target() {
     "${1}_valid_steps"
 }
 
+# step_valid_for_any_target <step> — true when a resolved target accepts <step>.
+step_valid_for_any_target() {
+    local t
+    for t in "${TARGETS[@]}"; do
+        [[ ",$(valid_steps_for_target "${t}")," == *",$1,"* ]] && return 0
+    done
+    return 1
+}
+
 # validate_only_steps <target> [quiet]
 # If --only was passed, ensure every requested step is valid for the target.
 # A slice step (skills/agents/commands) the target has no home for is skipped
-# with a notice instead, so '--target all --only commands' still works; pass
+# with a notice instead, so '--target all --only commands' still works; so is
+# any step under --target all that another resolved target accepts. Pass
 # 'quiet' to suppress that notice (preflight).
 validate_only_steps() {
     local target="$1"
@@ -89,6 +99,9 @@ validate_only_steps() {
             [[ "$v" == "$requested" ]] && { found=1; break; }
         done
         if [[ $found -eq 0 && " skills agents commands " == *" ${requested} "* ]]; then
+            [[ -n "${quiet}" ]] || warn "step '${requested}' is not supported by target '${target}' — skipping"
+        elif [[ $found -eq 0 && "${TARGET:-}" == "all" ]] && step_valid_for_any_target "${requested}"; then
+            # '--target all --only mcp': the targets without the step sit it out.
             [[ -n "${quiet}" ]] || warn "step '${requested}' is not supported by target '${target}' — skipping"
         elif [[ $found -eq 0 ]]; then
             err "--only step '${requested}' is not valid for target '${target}' (valid: ${valid_csv})"
@@ -206,6 +219,7 @@ run_target() {
     local -a only_saved=(${ONLY_STEPS[@]+"${ONLY_STEPS[@]}"})
     local exclusive_saved="${EXCLUSIVE_STEPS:-0}"
     skip_unselectable_steps "${target}"
+    skip_dry_run_steps "${target}"
     # --with-deps extends the selection for this target only (select.sh).
     local skills_saved="${SELECTION[skills]:-}" agents_saved="${SELECTION[agents]:-}" commands_saved="${SELECTION[commands]:-}"
     expand_with_deps "${target}"
@@ -215,6 +229,28 @@ run_target() {
     SELECTION[commands]="${commands_saved}"
     ONLY_STEPS=(${only_saved[@]+"${only_saved[@]}"})
     EXCLUSIVE_STEPS="${exclusive_saved}"
+}
+
+# skip_dry_run_steps <target> — with --dry-run, keep only the steps <target>
+# can preview (<target>_dry_run_steps; none when undefined) and say so for
+# every other selected step instead of running it. Rewrites ONLY_STEPS
+# (exclusive mode), like skip_unselectable_steps.
+skip_dry_run_steps() {
+    local target="$1" step previewable=""
+    [[ "${DRY_RUN:-0}" == "1" ]] || return 0
+    declare -F "${target}_dry_run_steps" >/dev/null && previewable="$("${target}_dry_run_steps")"
+    local -a kept=()
+    for step in $(valid_steps_for_target "${target}" | tr ',' ' '); do
+        step_enabled "${step}" || continue
+        if [[ ",${previewable}," == *",${step},"* ]]; then
+            kept+=("${step}")
+        else
+            info "dry-run: ${target} ${step} step has no preview — skipped (nothing written)"
+        fi
+    done
+    ONLY_STEPS=(${kept[@]+"${kept[@]}"})
+    # shellcheck disable=SC2034  # EXCLUSIVE_STEPS is read by step_enabled.
+    EXCLUSIVE_STEPS=1
 }
 
 # ---------------------------------------------------------------------------

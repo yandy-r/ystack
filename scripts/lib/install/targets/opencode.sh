@@ -30,6 +30,9 @@ OPENCODE_BUNDLE_UNITS=(skills agents commands shared ycc-sensitive-guard)
 # opencode_valid_steps — comma-separated steps opencode accepts for --only.
 opencode_valid_steps() { echo "base,skills,agents,commands,settings,rules,mcp"; }
 
+# opencode_dry_run_steps — steps --dry-run can preview (merge helper only).
+opencode_dry_run_steps() { echo "mcp"; }
+
 # opencode_intent_steps <intent> — steps <intent> maps to; empty means no-op.
 opencode_intent_steps() {
     case "$1" in

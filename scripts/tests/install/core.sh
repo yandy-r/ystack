@@ -271,7 +271,7 @@ if ! command -v fish >/dev/null || fish -n "${REPO_ROOT}/scripts/completions/ycc
 out="$(bash -c 'source "$1"; COMP_WORDS=(ycc sync --target claude,co); COMP_CWORD=3; _ycc; echo "${COMPREPLY[*]}"' _ "${REPO_ROOT}/scripts/completions/ycc.bash")"
 assert_contains "${out}" "claude,codex" "bash completion completes comma lists"
 # bash completion behaviour: omp is a --target value (migrate too) and the
-# omp-only --dry-run is offered for install, sync and remove.
+# --dry-run is offered for install, sync and remove.
 complete_bash() {
     bash -c 'source "$1"; shift; COMP_WORDS=("$@"); COMP_CWORD=$(($# - 1)); _ycc; echo "${COMPREPLY[*]}"' \
         _ "${REPO_ROOT}/scripts/completions/ycc.bash" "$@"

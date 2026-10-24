@@ -131,15 +131,11 @@ else
     ko "omp dry-run writes no state, export or marketplace registry"
 fi
 
-for target in codex all; do
-    home="$(new_home)"
-    if out="$(run_install "${home}" install --target "${target}" --dry-run)"; then
-        ko "--dry-run rejected for --target ${target}"
-    else
-        assert_contains "${out}" "--dry-run is only supported by the omp target" "--dry-run rejected for --target ${target}"
-    fi
-    assert_not_contains "$(omp_log "${home}")" "omp plugin" "--target ${target} --dry-run rejection runs no omp plugin call"
-done
+# Other targets now dry-run too (dry-run.sh); omp still makes no omp call.
+home="$(new_home)"
+install_must_succeed "${home}" install --target codex --dry-run
+assert_contains "${INSTALL_OUT}" "dry-run: codex base step has no preview" "--target codex --dry-run skips the codex base step"
+assert_not_contains "$(omp_log "${home}")" "omp plugin" "--target codex --dry-run runs no omp plugin call"
 
 echo
 echo "== install.sh: omp package, mode and --target all gates =="

@@ -13,6 +13,9 @@ CODEX_AGENTS_DIR="${SCRIPT_DIR}/.codex-plugin/agents"
 # codex_valid_steps — comma-separated steps Codex accepts for --only.
 codex_valid_steps() { echo "base,skills,agents,settings,rules,mcp"; }
 
+# codex_dry_run_steps — steps --dry-run can preview (merge helper only).
+codex_dry_run_steps() { echo "mcp"; }
+
 # codex_intent_steps <intent> — steps <intent> maps to; empty means no-op.
 codex_intent_steps() {
     case "$1" in

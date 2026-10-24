@@ -191,6 +191,7 @@ Remove ('remove' subcommand):
   $(basename "$0") remove --target all --intent base,settings,rules,hooks,plugins,mods
   $(basename "$0") remove --target opencode --intent agents,commands
   $(basename "$0") remove --target opencode --intent plugins --plugins oh-my-opencode-slim --purge-cache
+  $(basename "$0") remove --target all --only mcp --dry-run     # preview, change nothing
   $(basename "$0") remove --target omp --only base --dry-run    # preview the omp uninstall
 
 Scope (--project | --global, mutually exclusive):
@@ -380,16 +381,22 @@ Options:
                       and whose step runs; skips dependencies available from
                       elsewhere (the ycc plugin, your own entries) unless ycc
                       owns them. Prints '<target>: --with-deps adds ...'.
-  --dry-run           install / sync / remove, omp target only (every resolved
-                      target must be omp). Previews every 'omp plugin' call
-                      (omp's own --dry-run where it has one) and the planned
-                      --settings merge and --rules link without building,
-                      exporting or writing state.
+  --dry-run           install / sync / remove: preview without writing any
+                      config, file or ownership state. The mcp step (claude,
+                      cursor, codex, opencode) prints each 'would set' /
+                      'would remove'. omp previews every step: each 'omp
+                      plugin' call (omp's own --dry-run where it has one) and
+                      the planned --settings merge and --rules link, without
+                      building or exporting. Every other step says it has no
+                      preview and is skipped (nothing runs).
   --only <steps>      Exclusive: run only the comma-separated steps
                       (e.g. --only settings, --only rules,settings).
                       Overrides defaults and --settings/--rules/--mcp/--hooks.
                       A skills/agents/commands step a target has no home for
-                      is skipped with a notice (e.g. commands on codex).
+                      is skipped with a notice (e.g. commands on codex); with
+                      --target all, so is any step another target accepts
+                      (e.g. --only mcp skips agents). A step no target has
+                      is still an error.
   --skills-home <dir> Resolve duplicate skills when ycc skills would land in
                       several of codex/opencode/cursor's own skills dirs (all
                       read ~/.agents/skills too):
@@ -639,7 +646,7 @@ INTENTS=()
 PACKAGE=""
 PACKAGE_CONFLICT_FLAG=0
 SCOPE=""
-# Read by targets/omp.sh (the only target with a dry-run).
+# Read by core.sh (merge helper), steps.sh (skip_dry_run_steps) and targets/omp.sh.
 export DRY_RUN=0
 
 case "${1:-}" in
@@ -882,14 +889,6 @@ if [[ "${WITH_DEPS}" == "1" ]] && ! has_selection skills && ! has_selection agen
     && [[ " ${TARGETS[*]} " != *" claude "* ]]; then
     err "--with-deps needs --skills or --agents (--commands seeds it on claude only)"
     exit 1
-fi
-if [[ "${DRY_RUN}" == "1" ]]; then
-    for target in "${TARGETS[@]}"; do
-        if [[ "${target}" != "omp" ]]; then
-            err "--dry-run is only supported by the omp target"
-            exit 1
-        fi
-    done
 fi
 [[ "${COMMAND}" == "remove" ]] || print_native_deprecation_hints "${TARGETS[@]}"
 if [[ -n "${PACKAGE}" ]]; then
