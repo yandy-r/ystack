@@ -23,6 +23,9 @@ cursor_unit_src_root() {
 # cursor_valid_steps — comma-separated steps Cursor accepts for --only.
 cursor_valid_steps() { echo "base,skills,agents,commands,settings,rules,mcp,hooks"; }
 
+# cursor_dry_run_steps — steps --dry-run can preview (merge helper only).
+cursor_dry_run_steps() { echo "mcp"; }
+
 # cursor_intent_steps <intent> — steps <intent> maps to; empty means no-op.
 cursor_intent_steps() {
     case "$1" in
@@ -152,7 +155,7 @@ sync_cursor_target() {
     command -v python3 >/dev/null 2>&1 || { err "python3 is required but not found"; exit 1; }
     cursor_carrier_preflight install || exit 1
 
-    mkdir -p "${cursor_dir}"
+    [[ "${DRY_RUN:-0}" == "1" ]] || mkdir -p "${cursor_dir}"
 
     # 'base' ships every bundle unit; 'skills' / 'agents' ship one each.
     local -a units=()

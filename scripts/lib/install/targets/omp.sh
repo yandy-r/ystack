@@ -4,7 +4,8 @@
 #   omp_valid_steps, omp_intent_steps <intent>, omp_config_groups,
 #   omp_supports_repo_mode, omp_reads_agents_skills, sync_omp_target, remove_omp_target
 # plus the optional hooks the generic shell calls when they exist:
-#   omp_preflight, omp_in_all, omp_all_skip_reason, omp_repo_mode_hint, omp_project_steps
+#   omp_preflight, omp_in_all, omp_all_skip_reason, omp_repo_mode_hint, omp_project_steps,
+#   omp_dry_run_steps
 #
 # Sourced by install.sh (never run directly); inherits SCRIPT_DIR and the
 # shared helpers from core.sh / steps.sh / bundle.sh.
@@ -22,6 +23,9 @@ OMP_INSTALL_HELPER="${SCRIPT_DIR}/scripts/omp_install.py"
 
 # omp_valid_steps — comma-separated steps omp accepts for --only.
 omp_valid_steps() { echo "base,dedupe,settings,rules"; }
+
+# omp_dry_run_steps — every omp step previews itself under --dry-run.
+omp_dry_run_steps() { omp_valid_steps; }
 
 # omp_intent_steps <intent> — steps <intent> maps to; empty means no-op.
 omp_intent_steps() {
@@ -158,7 +162,6 @@ omp_merge_settings() {
     groups="$(config_groups_for_target omp)"
     [[ -n "${groups}" ]] || return 0
     local -a extra=("${@:2}")
-    [[ "${DRY_RUN:-0}" == "1" ]] && extra+=(--dry-run)
     merge_settings_config omp-config "${SCRIPT_DIR}/ycc/settings/omp/config.yml" \
         "$(omp_config_dest "${agent_dir}")" "${groups}" "${extra[@]}"
 }
@@ -206,7 +209,6 @@ omp_dedupe_step() {
 omp_dedupe_apply() {
     local dest="$1" tmp="$2" mode="$3"
     local -a extra=()
-    [[ "${DRY_RUN:-0}" == "1" ]] && extra+=(--dry-run)
     if [[ "${mode}" == "--remove" ]]; then
         printf '\n%somp: take back ycc skills.ignoredSkills entries from %s%s\n' "${BOLD}" "${dest}" "${NC}"
         printf '{}\n' >"${tmp}" || return 1

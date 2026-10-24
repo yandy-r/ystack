@@ -108,7 +108,8 @@ copy_settings_file() {
 # merge_settings_config <profile> <src> <dest> <groups> [helper-args...]
 # Merge only repo-managed keys while preserving unknown/local settings. Managed
 # values previously written by this helper update automatically; locally edited
-# managed values are preserved unless --force is passed.
+# managed values are preserved unless --force is passed. With --dry-run the
+# helper only reports the change (no config or ownership-state write).
 merge_settings_config() {
     local profile="$1"
     local src="$2"
@@ -128,6 +129,7 @@ merge_settings_config() {
         "${@:5}"
     )
     [[ "${FORCE:-0}" == "1" ]] && command+=(--force)
+    [[ "${DRY_RUN:-0}" == "1" ]] && command+=(--dry-run)
     "${command[@]}"
 }
 

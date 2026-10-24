@@ -225,7 +225,9 @@ invocations there, so there is nothing separate to copy:
 - With the plugin (`base`) also installed, skills appear twice (`ycc:<name>`
   and `<name>`); the installer warns.
 - `--only` / `--intent` skip a slice a target has no home for (e.g.
-  `commands` on codex), so `--target all --only agents` just works.
+  `commands` on codex), so `--target all --only agents` just works. With
+  `--target all`, `--only` also skips any other step a target lacks (e.g.
+  `--only mcp` on the agents target); a step no target has is an error.
 
 ### Selecting Skills, Agents And Commands
 
@@ -571,6 +573,19 @@ taken back:
   copies of each catalog plugin removed from `opencode.json`.
 - A config file left empty is deleted. Codex TOML removal keeps comments,
   trusted projects and unrelated tables.
+
+### Previewing With `--dry-run`
+
+```bash
+./install.sh remove --target all --only mcp --dry-run
+./install.sh sync --target claude,codex --intent mcp --global --dry-run
+```
+
+`--dry-run` works with `install`, `sync` and `remove` on every target and
+writes no config, file or ownership state. The `mcp` step prints each
+`would set` / `would remove` change. On omp every step previews itself (see
+the [OMP guide](omp.md)). Any other step prints
+`dry-run: <target> <step> step has no preview — skipped` and does not run.
 
 ### Legacy Flag Form
 
