@@ -8,8 +8,9 @@
 #   - populated and mixed (empty + populated) categories sum into the total
 #   - per-category rows and the executive-summary total in the report
 #   - a missing category file is skipped
-#   - unreadable findings (grep exit > 1) fail with exit 2, no success banner, no partial report
-#   - a failed placeholder rewrite (read-only output dir) fails with exit 2, no success banner
+#   - a failed findings read (grep exit > 1) fails with exit 2, no success banner, no report left behind
+#   - a failed placeholder rewrite (sed failure) fails with exit 2, no success banner, no report or .tmp left behind
+#   - an inaccessible target dir exits 1 ("Cannot access directory")
 #   - usage errors keep exit 1
 set -euo pipefail
 
@@ -17,7 +18,7 @@ SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]
 REPO_ROOT="$(cd "$(dirname "$SELF")/.." && pwd)"
 SCRIPT="${REPO_ROOT}/ycc/skills/clean/scripts/generate-report.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/ycc-clean-report.XXXXXX")"
-# Restore permissions first: the failure scenarios chmod scratch paths read-only.
+# Restore permissions first: the inaccessible-dir scenario chmods a scratch dir to 000.
 trap 'chmod -R u+rwx "$SCRATCH" 2>/dev/null || true; rm -rf "$SCRATCH"' EXIT
 
 FAILED=0
@@ -52,12 +53,35 @@ EMPTY_FINDINGS=$'# Code\n\n## x\n'
 ONE_FINDING=$'# B\n\n## x\n### junk.tmp\n- **Total Size**: 1 B\n'
 TWO_FINDINGS=$'# A\n\n## x\n### a.png\n### b.png\n- **Total Size**: 2 KB\n'
 
-# run <target> -> sets RC, OUT, ERR
+# run <target> -> sets RC, OUT, ERR. When SHIM_BIN is set it is prepended to
+# PATH for this invocation only.
 run() {
   RC=0
-  OUT="$("$SCRIPT" "$1" 2>"${SCRATCH}/stderr")" || RC=$?
+  OUT="$(PATH="${SHIM_BIN:+${SHIM_BIN}:}${PATH}" "$SCRIPT" "$1" 2>"${SCRATCH}/stderr")" || RC=$?
   ERR="$(cat "${SCRATCH}/stderr" 2>/dev/null || true)"
 }
+
+# make_shim <bin-dir> <name> <fail-pattern> <exit-code> <message>
+# Writes <bin-dir>/<name>: exits <exit-code> with <message> on stderr when any
+# argument matches the shell glob <fail-pattern>; otherwise execs the real tool
+# (resolved before any PATH change).
+make_shim() {
+  local bin="$1" name="$2" pattern="$3" code="$4" message="$5" real
+  real="$(command -v "$name")"
+  mkdir -p "$bin"
+  cat >"${bin}/${name}" <<EOF
+#!/usr/bin/env bash
+for arg in "\$@"; do
+  case "\$arg" in
+    ${pattern}) echo "${message}" >&2; exit ${code} ;;
+  esac
+done
+exec "${real}" "\$@"
+EOF
+  chmod +x "${bin}/${name}"
+}
+
+exists() { if [[ -e "$1" ]]; then echo yes; else echo no; fi; }
 
 # --- 1. empty and populated categories (issue repro) -------------------------
 # Categories are visited in associative-array order, not a fixed order, so the
@@ -108,45 +132,49 @@ assert_eq "missing: exit 0" "0" "$RC"
 assert_contains "missing: total is 1" "Total files identified: 1" "$OUT"
 assert_not_contains "missing: absent category not listed" "docker:" "$OUT"
 
-# --- 5. unreadable findings fail with exit 2 --------------------------------
+# --- 5. failed findings read fails with exit 2 ------------------------------
+# A grep shim exits 2 (the read-error status) for binaries.md only. A stale
+# report from an earlier run must not survive the failure.
 t="$(new_target unreadable)"
 printf '%s' "$ONE_FINDING" >"${t}/.cleanup-analysis/findings/binaries.md"
-# An unreadable regular file makes grep exit 2. Skipped when running as root
-# (the read still succeeds). A stale report from an earlier run must not
-# survive the failure.
 printf 'stale\n' >"${t}/.cleanup-analysis/cleanup-report.md"
-chmod 000 "${t}/.cleanup-analysis/findings/binaries.md"
-if [[ -r "${t}/.cleanup-analysis/findings/binaries.md" ]]; then
-  printf 'SKIP: unreadable findings (file still readable, running as root?)\n'
-else
-  run "$t"
-  assert_eq "unreadable: exit 2" "2" "$RC"
-  assert_not_contains "unreadable: no success banner" "Report generated successfully" "$OUT"
-  assert_contains "unreadable: stderr explains failure" "Failed to generate report" "$ERR"
-  assert_eq "unreadable: no report left behind" "no" "$([[ -e "${t}/.cleanup-analysis/cleanup-report.md" ]] && echo yes || echo no)"
-fi
-chmod 644 "${t}/.cleanup-analysis/findings/binaries.md"
+make_shim "${SCRATCH}/shim-grep" grep '*findings/binaries.md' 2 'grep: shim: simulated read error'
+SHIM_BIN="${SCRATCH}/shim-grep" run "$t"
+assert_eq "unreadable: exit 2" "2" "$RC"
+assert_not_contains "unreadable: no success banner" "Report generated successfully" "$OUT"
+assert_contains "unreadable: findings read error reported" "Failed to read findings file" "$ERR"
+assert_contains "unreadable: stderr explains failure" "Failed to generate report" "$ERR"
+assert_eq "unreadable: no report left behind" "no" "$(exists "${t}/.cleanup-analysis/cleanup-report.md")"
+assert_eq "unreadable: no .tmp left behind" "no" "$(exists "${t}/.cleanup-analysis/cleanup-report.md.tmp")"
 
 # --- 6. failed placeholder rewrite fails with exit 2 -------------------------
-# A pre-created writable report lets the initial `cat >` succeed while the
-# read-only directory makes the `.tmp` write in replace_in_file fail. Skipped
-# when running as root (permissions are not enforced).
-t="$(new_target readonly-dir)"
+# A sed shim exits 4 for the TIMESTAMP_PLACEHOLDER rewrite in replace_in_file
+# (the redirect has already created the .tmp file by then).
+t="$(new_target rewrite-fail)"
 printf '%s' "$ONE_FINDING" >"${t}/.cleanup-analysis/findings/binaries.md"
-: >"${t}/.cleanup-analysis/cleanup-report.md"
-chmod 555 "${t}/.cleanup-analysis"
-if (: >"${t}/.cleanup-analysis/probe") 2>/dev/null; then
-  rm -f "${t}/.cleanup-analysis/probe"
-  printf 'SKIP: read-only output dir (permissions not enforced, running as root?)\n'
-else
-  run "$t"
-  assert_eq "readonly-dir: exit 2" "2" "$RC"
-  assert_not_contains "readonly-dir: no success banner" "Report generated successfully" "$OUT"
-  assert_contains "readonly-dir: stderr explains failure" "Failed to generate report" "$ERR"
-fi
-chmod 755 "${t}/.cleanup-analysis"
+make_shim "${SCRATCH}/shim-sed" sed '*TIMESTAMP_PLACEHOLDER*' 4 'sed: shim: simulated write error'
+SHIM_BIN="${SCRATCH}/shim-sed" run "$t"
+assert_eq "rewrite-fail: exit 2" "2" "$RC"
+assert_not_contains "rewrite-fail: no success banner" "Report generated successfully" "$OUT"
+assert_contains "rewrite-fail: stderr explains failure" "Failed to generate report" "$ERR"
+assert_eq "rewrite-fail: no report left behind" "no" "$(exists "${t}/.cleanup-analysis/cleanup-report.md")"
+assert_eq "rewrite-fail: no .tmp left behind" "no" "$(exists "${t}/.cleanup-analysis/cleanup-report.md.tmp")"
 
-# --- 7. usage errors keep exit 1 --------------------------------------------
+# --- 7. inaccessible target dir exits 1 --------------------------------------
+# Needs real permissions; skipped when they are not enforced (running as root).
+mkdir -p "${SCRATCH}/locked"
+chmod 000 "${SCRATCH}/locked"
+if (cd "${SCRATCH}/locked") 2>/dev/null; then
+  printf 'SKIP: inaccessible target dir (permissions not enforced, running as root?)\n'
+else
+  run "${SCRATCH}/locked"
+  assert_eq "inaccessible: exit 1" "1" "$RC"
+  assert_contains "inaccessible: stderr explains failure" "Cannot access directory" "$ERR"
+  assert_not_contains "inaccessible: no success banner" "Report generated successfully" "$OUT"
+fi
+chmod 755 "${SCRATCH}/locked"
+
+# --- 8. usage errors keep exit 1 --------------------------------------------
 run "${SCRATCH}/does-not-exist"
 assert_eq "usage: missing target dir exits 1" "1" "$RC"
 mkdir -p "${SCRATCH}/no-findings"

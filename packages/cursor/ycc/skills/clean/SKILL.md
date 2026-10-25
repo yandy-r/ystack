@@ -92,7 +92,7 @@ After all agents complete:
 
 ## Phase 3: Report Generation and User Review
 
-1. Run: `${CURSOR_PLUGIN_ROOT}/skills/clean/scripts/generate-report.sh "$TARGET_DIR"`
+1. Run: `${CURSOR_PLUGIN_ROOT}/skills/clean/scripts/generate-report.sh "$TARGET_DIR"`. If it exits non-zero, **STOP**: report the error to the user and do not run `validate-safety.sh` on a partial report
 2. Run safety validation: `${CURSOR_PLUGIN_ROOT}/skills/clean/scripts/validate-safety.sh "$TARGET_DIR/.cleanup-analysis/cleanup-report.md"`
 3. Fix any violations before proceeding
 4. **If --report-only**: Display report summary and **STOP**
