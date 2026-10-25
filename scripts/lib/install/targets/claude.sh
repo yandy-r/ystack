@@ -226,7 +226,8 @@ claude_project_remove_plugin() {
         cd "${root}" || exit 1
         run_claude_cli plugin uninstall "${plugin}@ycc" --scope project
     )
-    actions="$(python3 - "${root}/.claude" "${plugin}" "$(realpath "${SCRIPT_DIR}")" <<'PY'
+    actions="$(python3 - "${root}/.claude" "${plugin}" "$(realpath "${SCRIPT_DIR}")" \
+        "${HOME}/.claude/plugins/installed_plugins.json" "$(cd "${root}" && pwd -P)" <<'PY'
 import json
 import pathlib
 import sys
@@ -251,6 +252,29 @@ for config in configs.values():
                       if isinstance(key, str) and key != removed and key.endswith("@ycc") and value is True)
 if others:
     print("keep:other ycc plugins are still enabled: " + ", ".join(sorted(others)))
+    sys.exit(0)
+# Removing a declaration drops the CLI's machine-wide registration, which
+# disables every other install from it (other projects, user scope) even
+# when they declare ycc themselves. Keep it while any other install remains.
+registry, project = pathlib.Path(sys.argv[4]), sys.argv[5]
+try:
+    installs = json.loads(registry.read_text(encoding="utf-8")).get("plugins") if registry.exists() else {}
+except (OSError, ValueError, AttributeError):
+    print("keep:the plugin registry could not be read")
+    sys.exit(0)
+elsewhere = set()
+for key, entries in (installs or {}).items():
+    if not (isinstance(key, str) and key.endswith("@ycc") and isinstance(entries, list)):
+        continue
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if key == removed and entry.get("scope") == "project" and entry.get("projectPath") == project:
+            continue
+        where = entry.get("projectPath") or entry.get("scope") or "unknown scope"
+        elsewhere.add(f"{key} ({where})")
+if elsewhere:
+    print("keep:other ycc installs still use it: " + ", ".join(sorted(elsewhere)))
     sys.exit(0)
 for scope, config in configs.items():
     marketplaces = config.get("extraKnownMarketplaces")

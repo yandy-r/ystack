@@ -215,6 +215,17 @@ printf '{"extraKnownMarketplaces":{"ycc":{"source":{"source":"directory","path":
 install_must_succeed "${home}" remove --target claude --intent hooks
 assert_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace remove ycc --scope local" "project hooks remove retracts its matching local declaration"
 
+# Removing the declaration drops the CLI's machine-wide registration, so a
+# ycc install in another project (or at user scope) keeps it in place.
+home="$(new_home)"
+mkdir -p "${home}/project/.claude" "${home}/.claude/plugins"
+printf '{"extraKnownMarketplaces":{"ycc":{"source":{"source":"directory","path":"%s"}}}}\n' "${REPO_REAL}" > "${home}/project/.claude/settings.local.json"
+printf '{"version":2,"plugins":{"ycc-hooks@ycc":[{"scope":"project","projectPath":"%s/project"},{"scope":"project","projectPath":"/other/project"}]}}\n' \
+    "$(cd "${home}" && pwd -P)" > "${home}/.claude/plugins/installed_plugins.json"
+install_must_succeed "${home}" remove --target claude --intent hooks
+assert_not_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace remove" "project hooks remove keeps the marketplace another project's install still uses"
+assert_contains "${INSTALL_OUT}" "other ycc installs still use it: ycc-hooks@ycc (/other/project)" "project hooks remove names the install that keeps the marketplace"
+
 home="$(new_home)"
 mkdir -p "${home}/project/.claude"
 cat > "${home}/project/.claude/settings.local.json" <<'JSON'
