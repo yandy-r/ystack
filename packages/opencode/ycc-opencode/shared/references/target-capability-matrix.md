@@ -68,7 +68,7 @@ alone do not make them shipping user install paths. This does not revise the cap
 
 | target   | native, listed today                                                                                                                          | install.sh fallback today                                                                                                                                                                                                                  | unlisted or gated native packages                                           |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| Claude   | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-hooks@ycc` (2.1.300+), `ycc-all@ycc`; `status-bar@ycc-mods`                                                    | Rules, settings, statusline, hooks link, MCP, standalone skills/agents                                                                                                                                                                     | `ycc-agents@ycc` in v7.0.0                                                  |
+| Claude   | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-hooks@ycc` (2.1.300+), `ycc-all@ycc`; `status-bar@ycc-mods`                                                    | Rules, settings, statusline, MCP, standalone skills/agents; hooks via the native `ycc-hooks` plugin at project scope (global hooks link with `--global`)                                                                                   | `ycc-agents@ycc` in v7.0.0                                                  |
 | Cursor   | `ycc`, `ycc-rules`, `ycc-mcp`, `ycc-hooks` via the root `.cursor-plugin/marketplace.json` (interactive `/plugins`); hooks `sessionStart` only | Skills, agents, commands, rules, settings under `~/.cursor/`; optional hooks                                                                                                                                                               | None                                                                        |
 | Codex    | `ycc@ycc`, `ycc-mcp@ycc` via the root `.agents/plugins/marketplace.json`                                                                      | Agent TOMLs, `AGENTS.md`, `config.toml`                                                                                                                                                                                                    | `ycc-hooks` excluded (YAN-1149)                                             |
 | opencode | None                                                                                                                                          | Skills, agents, commands, shared, `opencode.json`, `AGENTS.md`                                                                                                                                                                             | `@yandy-r/ycc-opencode` npm plugin: experimental, opt-in, unpublished       |
@@ -206,10 +206,18 @@ file so the committed `ycc/settings/settings.json` is not modified, and the `set
 later merges repo-managed keys while preserving the CLI-written marketplace entry. It also
 removes legacy `local-ycc-plugins` marketplace and `ycc@local-ycc-plugins` entries from
 `~/.claude.json` and `~/.claude/settings.local.json`, deleting `settings.local.json` if that
-leaves it empty. Other steps: `rules` links `~/.claude/CLAUDE.md`, `hooks` links
-`~/.claude/hooks`, `mods` registers the `ycc-mods` directory marketplace, and `skills`/`agents`
-install standalone copies into `~/.claude/` (warning about duplicate names if `ycc@ycc` is also
-installed). `remove --target claude` uninstalls `ycc@ycc` and the `ycc` marketplace.
+leaves it empty. Other steps: `rules` links `~/.claude/CLAUDE.md`; `hooks` (the
+default) enables the native `ycc-hooks@ycc` plugin at project scope, declaring
+the `ycc` marketplace at project scope (repo mode, committed) or local scope
+(local mode) only when no visible declaration supplies it — never repointing an
+existing declaration — while `--global` links `~/.claude/hooks`; `mods`
+registers the `ycc-mods` directory marketplace; and `skills`/`agents`
+install standalone copies into `~/.claude/` (warning about duplicate names if
+`ycc@ycc` is also installed). The `base` step of `remove --target claude`
+uninstalls `ycc@ycc` and the `ycc` marketplace. The `hooks` intent removes
+`ycc-hooks@ycc` at project scope, then removes only installer-written
+marketplace declarations when no other `@ycc` install remains; with
+`--global`, it removes the installer-managed global hooks link.
 
 **INSTALL_PATH:cursor**
 Sources under `ycc/` generate `packages/cursor/ycc/{skills,agents,commands}/`,

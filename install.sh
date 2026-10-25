@@ -83,7 +83,7 @@ step-flag form used for first-time setup.
   $(basename "$0") sync --target opencode --intent mcp --mcps github,linear
   $(basename "$0") sync --target claude --intent mods
   $(basename "$0") sync --target claude --intent mods --mods status-bar
-  $(basename "$0") sync --target claude --intent hooks --hooks WorktreeCreate
+  $(basename "$0") sync --target claude --intent hooks --hooks WorktreeCreate --global
   $(basename "$0") sync --target claude,codex --intent skills,agents
   $(basename "$0") sync --target claude,codex --intent agents --agents implementor,code-reviewer
   $(basename "$0") sync --target opencode --intent skills,commands --skills clean --commands clean
@@ -125,7 +125,8 @@ plugins, mods):
   settings  Merge repo-managed config keys (models, effort levels, ...).
   rules     Link native global instructions (Cursor: manual Settings guidance).
   mcp       Merge MCP server definitions.
-  hooks     Merge hook config; claude also links the hook scripts directory.
+  hooks     Install hooks. claude defaults to the native ycc-hooks plugin at
+            project scope; --global merges hook config and links its scripts.
   plugins   Merge plugin enablement and marketplace entries. Add 'base' too
             when you also want the target's CLI to perform registration.
   mods      Install the Claude Code mods under ycc/mods (claude only for now).
@@ -135,8 +136,8 @@ plugins, mods):
 
   Intent → step mapping per target:
     claude    base→base  settings→settings  rules→rules  mcp→mcp
-              hooks→settings+hooks  plugins→settings  mods→mods
-              skills→skills  agents→agents  commands→skills (alias)
+              hooks→hooks (project) / settings+hooks (global)  plugins→settings
+              mods→mods  skills→skills  agents→agents  commands→skills (alias)
     cursor    base→base  skills→skills  agents→agents  commands→commands
               settings→settings  rules→rules  mcp→mcp  hooks→hooks
               plugins, mods → no-op
@@ -163,7 +164,10 @@ Remove ('remove' subcommand):
                                 touched, a managed value you edited is kept
                                 with a warning unless --force. A config file
                                 left empty is deleted.
-    rules, claude hooks dir     symlinks, only while they still point here.
+    rules, claude global hooks dir
+                            symlinks, only while they still point here.
+    claude project hooks    native plugin uninstall; its project marketplace
+                            goes only when declared there and no longer used.
     claude statusline script    only while identical to the repo (or --force).
     base                        claude: 'claude plugin uninstall ycc@ycc' +
                                 marketplace remove; cursor/opencode: the
@@ -194,15 +198,18 @@ Remove ('remove' subcommand):
   $(basename "$0") remove --target all --only mcp --dry-run     # preview, change nothing
   $(basename "$0") remove --target omp --only base --dry-run    # preview the omp uninstall
 
+  Global installer-managed Claude hooks need a separate removal:
+  $(basename "$0") remove --target claude --intent hooks --global
+
 Scope (--project | --global, mutually exclusive):
   Without a flag, steps that support project scope use it; all others stay
   global. --project with a step lacking project support is an error. The
   project is the git toplevel of the current directory (else the directory).
-  Project-capable steps today: mcp (default project), omp base,dedupe
-  (opt-in: only with an explicit --project; omp installs default to user
-  scope; dedupe always writes the user config.yml), and opencode settings
-  for catalog plugins only (opt-in: <project>/opencode.json plus companions
-  in <project>/.opencode/).
+  Project-capable steps today: mcp and claude hooks (default project; package
+  installs keep hooks global), omp base,dedupe (opt-in: only with an explicit
+  --project; omp installs default to user scope; dedupe always writes the user
+  config.yml), and opencode settings for catalog plugins only (opt-in:
+  <project>/opencode.json plus companions in <project>/.opencode/).
 
     target    mcp --project                   mcp --global
     claude    <project>/.mcp.json             ~/.claude.json
@@ -211,10 +218,15 @@ Scope (--project | --global, mutually exclusive):
               (Codex loads it only for trusted projects)
     opencode  <project>/opencode.json         ~/.config/opencode/opencode.json
 
+    target    hooks --project                 hooks --global
+    claude    claude plugin install           settings merge +
+              ycc-hooks@ycc --scope project   ~/.claude/hooks link
+              (writes <project>/.claude/settings.json;
+              needs Claude Code >= 2.1.300; refused at \$HOME)
+
     target    base --project                  base (default, or --global)
     omp       omp plugin install --scope      omp plugin install --scope user
               project (refused at \$HOME)
-
 Merge semantics (all structured config files):
   - Keys this repo declares as managed are written; every other key is kept.
   - A managed value the installer previously wrote is updated automatically.
@@ -340,30 +352,33 @@ Options:
                       marketplace while another '<mod>@ycc-mods' key is still
                       in ~/.claude/settings.json enabledPlugins.
                       Names: '$(basename "$0") list mods'
-  --hooks <events>    sync/remove only (install --hooks is the boolean flag
-                      below): comma-separated hook events (e.g.
-                      WorktreeCreate) — the settings step merges (or removes)
-                      only these in the hooks config group; unselected
-                      managed events and their ownership state stay
-                      untouched. Requires the hooks group (--intent hooks).
-                      remove keeps the ~/.claude/hooks link while a managed
-                      event outside the selection remains. A target whose
-                      hooks step has no hook-event selection (cursor) skips
-                      that step with a warning.
+  --hooks <events>    sync/remove only, and only for the --global claude hooks
+                      step (install --hooks is the boolean flag below):
+                      comma-separated hook events (e.g. WorktreeCreate) — the
+                      settings step merges (or removes) only these in the
+                      hooks config group; unselected managed events and their
+                      ownership state stay untouched. Requires the hooks group
+                      (--intent hooks --global). remove keeps the
+                      ~/.claude/hooks link while a managed event outside the
+                      selection remains. A target whose hooks step has no
+                      hook-event selection (cursor) skips it with a warning.
                       Names: '$(basename "$0") list hooks'
-  --project           Scope-capable steps (today: mcp) write into the current
-                      project. Default when neither flag is given. omp base
-                      installs at omp's project scope only with an explicit
-                      --project (never at \$HOME). opencode settings, opt-in
-                      and for catalog plugins only (--intent plugins
+  --project           Scope-capable steps (mcp, claude hooks) write into the
+                      current project. Default when neither flag is given
+                      (except package installs, whose hooks stay global).
+                      Claude project hooks refuse \$HOME. omp base installs at
+                      omp's project scope only with an explicit --project
+                      (never at \$HOME). opencode settings, opt-in and for
+                      catalog plugins only (--intent plugins
                       --plugins <catalog names>): <project>/opencode.json and
                       <project>/.opencode/.
   --global            Scope-capable steps write into user-global config.
   --hooks             install only: additive, also run the target's 'hooks'
-                      step. Currently supported by the claude target only;
-                      silently ignored by targets without hook support.
-                      Mode-agnostic. On sync/remove, --hooks <events> selects
-                      hook events (above).
+                      step. Claude defaults to the native ycc-hooks plugin at
+                      project scope; --global keeps its settings merge and
+                      ~/.claude/hooks link. Silently ignored by targets
+                      without hook support. Mode-agnostic. On sync/remove,
+                      --hooks <events> selects hook events (above).
   --force             Let repo-managed config values win over local edits, and
                       replace real rules files with repo symlinks when needed.
                       Unknown/unmanaged config keys are never removed.
@@ -467,9 +482,13 @@ Target steps:
                       ~/.claude/.
             mcp:      merge mcp-configs/mcp.json mcpServers into <project>/.mcp.json
                       (--project, default) or ~/.claude.json (--global).
-            hooks:    symlink ycc/settings/hooks/ into ~/.claude/hooks/, enabling
-                      the WorktreeCreate hook (keeps harness-managed
-                      worktrees inside <repo>/.claude/worktrees/).
+            hooks:    project default: 'claude plugin install ycc-hooks@ycc
+                      --scope project' (Claude Code >= 2.1.300). When ycc is not
+                      already known, declare the marketplace in the project's
+                      settings.local.json (local mode) or settings.json (repo mode).
+                      --global: merge hook settings + symlink ycc/settings/hooks/
+                      into ~/.claude/hooks/ (WorktreeCreate keeps worktrees in
+                      <repo>/.claude/worktrees/).
             mods:     'claude plugin marketplace add ycc/mods --scope user'
                       (the local 'ycc-mods' marketplace) + 'claude plugin
                       install <mod>@ycc-mods --scope user' for each mod it

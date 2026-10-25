@@ -311,13 +311,12 @@ run_repo_style_format_modified() {
 # ---------------------------------------------------------------------------
 # Scope (--project / --global)
 # ---------------------------------------------------------------------------
-# Steps that can write into the current project instead of the user-global
 # config. Without an explicit flag, these default to project scope and every
-# other step stays global.
-# ponytail: mcp only; widen this per step as project support lands for
-# settings, hooks, rules.
+# other step stays global. Package installs keep Claude hooks global alongside
+# their package-wide settings and rules.
+# ponytail: widen this per step as project support lands for settings, rules.
 step_supports_project() {
-    [[ "$2" == "mcp" ]]
+    [[ "$2" == "mcp" ]] || [[ "$1" == "claude" && "$2" == "hooks" && -z "${PACKAGE:-}" ]]
 }
 
 # step_allows_project <target> <step> — true when an explicit --project is
