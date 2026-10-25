@@ -13,6 +13,12 @@
 
 set -euo pipefail
 
+# Any unexpected failure (including a failed findings read) maps to exit 2 so
+# the script never claims success after a partial run, and the partial report
+# is removed. Usage errors below exit 1 explicitly and do not pass through this
+# trap. Functions do not inherit ERR (no set -E), so they must `|| return`.
+trap 'echo "Error: Failed to generate report (line ${LINENO}: ${BASH_COMMAND})" >&2; if [[ -n "${REPORT_PATH:-}" ]]; then rm -f "$REPORT_PATH" "$REPORT_PATH.tmp" || true; fi; exit 2' ERR
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -27,7 +33,10 @@ if [[ ! -d "$TARGET_DIR" ]]; then
 fi
 
 # Convert to absolute path
-TARGET_DIR=$(cd "$TARGET_DIR" && pwd)
+TARGET_DIR=$(cd "$TARGET_DIR" && pwd) || {
+    echo -e "${RED}Error: Cannot access directory: $TARGET_DIR${NC}" >&2
+    exit 1
+}
 
 # Findings directory
 FINDINGS_DIR="$TARGET_DIR/.cleanup-analysis/findings"
@@ -51,7 +60,15 @@ echo ""
 count_files() {
     local findings_file="$1"
     if [[ -f "$findings_file" ]]; then
-        grep -c '^###' "$findings_file" || echo "0"
+        # grep -c prints the count itself; exit 1 only means zero matches. Any
+        # other non-zero status (e.g. unreadable file) is a real failure.
+        local count status=0
+        count=$(grep -c '^###' "$findings_file") || status=$?
+        if [[ "$status" -gt 1 ]]; then
+            echo "Error: Failed to read findings file: $findings_file" >&2
+            return "$status"
+        fi
+        echo "$count"
     else
         echo "0"
     fi
@@ -61,7 +78,19 @@ count_files() {
 extract_total_size() {
     local findings_file="$1"
     if [[ -f "$findings_file" ]]; then
-        grep -i "^- \*\*Total.*Size\*\*:" "$findings_file" | head -1 | sed 's/.*: //' || echo "0 B"
+        # grep exit 1 means no Total Size line; anything above 1 is a read error.
+        local line status=0
+        line=$(grep -i "^- \*\*Total.*Size\*\*:" "$findings_file") || status=$?
+        if [[ "$status" -gt 1 ]]; then
+            echo "Error: Failed to read findings file: $findings_file" >&2
+            return "$status"
+        fi
+        if [[ "$status" -eq 1 ]]; then
+            echo "0 B"
+        else
+            line="${line%%$'\n'*}"
+            echo "${line##*: }"
+        fi
     else
         echo "0 B"
     fi
@@ -143,8 +172,8 @@ replace_in_file() {
     local tmp_file
 
     tmp_file="${file}.tmp"
-    sed "s|${pattern}|${replacement}|g" "$file" > "$tmp_file"
-    mv "$tmp_file" "$file"
+    sed "s|${pattern}|${replacement}|g" "$file" > "$tmp_file" || return
+    mv "$tmp_file" "$file" || return
 }
 
 replace_in_file "$REPORT_PATH" "REPORT_DATE_PLACEHOLDER" "$REPORT_DATE"
