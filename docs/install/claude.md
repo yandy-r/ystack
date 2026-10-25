@@ -52,15 +52,15 @@ install the plugin marketplace. The step-flag `install` form is equivalent:
 
 Step behavior:
 
-| Step                           | Effect                                                                                                                                                                                                                                                                                    |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `base`                         | Runs `claude plugin marketplace add <repo> --scope user` and `claude plugin install ycc@ycc --scope user`.                                                                                                                                                                                |
-| `settings`                     | Merges managed keys from `ycc/settings/settings.json` into `~/.claude/settings.json` and copies `ycc/settings/statusline-command.sh` into `~/.claude/`.                                                                                                                                   |
-| `rules`                        | Symlinks `ycc/settings/rules/CLAUDE.md` into `~/.claude/CLAUDE.md`, the user memory file Claude Code reads.                                                                                                                                                                               |
-| `mcp`                          | Merges `mcp-configs/mcp.json` into `<project>/.mcp.json` (or `~/.claude.json` with `--global`).                                                                                                                                                                                           |
-| `hooks`                        | Symlinks `ycc/settings/hooks/` into `~/.claude/hooks/`.                                                                                                                                                                                                                                   |
-| `skills`, `agents`, `commands` | Claude `skills` installs standalone skill entries; `commands` is a compatibility alias for that same install. `agents` copies standalone agents. Skills are native `/name` invocations; `user-invocable: false` skills stay hidden. See [Standalone Slices](README.md#standalone-slices). |
-| `mods`                         | Registers `ycc/mods/` as the local `ycc-mods` marketplace and installs every mod it lists. Sync with `--intent mods`; see [`ycc/mods`](../../ycc/mods/README.md).                                                                                                                         |
+| Step                           | Effect                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base`                         | Runs `claude plugin marketplace add <repo> --scope user` and `claude plugin install ycc@ycc --scope user`.                                                                                                                                                                                                                                                                                         |
+| `settings`                     | Merges managed keys from `ycc/settings/settings.json` into `~/.claude/settings.json` and copies `ycc/settings/statusline-command.sh` into `~/.claude/`.                                                                                                                                                                                                                                            |
+| `rules`                        | Symlinks `ycc/settings/rules/CLAUDE.md` into `~/.claude/CLAUDE.md`, the user memory file Claude Code reads.                                                                                                                                                                                                                                                                                        |
+| `mcp`                          | Merges `mcp-configs/mcp.json` into `<project>/.mcp.json` (or `~/.claude.json` with `--global`).                                                                                                                                                                                                                                                                                                    |
+| `hooks`                        | Default (project): `claude plugin install ycc-hooks@ycc --scope project`, declaring the `ycc` marketplace at project scope (repo mode, committed to `.claude/settings.json`) or local scope (local mode, `.claude/settings.local.json`) only when no visible declaration already supplies it. With `--global`: symlinks `ycc/settings/hooks/` into `~/.claude/hooks/` and merges the hooks config. |
+| `skills`, `agents`, `commands` | Claude `skills` installs standalone skill entries; `commands` is a compatibility alias for that same install. `agents` copies standalone agents. Skills are native `/name` invocations; `user-invocable: false` skills stay hidden. See [Standalone Slices](README.md#standalone-slices).                                                                                                          |
+| `mods`                         | Registers `ycc/mods/` as the local `ycc-mods` marketplace and installs every mod it lists. Sync with `--intent mods`; see [`ycc/mods`](../../ycc/mods/README.md).                                                                                                                                                                                                                                  |
 
 Settings are merge-safe: unmanaged local keys are preserved, and managed keys
 you changed locally are kept unless `--force` is passed. Model defaults are
@@ -105,7 +105,7 @@ Use `--only` when you want exactly one step or a small set of steps:
 ./install.sh install --target claude --only rules
 ./install.sh install --target claude --only mcp           # writes <project>/.mcp.json
 ./install.sh install --target claude --only mcp --global  # writes ~/.claude.json
-./install.sh install --target claude --only hooks
+./install.sh install --target claude --only hooks         # project scope: ycc-hooks@ycc in this project (refused at $HOME)
 ```
 
 Narrow the mods step or the managed hook events to named items with `--mods`
@@ -114,9 +114,13 @@ and (on `sync` / `remove` only) `--hooks`; `install --hooks` stays the boolean
 
 ```bash
 ./install.sh sync   --target claude --intent mods --mods status-bar
-./install.sh sync   --target claude --intent hooks --hooks WorktreeCreate
-./install.sh remove --target claude --intent hooks --hooks WorktreeCreate
+./install.sh sync   --target claude --intent hooks --hooks WorktreeCreate --global
+./install.sh remove --target claude --intent hooks --hooks WorktreeCreate --global
 ```
+
+`--hooks <events>` narrows the `settings.json` hook events of the `--global`
+hooks step only; the project plugin carries its own activation, so the
+project-scope step accepts no event selection.
 
 See [Selecting Mods And Hook Events](README.md#selecting-mods-and-hook-events).
 

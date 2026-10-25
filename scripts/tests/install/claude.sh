@@ -120,17 +120,68 @@ for marketplace_output in '[]' 'not JSON'; do
         CLAUDE_STUB_MARKETPLACES="${marketplace_output}" install_must_succeed "${home}" sync --target claude --intent hooks
     fi
     calls="$(cat "${home}/claude-calls.log")"
-    assert_not_contains "${calls}" "plugin marketplace add" "unknown marketplace lookup never repoints ycc (${marketplace_output})"
-    assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "unknown marketplace lookup still attempts installation (${marketplace_output})"
-    assert_contains "${INSTALL_OUT}" "marketplace list could not be read" "unknown marketplace lookup warns (${marketplace_output})"
+    assert_not_contains "${calls}" "plugin marketplace add" "unreadable marketplace list never declares ycc (${marketplace_output})"
+    assert_not_contains "${calls}" "plugin install" "unreadable marketplace list skips the install (${marketplace_output})"
+    assert_contains "${INSTALL_OUT}" "marketplace list could not be read" "unreadable marketplace list warns (${marketplace_output})"
+    assert_contains "${INSTALL_OUT}" "Skipped the plugin install" "unreadable marketplace list explains the skip (${marketplace_output})"
 done
 
+# Two projects, one machine: project A's settings.local.json declaration is
+# what the machine list shows as registered; this project (B) is undeclared,
+# so it adds its own declaration instead of borrowing A's invisibly.
 home="$(new_home)"
-CLAUDE_STUB_MARKETPLACES='[{"name":"ycc"}]' install_must_succeed "${home}" sync --target claude --intent hooks
+CLAUDE_STUB_MARKETPLACES="[{\"name\":\"ycc\",\"source\":\"directory\",\"path\":\"${REPO_REAL}\"}]" \
+    install_must_succeed "${home}" sync --target claude --intent hooks
 calls="$(cat "${home}/claude-calls.log")"
-assert_not_contains "${calls}" "plugin marketplace add" "project hooks reuses a known ycc marketplace"
-assert_contains "${INSTALL_OUT}" "reusing the existing ycc marketplace" "project hooks reports marketplace reuse"
-assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "known marketplace still installs ycc-hooks"
+assert_contains "${calls}" "plugin marketplace add ${REPO_REAL} --scope local" "another project's registration does not satisfy this project's declaration"
+assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "a same-source registration still installs ycc-hooks"
+
+# A registration from a different source must not be repointed by declaring it.
+home="$(new_home)"
+CLAUDE_STUB_MARKETPLACES='[{"name":"ycc","source":"directory","path":"/fork/ystack"}]' \
+    install_must_succeed "${home}" sync --target claude --intent hooks
+calls="$(cat "${home}/claude-calls.log")"
+assert_not_contains "${calls}" "plugin marketplace add" "a foreign-source registration is never repointed"
+assert_not_contains "${calls}" "plugin install" "a foreign-source registration skips the install"
+assert_contains "${INSTALL_OUT}" "registered from a different source" "a foreign-source registration warns"
+assert_contains "${INSTALL_OUT}" "Skipped the plugin install" "a foreign-source registration explains the skip"
+
+# A committed pinned declaration is reused, never repointed: no add runs, and
+# remove keeps the declaration (the pin makes it user-owned).
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "github", "repo": "yandy-r/ystack", "ref": "v6.1.0" } } }, "enabledPlugins": { "ycc-hooks@ycc": true } }
+JSON
+install_must_succeed "${home}" sync --target claude --intent hooks
+calls="$(cat "${home}/claude-calls.log")"
+assert_not_contains "${calls}" "plugin marketplace add" "a pinned project declaration is never rewritten"
+assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "a pinned project declaration still installs ycc-hooks"
+assert_contains "${INSTALL_OUT}" "reusing the ycc marketplace declared in project settings" "a pinned project declaration is reused"
+install_must_succeed "${home}" remove --target claude --intent hooks
+assert_not_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace remove" "remove keeps a pinned (ref) project declaration"
+
+# The machine registration can vanish while this project still declares ycc
+# (another project's remove does that): an installer-shaped declaration is
+# re-added at its own scope, which re-registers the machine without rewriting
+# the file. A fresh clone with the committed project declaration heals too.
+for mode_args in "" "--mode repo"; do
+    home="$(new_home)"
+    mkdir -p "${home}/project/.claude"
+    if [[ -z "${mode_args}" ]]; then
+        printf '{"extraKnownMarketplaces":{"ycc":{"source":{"source":"directory","path":"%s"}}}}\n' "${REPO_REAL}" \
+            > "${home}/project/.claude/settings.local.json"
+        expected="plugin marketplace add ${REPO_REAL} --scope local"
+    else
+        printf '{"extraKnownMarketplaces":{"ycc":{"source":{"source":"github","repo":"yandy-r/ystack"}}}}\n' \
+            > "${home}/project/.claude/settings.json"
+        expected="plugin marketplace add yandy-r/ystack --scope project"
+    fi
+    install_must_succeed "${home}" sync --target claude --intent hooks ${mode_args}
+    calls="$(cat "${home}/claude-calls.log")"
+    assert_contains "${calls}" "${expected}" "an owned declaration with no machine registration re-registers (${mode_args:-local mode})"
+    assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "re-registration still installs ycc-hooks (${mode_args:-local mode})"
+done
 
 home="$(new_home)"
 install_must_succeed "${home}" sync --target claude --intent settings,hooks
@@ -179,7 +230,8 @@ cat > "${home}/project/.claude/settings.json" <<'JSON'
 { "extraKnownMarketplaces": { "ycc": { "source": { "source": "git", "url": "https://github.com/yandy-r/ystack.git" } } } }
 JSON
 install_must_succeed "${home}" remove --target claude --intent hooks
-assert_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace remove ycc --scope project" "project hooks remove recognizes the upstream URL source"
+assert_not_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace remove" "project hooks remove keeps a git-url declaration it never wrote"
+assert_contains "${INSTALL_OUT}" "source does not match the installer source" "git-url declaration retention explains ownership"
 
 home="$(new_home)"
 mkdir -p "${home}/project/.claude"
