@@ -157,7 +157,14 @@ echo ""
 if [ "$UNIQUE_DIRS" -gt 0 ]; then
     echo -e "${GREEN}Changed Directories:${NC}"
     echo "$ALL_CHANGED_FILES" | grep -v '^$' | xargs -r dirname | sort -u | while IFS= read -r dir; do
-        file_count=$(echo "$ALL_CHANGED_FILES" | grep -c "^${dir}/" || echo "0")
+        # grep -c prints the count itself; exit 1 only means zero matches.
+        # Any other non-zero status is a real failure.
+        file_count_status=0
+        file_count=$(grep -c "^${dir}/" <<<"$ALL_CHANGED_FILES") || file_count_status=$?
+        if [ "$file_count_status" -gt 1 ]; then
+            echo "Error: Failed to count files in ${dir}/" >&2
+            exit "$file_count_status"
+        fi
         echo "  - $dir/ ($file_count files)"
     done
     echo ""

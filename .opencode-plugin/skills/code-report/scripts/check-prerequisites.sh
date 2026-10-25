@@ -46,8 +46,14 @@ echo "  Target: ${PLAN_DIR}/report.md"
 if [[ -f "${PLAN_DIR}/parallel-plan.md" ]]; then
   echo "  Found: ${PLAN_DIR}/parallel-plan.md"
 
-  # Count tasks in the plan
-  TASK_COUNT=$(grep -c "^#### Task" "${PLAN_DIR}/parallel-plan.md" 2>/dev/null || echo "0")
+  # Count tasks in the plan. grep -c prints the count itself; exit 1 only
+  # means zero matches. Any other non-zero status is a real read failure.
+  TASK_COUNT_STATUS=0
+  TASK_COUNT=$(grep -c "^#### Task" "${PLAN_DIR}/parallel-plan.md" 2>/dev/null) || TASK_COUNT_STATUS=$?
+  if [[ "$TASK_COUNT_STATUS" -gt 1 ]]; then
+    echo "ERROR: Failed to read ${PLAN_DIR}/parallel-plan.md" >&2
+    exit "$TASK_COUNT_STATUS"
+  fi
   echo "  Tasks in plan: ${TASK_COUNT}"
 fi
 

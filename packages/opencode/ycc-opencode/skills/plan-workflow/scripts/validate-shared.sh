@@ -67,7 +67,9 @@ fi
 echo "Validating: $SHARED_FILE"
 echo "---"
 
-# Read file content
+# Read file content. Match against it with here-strings, not `echo | grep -q`:
+# under pipefail an early-exiting reader SIGPIPEs the echo writer and a
+# present section reads as missing (YAN-1285).
 CONTENT=$(cat "$SHARED_FILE")
 
 # Check for required sections
@@ -75,7 +77,7 @@ check_section() {
   local section="$1"
   local required="$2"
 
-  if echo "$CONTENT" | grep -q "^## $section"; then
+  if grep -q "^## $section" <<<"$CONTENT"; then
     success "Found section: $section"
     return 0
   else
@@ -101,7 +103,7 @@ check_section "Relevant Tables" "false" || true
 # Check for title (H1)
 echo ""
 echo "Checking document structure..."
-if echo "$CONTENT" | head -5 | grep -q "^# "; then
+if grep -q "^# " <<<"$(head -n 5 <<<"$CONTENT")"; then
   success "Found document title (H1)"
 else
   error "Missing document title (should start with '# ')"

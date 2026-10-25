@@ -165,7 +165,14 @@ if [ -n "$SUBJECT_TEXT" ]; then
 fi
 
 # Check for body (optional but recommended for complex changes)
-BODY_LINES=$(echo "$COMMIT_MSG" | tail -n +3 | grep -c '[[:alnum:]]' || echo "0")
+# grep -c prints the count itself; exit 1 only means zero matches. Any other
+# non-zero status is a real failure.
+BODY_LINES_STATUS=0
+BODY_LINES=$(echo "$COMMIT_MSG" | tail -n +3 | grep -c '[[:alnum:]]') || BODY_LINES_STATUS=$?
+if [ "$BODY_LINES_STATUS" -gt 1 ]; then
+    echo "Error: Failed to count body lines" >&2
+    exit "$BODY_LINES_STATUS"
+fi
 
 if [ "$BODY_LINES" -gt 0 ]; then
     echo -e "${GREEN}✓ Body is present ($BODY_LINES lines)${NC}"

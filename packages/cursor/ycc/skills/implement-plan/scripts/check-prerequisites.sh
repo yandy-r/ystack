@@ -63,16 +63,28 @@ if [[ -f "${PLAN_DIR}/shared.md" ]]; then
   echo "  Found: ${PLAN_DIR}/shared.md"
 fi
 
+# Count pattern matches in the plan. grep -c prints the count itself; exit 1
+# only means zero matches. Any other non-zero status is a real read failure.
+plan_count() {
+  local pattern="$1" status=0 count
+  count=$(grep -cE "$pattern" "${PLAN_DIR}/parallel-plan.md" 2>/dev/null) || status=$?
+  if [[ "$status" -gt 1 ]]; then
+    echo "ERROR: Failed to read ${PLAN_DIR}/parallel-plan.md" >&2
+    exit "$status"
+  fi
+  echo "$count"
+}
+
 # Count tasks in the plan
-TASK_COUNT=$(grep -c "^#### Task" "${PLAN_DIR}/parallel-plan.md" 2>/dev/null || echo "0")
+TASK_COUNT=$(plan_count "^#### Task")
 echo "  Tasks in plan: ${TASK_COUNT}"
 
 # Count phases
-PHASE_COUNT=$(grep -cE "^### (Phase|Batch)" "${PLAN_DIR}/parallel-plan.md" 2>/dev/null || echo "0")
+PHASE_COUNT=$(plan_count "^### (Phase|Batch)")
 echo "  Phases/Batches in plan: ${PHASE_COUNT}"
 
 # Count independent tasks
-INDEPENDENT_COUNT=$(grep -cE "(Depends on \[none\]|\*\*Dependencies\*\*: *[Nn]one)" "${PLAN_DIR}/parallel-plan.md" 2>/dev/null || echo "0")
+INDEPENDENT_COUNT=$(plan_count "(Depends on \[none\]|\*\*Dependencies\*\*: *[Nn]one)")
 echo "  Independent tasks: ${INDEPENDENT_COUNT}"
 
 exit 0

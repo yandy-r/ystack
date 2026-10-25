@@ -66,8 +66,11 @@ Read `references/detection.md` (Parallel-Capable Detection and Execution Mode De
 Apply the common worktree precedence/deduction in standalone-dispatch.md §8.1. Scan the plan's worktree annotations:
 
 ```bash
-grep -c "^## Worktree Setup" "$PLAN_PATH" || echo 0
-grep -c "^\- \*\*Worktree\*\*:" "$PLAN_PATH" || echo 0
+# grep -c prints the count itself; exit 1 only means zero matches, so
+# exit codes 0 and 1 both leave exactly one integer on stdout. Anything
+# higher (unreadable/missing file) is a real error and aborts the snippet.
+grep -c "^## Worktree Setup" "$PLAN_PATH"; [ $? -le 1 ]
+grep -c "^\- \*\*Worktree\*\*:" "$PLAN_PATH"; [ $? -le 1 ]
 ```
 
 With a parent annotation, use its path before whitespace/comment and slug segment after `<repo>-`. Otherwise derive `WT_FEATURE_SLUG` from plan basename: strip `.plan.md`, lowercase, replace `[^a-z0-9-]` with `-`, collapse runs, truncate to 40 chars. `WORKTREE_ACTIVE` follows common mode selection; sequential tasks use the parent execution tree too.
