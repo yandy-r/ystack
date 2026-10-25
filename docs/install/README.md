@@ -386,15 +386,30 @@ Claude project hooks reuse a `ycc` marketplace this project already declares —
 in `<project>/.claude/settings.json` or `<project>/.claude/settings.local.json`
 — without repointing it, so a committed or pinned declaration (a `ref`, a fork)
 is never rewritten. The CLI never creates a registration from a declaration
-alone, so when the machine has no `ycc` registration (a fresh clone, or another
-project's `remove` dropped it) the installer first runs
-`claude plugin marketplace add <source> --scope <declaration scope>`, rebuilding
-the source from the declaration (`repo[#ref]` for github, `path` for directory,
-`url[#ref]` for git); re-adding the same source leaves the file untouched
-(verified against Claude Code 2.1.310). A declaration shape the installer cannot
-rebuild is warned about and the plugin install is skipped. A declaration in
-`~/.claude/settings.json` (the `settings` step writes one) counts only while the
-CLI has a registration; with none it is treated as undeclared. When no
+alone, and `claude plugin marketplace add` rewrites the entry it writes from its
+arguments (dropping keys such as `autoUpdate`, turning a relative directory
+path into an absolute one, appending `.git` to a git url). So when the machine
+has no `ycc` registration (a fresh clone, or another project's `remove` dropped
+it), the installer re-registers a project or local declaration with
+`claude plugin marketplace add <source> --scope <declaration scope>` only when
+that add reproduces the declaration exactly: the entry holds nothing but
+`source`, and the source is github (`repo[#ref]`), a directory with an absolute
+normalised `path`, or a git url ending in `.git` (https, http or `git@`, with an
+optional `#ref`). Any other declaration is left untouched: the installer warns
+`ycc is declared in <file> but not registered on this machine; re-registering
+would rewrite that declaration`, adds `run: claude plugin marketplace add
+<source> --scope <scope>` as a hint when the source is rebuildable, and skips
+the plugin install. A declaration in `~/.claude/settings.json` (the `settings` step writes
+one) is not a registration, but the CLI rejects a project or local add whose
+source differs from it (directory sources excepted). With no registration and
+no project or local declaration, local mode therefore adds the checkout
+directory with `--scope local`, and repo mode adds the user declaration's own
+source (for example `yandy-r/ystack#main`) with `--scope project`; the user file
+stays byte-identical. If that user declaration is not rebuildable, or a project
+or local declaration names a different source than it, the installer warns and
+skips the plugin install. Every `marketplace add` is guarded: when the CLI
+rejects it, the installer warns with the CLI's reason line and skips the plugin
+install without aborting the run. When no
 declaration is visible, the machine registration decides: absent, or exactly the
 unpinned source the installer would declare (no `ref`, no `path`), local mode
 declares the absolute checkout path with `--scope local` in

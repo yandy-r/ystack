@@ -61,23 +61,29 @@ claude_marketplace_source() {
     fi
 }
 
-# claude_marketplace_declaration <root> [skip-user] — where a ycc marketplace
-# declaration is visible to this project. Declarations, not the machine-wide
-# marketplace registration, decide reuse: the CLI's `marketplace list` reports
-# every marketplace registered on the machine, including one another project
-# declared in its own settings.local.json, so trusting it would let a remove
-# in that other project retract this project's plugin. Prints
-# "<status>:<scope><TAB><source>" — status declared or undeclared; <source> is
-# the `marketplace add` argument rebuilt from a declared project/local entry
-# (github repo[#ref], directory path, git/url url[#ref]) and empty for any
-# other shape. An unreadable file counts as undeclared (adding is then guarded
-# by the registration check). Scopes: user, project, local; "skip-user" ignores
-# the user file (a user declaration alone never creates a registration).
+# claude_marketplace_declaration <root> [skip-user|only-user] — where a ycc
+# marketplace declaration is visible to this project. Declarations, not the
+# machine-wide marketplace registration, decide reuse: the CLI's `marketplace
+# list` reports every marketplace registered on the machine, including one
+# another project declared in its own settings.local.json, so trusting it would
+# let a remove in that other project retract this project's plugin. Prints
+# "<status>:<scope><US><source><US><exact>" (US = \x1f) — status declared or
+# undeclared; <source> is the `marketplace add` argument that rebuilds the
+# declared source and is empty for any shape the CLI would not keep verbatim:
+# github repo[#ref], a normalised absolute directory path, or a git url ending
+# in .git (https, http or git@) with an optional ref. <exact> is 1 when the
+# entry holds nothing but that source, so `marketplace add <source>` would
+# reproduce it byte for byte (extra keys such as autoUpdate, and anything else
+# the CLI rewrites, are lost by an add). An unreadable file counts as
+# undeclared (adding is then guarded by the registration check). Scopes: user,
+# project, local; "skip-user" ignores the user file, "only-user" reads only it.
 claude_marketplace_declaration() {
     python3 - "${HOME}/.claude/settings.json" "${1}/.claude/settings.json" \
         "${1}/.claude/settings.local.json" "${2:-}" <<'PY'
 import json
+import os
 import pathlib
+import re
 import sys
 
 
@@ -86,21 +92,29 @@ def source_arg(declaration):
     if not isinstance(source, dict) or not isinstance(source.get("source"), str):
         return ""
     kind, ref = source["source"], source.get("ref")
-    if ref is not None and not (isinstance(ref, str) and ref):
+    if ref is not None and not (isinstance(ref, str) and ref and "#" not in ref):
         return ""
     suffix = f"#{ref}" if ref else ""
-    if kind == "github" and isinstance(source.get("repo"), str) and "path" not in source:
-        return source["repo"] + suffix
-    if kind == "directory" and isinstance(source.get("path"), str) and ref is None:
-        return source["path"]
-    if kind in ("git", "url") and isinstance(source.get("url"), str):
-        return source["url"] + suffix
+    keys = set(source) - {"ref"}
+    if kind == "github" and keys == {"source", "repo"} and isinstance(source["repo"], str):
+        if re.fullmatch(r"[\w.-]+/[\w.-]+", source["repo"]):
+            return source["repo"] + suffix
+    if kind == "directory" and keys == {"source", "path"} and ref is None:
+        path = source["path"]
+        if isinstance(path, str) and os.path.isabs(path) and os.path.normpath(path) == path:
+            return path
+    if kind == "git" and keys == {"source", "url"} and isinstance(source["url"], str):
+        url = source["url"]
+        if re.fullmatch(r"(https?://|git@)[^#\s]+\.git", url):
+            return url + suffix
     return ""
 
 
-skip_user = sys.argv[4] == "skip-user"
+mode = sys.argv[4]
 for scope, name in zip(("user", "project", "local"), sys.argv[1:4]):
-    if skip_user and scope == "user":
+    if mode == "skip-user" and scope == "user":
+        continue
+    if mode == "only-user" and scope != "user":
         continue
     try:
         config = json.loads(pathlib.Path(name).read_text(encoding="utf-8"))
@@ -109,9 +123,11 @@ for scope, name in zip(("user", "project", "local"), sys.argv[1:4]):
     marketplaces = config.get("extraKnownMarketplaces") if isinstance(config, dict) else None
     declaration = marketplaces.get("ycc") if isinstance(marketplaces, dict) else None
     if isinstance(declaration, (dict, str)):
-        print(f"declared:{scope}\t{source_arg(declaration)}")
+        arg = source_arg(declaration)
+        exact = "1" if arg and isinstance(declaration, dict) and set(declaration) == {"source"} else "0"
+        print(f"declared:{scope}\x1f{arg}\x1f{exact}")
         sys.exit(0)
-print("undeclared:none\t")
+print("undeclared:none\x1f\x1f0")
 PY
 }
 
@@ -167,17 +183,41 @@ claude_registered_source_matches() {
     esac
 }
 
+# claude_marketplace_add <source> <scope> — `marketplace add`, guarded: a CLI
+# rejection (a source mismatch with the user declaration, a clone failure, ...)
+# warns with the CLI's reason line and returns non-zero so the caller skips the
+# plugin install instead of aborting the run.
+claude_marketplace_add() {
+    local source="$1" scope="$2" out rc=0 reason
+    info "Running: claude plugin marketplace add ${source} --scope ${scope}"
+    out="$(claude plugin marketplace add "${source}" --scope "${scope}" 2>&1)" || rc=$?
+    [[ -n "${out}" ]] && printf '%s\n' "${out}"
+    [[ ${rc} -eq 0 ]] && return 0
+    reason="$(printf '%s\n' "${out}" | sed '/^[[:space:]]*$/d' | tail -n 1)"
+    warn "claude plugin marketplace add ${source} --scope ${scope} failed${reason:+: ${reason}}"
+    warn "Skipped the plugin install. Run 'claude plugin marketplace add <source> --scope ${scope}' yourself, or rerun with --global"
+    return 1
+}
+
 # claude_project_install_plugin <plugin> — enable a native package in this
 # project. A visible project/local declaration always wins (never repointed,
 # never duplicated); otherwise the machine registration decides whether adding
 # the declaration at this scope would repoint something. The CLI never
-# creates a registration from a declaration alone, so a project/local
-# declaration with no registration is re-added from its own source and scope
-# first, and a user-scope declaration with no registration counts as
-# undeclared.
+# creates a registration from a declaration alone, and `marketplace add`
+# rewrites the declaration it writes from its arguments, so with no
+# registration:
+#   - a project/local declaration is re-added from its own source and scope
+#     only when that reproduces it exactly (the entry holds just `source`, and
+#     the source survives the CLI verbatim); anything else is warned about and
+#     skipped rather than rewritten;
+#   - a user-scope declaration is not a registration, but the CLI insists a
+#     project/local add match it (directory sources aside). Local mode adds the
+#     checkout directory, which the CLI always accepts; repo mode adds the user
+#     declaration's own source at project scope when it can be rebuilt (the
+#     user file stays untouched) and otherwise skips the install.
 claude_project_install_plugin() {
-    local plugin="$1" root declaration_line declaration declared_source registration
-    local source_arg marketplace_scope
+    local plugin="$1" root declaration_line declaration declared_source declared_exact registration
+    local user_declared=0 user_source="" source_arg marketplace_scope declared_file
     root="$(project_root)"
     require_claude_cli
     command -v python3 >/dev/null 2>&1 || { err "python3 is required but not found"; exit 1; }
@@ -185,11 +225,13 @@ claude_project_install_plugin() {
         cd "${root}" || exit 1
         declaration_line="$(claude_marketplace_declaration "${root}")"
         registration="$(claude_registered_marketplace_source)"
-        if [[ "${registration}" == absent:* && "${declaration_line}" == declared:user$'\t'* ]]; then
+        IFS=$'\x1f' read -r declaration declared_source declared_exact <<< "${declaration_line}"
+        if [[ "${registration}" == absent:* && "${declaration}" == declared:user ]]; then
+            user_declared=1
+            user_source="${declared_source}"
             declaration_line="$(claude_marketplace_declaration "${root}" skip-user)"
+            IFS=$'\x1f' read -r declaration declared_source declared_exact <<< "${declaration_line}"
         fi
-        declaration="${declaration_line%%$'\t'*}"
-        declared_source="${declaration_line#*$'\t'}"
         case "${registration}" in
             registered:*)
                 if [[ "${declaration}" == undeclared:* ]] \
@@ -214,22 +256,42 @@ claude_project_install_plugin() {
             marketplace_scope=project
             [[ "${MODE:-local}" == "local" ]] && marketplace_scope=local
             source_arg="$(claude_marketplace_source)"
-            info "Running: claude plugin marketplace add ${source_arg} --scope ${marketplace_scope}"
-            claude plugin marketplace add "${source_arg}" --scope "${marketplace_scope}"
+            if [[ ${user_declared} -eq 1 && "${marketplace_scope}" == "project" ]]; then
+                # The CLI rejects a non-directory add that differs from the
+                # user declaration, and a project file must stay portable, so
+                # the user declaration's own source is the only usable one.
+                if [[ -z "${user_source}" || "${user_source}" == /* ]]; then
+                    warn "ycc is declared in ~/.claude/settings.json but not registered on this machine, and that declaration has no source this installer can add at project scope without the CLI rejecting it or writing a machine path into the project"
+                    warn "Skipped the plugin install. Run 'claude plugin marketplace add <source> --scope project' with that declaration's source yourself, or rerun with --global"
+                    exit 0
+                fi
+                source_arg="${user_source}"
+            fi
+            claude_marketplace_add "${source_arg}" "${marketplace_scope}" || exit 0
         elif [[ "${registration}" == absent:* ]]; then
             # The machine registration is gone (another project's remove, or a
-            # fresh clone) while this project still declares ycc: re-register
-            # from the declaration's own scope and source. Re-adding the same
-            # source leaves the file untouched (verified against Claude Code
-            # 2.1.310) and heals this project's plugin.
+            # fresh clone) while this project still declares ycc. Re-register
+            # from the declaration's own scope and source, but only when that
+            # add reproduces the declaration exactly.
             marketplace_scope="${declaration#declared:}"
-            if [[ -z "${declared_source}" ]]; then
-                warn "The ycc marketplace declared in ${marketplace_scope} settings has a source this installer cannot re-register"
-                warn "Skipped the plugin install. Run 'claude plugin marketplace add <source> --scope ${marketplace_scope}' yourself, or rerun with --global"
+            declared_file=".claude/settings.json"
+            [[ "${marketplace_scope}" == "local" ]] && declared_file=".claude/settings.local.json"
+            if [[ ${user_declared} -eq 1 && "${declared_exact}" == "1" && "${declared_source}" != /* \
+                && "${user_source}" != "${declared_source}" ]]; then
+                warn "ycc is declared in ${declared_file} but not registered on this machine, and ~/.claude/settings.json declares a different ycc source; the CLI would reject the add"
+                warn "Skipped the plugin install. Align the two declarations, or rerun with --global"
                 exit 0
             fi
-            info "Running: claude plugin marketplace add ${declared_source} --scope ${marketplace_scope}"
-            claude plugin marketplace add "${declared_source}" --scope "${marketplace_scope}"
+            if [[ "${declared_exact}" != "1" ]]; then
+                warn "ycc is declared in ${declared_file} but not registered on this machine; re-registering would rewrite that declaration"
+                if [[ -n "${declared_source}" ]]; then
+                    warn "Skipped the plugin install; to register it as declared, run: claude plugin marketplace add ${declared_source} --scope ${marketplace_scope}"
+                else
+                    warn "Skipped the plugin install. Register ycc yourself with claude plugin marketplace add <source> --scope ${marketplace_scope}, or rerun with --global"
+                fi
+                exit 0
+            fi
+            claude_marketplace_add "${declared_source}" "${marketplace_scope}" || exit 0
         else
             info "reusing the ycc marketplace declared in ${declaration#declared:} settings (not repointing it)"
         fi

@@ -79,6 +79,11 @@ if [[ "$*" == "plugin marketplace list --json" ]]; then
     printf '%s\n' "${CLAUDE_STUB_MARKETPLACES:-[]}"
     exit "${CLAUDE_STUB_MARKETPLACES_STATUS:-0}"
 fi
+# CLAUDE_STUB_ADD_FAIL makes every 'marketplace add' print its value to stderr and fail.
+if [[ "$*" == "plugin marketplace add "* && -n "${CLAUDE_STUB_ADD_FAIL:-}" ]]; then
+    printf '%s\n' "${CLAUDE_STUB_ADD_FAIL}" >&2
+    exit 1
+fi
 SH
 cat > "${STUB_BIN}/codex" <<'SH'
 #!/usr/bin/env bash

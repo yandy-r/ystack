@@ -202,7 +202,7 @@ install_must_succeed "${home}" sync --target claude --intent hooks
 calls="$(cat "${home}/claude-calls.log")"
 assert_not_contains "${calls}" "plugin marketplace add" "an unrecognised declaration shape is never re-registered"
 assert_not_contains "${calls}" "plugin install" "an unrecognised declaration shape skips the install"
-assert_contains "${INSTALL_OUT}" "cannot re-register" "an unrecognised declaration shape warns"
+assert_contains "${INSTALL_OUT}" "re-registering would rewrite that declaration" "an unrecognised declaration shape warns"
 
 # A pinned registration is not the installer's unpinned source: an undeclared
 # project must not repoint it.
@@ -243,6 +243,89 @@ for mode_args in "" "--mode repo"; do
     assert_contains "${calls}" "${expected}" "an owned declaration with no machine registration re-registers (${mode_args:-local mode})"
     assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "re-registration still installs ycc-hooks (${mode_args:-local mode})"
 done
+
+# A lossy declaration is never re-registered: `marketplace add` rewrites the
+# entry from its arguments, so extra keys (autoUpdate) would be dropped and a
+# relative directory path would become a machine-specific absolute one.
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "github", "repo": "yandy-r/ystack", "ref": "v6.1.0" }, "autoUpdate": true } } }
+JSON
+before="$(cat "${home}/project/.claude/settings.json")"
+install_must_succeed "${home}" sync --target claude --intent hooks
+calls="$(cat "${home}/claude-calls.log")"
+assert_not_contains "${calls}" "plugin marketplace add" "a declaration with extra keys is never re-registered"
+assert_not_contains "${calls}" "plugin install" "a declaration with extra keys skips the install"
+assert_contains "${INSTALL_OUT}" "ycc is declared in .claude/settings.json but not registered on this machine; re-registering would rewrite that declaration" "a declaration with extra keys warns"
+assert_contains "${INSTALL_OUT}" "run: claude plugin marketplace add yandy-r/ystack#v6.1.0 --scope project" "a declaration with extra keys names the manual command"
+assert_contains "$(cat "${home}/project/.claude/settings.json")" "${before}" "a declaration with extra keys is left untouched"
+
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "directory", "path": "./vendor/ystack" } } } }
+JSON
+install_must_succeed "${home}" sync --target claude --intent hooks
+calls="$(cat "${home}/claude-calls.log")"
+assert_not_contains "${calls}" "plugin marketplace add" "a relative directory declaration is never re-registered"
+assert_not_contains "${calls}" "plugin install" "a relative directory declaration skips the install"
+assert_contains "${INSTALL_OUT}" "re-registering would rewrite that declaration" "a relative directory declaration warns"
+
+# A git url the CLI would rewrite (it appends .git) is not lossless.
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "git", "url": "https://github.com/yandy-r/ystack" } } } }
+JSON
+install_must_succeed "${home}" sync --target claude --intent hooks
+assert_not_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace add" "a git url the CLI would rewrite is never re-registered"
+assert_contains "${INSTALL_OUT}" "re-registering would rewrite that declaration" "a rewritable git url warns"
+
+# The CLI only accepts a project/local add that matches the user declaration
+# (directory sources aside): repo mode adds the user declaration's own source.
+home="$(new_home)"
+install_must_succeed "${home}" install --target claude --only settings,hooks --mode repo
+calls="$(cat "${home}/claude-calls.log")"
+assert_contains "${calls}" "plugin marketplace add yandy-r/ystack#main --scope project" "repo-mode settings,hooks adds the user declaration's source at project scope"
+assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "repo-mode settings,hooks installs ycc-hooks"
+
+# A project declaration that differs from the user declaration cannot be
+# re-registered (the CLI rejects the add): warn and skip.
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "github", "repo": "yandy-r/ystack", "ref": "v6.1.0" } } } }
+JSON
+install_must_succeed "${home}" install --target claude --only settings --mode repo
+: > "${home}/claude-calls.log"
+install_must_succeed "${home}" sync --target claude --intent hooks --mode repo
+calls="$(cat "${home}/claude-calls.log")"
+assert_not_contains "${calls}" "plugin marketplace add" "a project declaration differing from the user declaration is not re-registered"
+assert_not_contains "${calls}" "plugin install" "a project declaration differing from the user declaration skips the install"
+assert_contains "${INSTALL_OUT}" "declares a different ycc source" "a differing project declaration warns"
+
+# A rejected add warns with the CLI's reason and skips the install; it never
+# aborts the run.
+for add_mode in "" "--mode repo"; do
+    home="$(new_home)"
+    CLAUDE_STUB_ADD_FAIL='Failed to add marketplace: stub rejection' \
+        install_must_succeed "${home}" sync --target claude --intent hooks ${add_mode}
+    calls="$(cat "${home}/claude-calls.log")"
+    assert_contains "${calls}" "plugin marketplace add" "a rejected add was attempted (${add_mode:-local mode})"
+    assert_not_contains "${calls}" "plugin install" "a rejected add skips the install (${add_mode:-local mode})"
+    assert_contains "${INSTALL_OUT}" "failed: Failed to add marketplace: stub rejection" "a rejected add warns with the CLI's reason (${add_mode:-local mode})"
+done
+
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "github", "repo": "yandy-r/ystack", "ref": "v6.1.0" } } } }
+JSON
+CLAUDE_STUB_ADD_FAIL='Failed to add marketplace: stub rejection' \
+    install_must_succeed "${home}" sync --target claude --intent hooks
+assert_not_contains "$(cat "${home}/claude-calls.log")" "plugin install" "a rejected re-registration skips the install"
+assert_contains "${INSTALL_OUT}" "failed: Failed to add marketplace: stub rejection" "a rejected re-registration warns with the CLI's reason"
 
 home="$(new_home)"
 install_must_succeed "${home}" sync --target claude --intent settings,hooks
