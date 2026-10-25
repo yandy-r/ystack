@@ -92,7 +92,7 @@ If `PROJECT TYPE-CHECK COMMAND` or `PROJECT BUILD COMMAND` is included and appli
 | Go         | `go vet ./...`                                                        | `go build ./...`                              |
 | Python     | `pytest` / `python -m mypy <file>` / `python3 -m mypy <file>`         | —                                             |
 
-Do not run a provided command outside this table (on OpenCode, native rules deny any other shell command). Return `RESULT: cannot-fix` with `REASON: command not allowlisted — <value>`.
+Do not run a provided command outside this table (OpenCode and OMP block any other shell command natively; on other runtimes this rule is yours to keep). Return `RESULT: cannot-fix` with `REASON: command not allowlisted — <value>`.
 
 ### 5. Return one of two response shapes
 

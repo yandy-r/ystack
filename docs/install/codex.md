@@ -197,3 +197,10 @@ directory as the Codex CLI/TUI.
   `SKILL.md`. The `~/.codex/plugins/ycc/` symlink and the `local-ycc-plugins`
   marketplace belong to pre-v6 installs; `./install.sh migrate --target codex`
   retires them.
+- Agent shell scope is not enforced on Codex. A custom agent cannot narrow the
+  shell to a command list: it inherits the parent session's sandbox, approval
+  policy and command rules, and can only turn the shell off entirely. The fixer
+  agents (`pr-comment-fixer`, `review-fixer`, `release-fix-applier`) need their
+  type-check and build commands, so their allowlist is a prompt instruction
+  here. Run them under a sandbox and approval policy you trust. OpenCode and OMP
+  enforce the same lists natively.

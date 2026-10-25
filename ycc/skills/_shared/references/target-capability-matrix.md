@@ -140,7 +140,24 @@ via the plugin bundle; there is no Codex analog for slash commands.
 **AGENTS:cursor**
 Agents from `ycc/agents/` are adapted into `packages/cursor/ycc/agents/` and copied by
 the installer to `~/.cursor/agents/`. The same generated definitions are packaged in the
-native `ycc` package.
+native `ycc` package. Shell scope is not enforced (YAN-1276): Cursor subagent frontmatter
+documents only `name`, `description`, `model`, `readonly` and `is_background`, so the copied
+`Bash(<prefix>:*)` entries in `tools:` are not a documented grant, and `readonly` cannot
+express "these validation commands only". Cursor's `beforeShellExecution` / `preToolUse` hook
+input carries no subagent name, so a hook cannot apply one agent's prefixes either. The
+restricted fixers (`pr-comment-fixer`, `review-fixer`, `release-fix-applier`) keep their
+allowlist as prompt instructions only. Sources: cursor.com/docs/subagents, cursor.com/docs/hooks.
+
+**AGENTS:codex**
+Agents are emitted as custom-agent TOMLs (`name`, `description`, `developer_instructions`)
+and installed under `~/.codex/agents/`. Shell scope is not enforced (YAN-1276): a custom agent
+can only switch off whole capabilities (`features.shell_tool`, `apps`, `plugins`, `memories`,
+`request_permissions_tool`); `sandbox_mode`, `approval_policy` and command rules come from the
+parent session (codex-rs `core/src/agent/role.rs`, rust-v0.164.0). Prefix rules
+(`rules/*.rules`) apply per config layer, never per agent. The restricted fixers need their
+validation commands, so the shell stays on and the allowlist is a prompt instruction only. A
+`PreToolUse` hook input does carry `agent_type`, but ycc ships no Codex hooks (YAN-1149).
+Sources: learn.chatgpt.com/docs/agent-configuration/subagents, `.../rules`, `.../hooks`.
 
 **HOOKS.PreToolUse:cursor**
 Cursor does not expose a native PreToolUse hook execution surface equivalent to Claude Code's

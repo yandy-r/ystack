@@ -184,6 +184,13 @@ This proves the user-file carriers; the native plugins are installed
 interactively through the marketplace described under
 [Native Plugins](#native-plugins).
 
+Agent shell scope is not enforced on Cursor. Cursor subagents have no
+per-command allowlist (only `readonly`), and shell hooks do not identify the
+subagent that runs a command. The fixer agents (`pr-comment-fixer`,
+`review-fixer`, `release-fix-applier`) therefore keep their validation-command
+allowlist as a prompt instruction. OpenCode and OMP enforce the same lists
+natively.
+
 ## Regenerate Only Cursor Artifacts
 
 After editing source files under `ycc/`, regenerate Cursor artifacts directly or
