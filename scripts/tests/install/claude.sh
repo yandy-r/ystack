@@ -94,14 +94,195 @@ out="${INSTALL_OUT}"
 assert_contains "$(cat "${home}/.claude/settings.json")" '"claude-fable-5-1"' "--force restores repo value"
 
 echo
+
+echo "== install.sh sync: claude project hooks =="
+
+home="$(new_home)"
+install_must_succeed "${home}" sync --target claude --intent hooks
+calls="$(cat "${home}/claude-calls.log")"
+assert_contains "${calls}" "plugin marketplace add ${REPO_REAL} --scope local" "local project hooks registers the machine path at local scope"
+assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "project hooks installs the native plugin"
+if [[ ! -e "${home}/.claude/settings.json" && ! -e "${home}/.claude/hooks" && ! -L "${home}/.claude/hooks" ]]; then
+    ok "project hooks writes no global settings or hooks link"
+else
+    ko "project hooks writes no global settings or hooks link"
+fi
+
+home="$(new_home)"
+install_must_succeed "${home}" sync --target claude --intent hooks --mode repo
+assert_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace add yandy-r/ystack --scope project" "repo project hooks registers the portable source at project scope"
+
+for marketplace_output in '[]' 'not JSON'; do
+    home="$(new_home)"
+    if [[ "${marketplace_output}" == '[]' ]]; then
+        CLAUDE_STUB_MARKETPLACES_STATUS=1 install_must_succeed "${home}" sync --target claude --intent hooks
+    else
+        CLAUDE_STUB_MARKETPLACES="${marketplace_output}" install_must_succeed "${home}" sync --target claude --intent hooks
+    fi
+    calls="$(cat "${home}/claude-calls.log")"
+    assert_not_contains "${calls}" "plugin marketplace add" "unknown marketplace lookup never repoints ycc (${marketplace_output})"
+    assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "unknown marketplace lookup still attempts installation (${marketplace_output})"
+    assert_contains "${INSTALL_OUT}" "marketplace list could not be read" "unknown marketplace lookup warns (${marketplace_output})"
+done
+
+home="$(new_home)"
+CLAUDE_STUB_MARKETPLACES='[{"name":"ycc"}]' install_must_succeed "${home}" sync --target claude --intent hooks
+calls="$(cat "${home}/claude-calls.log")"
+assert_not_contains "${calls}" "plugin marketplace add" "project hooks reuses a known ycc marketplace"
+assert_contains "${INSTALL_OUT}" "reusing the existing ycc marketplace" "project hooks reports marketplace reuse"
+assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "known marketplace still installs ycc-hooks"
+
+home="$(new_home)"
+install_must_succeed "${home}" sync --target claude --intent settings,hooks
+merged="$(cat "${home}/.claude/settings.json")"
+assert_contains "${merged}" '"claude-fable-5-1"' "settings still merge beside project hooks"
+assert_not_contains "${merged}" '"hooks"' "project hooks writes no global hook activation"
+
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "enabledPlugins": { "ycc-hooks@ycc": true } }
+JSON
+install_must_succeed "${home}" remove --target claude --intent hooks
+calls="$(cat "${home}/claude-calls.log")"
+assert_contains "${calls}" "plugin uninstall ycc-hooks@ycc --scope project" "project hooks remove without a project declaration uninstalls only the plugin"
+assert_not_contains "${calls}" "plugin marketplace remove ycc --scope project" "project hooks remove leaves a user-scope marketplace declaration alone"
+
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "github", "repo": "yandy-r/ystack" } } }, "enabledPlugins": { "ycc-hooks@ycc": true } }
+JSON
+install_must_succeed "${home}" remove --target claude --intent hooks
+calls="$(cat "${home}/claude-calls.log")"
+assert_contains "${calls}" "plugin uninstall ycc-hooks@ycc --scope project" "project hooks remove uninstalls the native plugin"
+assert_contains "${calls}" "plugin marketplace remove ycc --scope project" "project hooks remove retracts its unused marketplace"
+
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+printf '{"extraKnownMarketplaces":{"ycc":{"source":{"source":"directory","path":"%s"}}}}\n' "${REPO_REAL}" > "${home}/project/.claude/settings.local.json"
+install_must_succeed "${home}" remove --target claude --intent hooks
+assert_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace remove ycc --scope local" "project hooks remove retracts its matching local declaration"
+
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.local.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "directory", "path": "/foreign/checkout" } } } }
+JSON
+install_must_succeed "${home}" remove --target claude --intent hooks
+assert_not_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace remove" "project hooks remove preserves a foreign local directory declaration"
+assert_contains "${INSTALL_OUT}" "source does not match the installer source" "foreign declaration retention explains ownership"
+
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "git", "url": "https://github.com/yandy-r/ystack.git" } } } }
+JSON
+install_must_succeed "${home}" remove --target claude --intent hooks
+assert_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace remove ycc --scope project" "project hooks remove recognizes the upstream URL source"
+
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "github", "repo": "yandy-r/ystack" } } } }
+JSON
+cat > "${home}/project/.claude/settings.local.json" <<'JSON'
+{ "enabledPlugins": { "another@ycc": true } }
+JSON
+install_must_succeed "${home}" remove --target claude --intent hooks
+assert_not_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace remove" "locally enabled plugin retains the project marketplace"
+assert_contains "${INSTALL_OUT}" "other ycc plugins are still enabled: another@ycc" "local plugin retention explains its dependency"
+
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "github", "repo": "yandy-r/ystack" } } }, "enabledPlugins": { "ycc-hooks@ycc": true, "ycc@ycc": true } }
+JSON
+install_must_succeed "${home}" remove --target claude --intent hooks
+calls="$(cat "${home}/claude-calls.log")"
+assert_contains "${calls}" "plugin uninstall ycc-hooks@ycc --scope project" "project hooks remove leaves other ycc plugins alone"
+assert_not_contains "${calls}" "plugin marketplace remove ycc --scope project" "project hooks keeps a marketplace another plugin uses"
+assert_contains "${INSTALL_OUT}" "other ycc plugins are still enabled" "project hooks explains marketplace retention"
+
+home="$(new_home)"
+out="$(run_install "${home}" sync --target claude --intent hooks --hooks WorktreeCreate)"
+assert_contains "${out}" "--hooks <events> narrows settings.json hook events" "project hooks rejects event selection"
+assert_contains "${out}" "use --global, or drop --hooks" "project hooks selection error suggests global scope"
+if [[ ! -e "${home}/.claude/settings.json" && ! -e "${home}/.claude/hooks" && ! -e "${home}/project/.claude" && ! -e "${home}/claude-calls.log" ]]; then
+    ok "project hooks selection rejection writes nothing and calls no CLI"
+else
+    ko "project hooks selection rejection writes nothing and calls no CLI"
+fi
+
+home="$(new_home)"
+out="$(CLAUDE_STUB_VERSION='2.1.200 (Claude Code)' run_install "${home}" sync --target claude --intent hooks)"
+assert_contains "${out}" "ycc-hooks needs Claude Code 2.1.300 or later (found 2.1.200)" "project hooks rejects an old Claude CLI"
+if [[ ! -e "${home}/.claude/settings.json" && ! -e "${home}/.claude/hooks" && ! -e "${home}/project/.claude" ]]; then
+    ok "old Claude CLI rejection writes nothing"
+else
+    ko "old Claude CLI rejection writes nothing"
+fi
+home="$(new_home)"
+CLAUDE_STUB_VERSION='2.1.200 (Claude Code)' install_must_succeed "${home}" sync --target all --intent hooks
+assert_contains "${INSTALL_OUT}" "Skipping Claude project hooks: ycc-hooks needs Claude Code 2.1.300" "all-target sync warns and skips old Claude project hooks"
+assert_contains "${INSTALL_OUT}" "Cursor sync complete" "all-target sync still completes other targets with old Claude"
+assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin install ycc-hooks" "all-target old Claude does not install project hooks"
+CLAUDE_STUB_VERSION='2.1.200 (Claude Code)' install_must_succeed "${home}" remove --target all --intent hooks
+assert_contains "${INSTALL_OUT}" "Skipping Claude project hooks: ycc-hooks needs Claude Code 2.1.300" "all-target remove warns and skips old Claude project hooks"
+assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin uninstall ycc-hooks" "all-target old Claude does not uninstall project hooks"
+
+
+# run_install starts below HOME; exercise the same installer from HOME itself
+# to verify the default and explicit project-scope guard before any writes.
+home="$(new_home)"
+for scope_flag in "" "--project"; do
+    out="$(
+        cd "${home}" || exit 1
+        HOME="${home}" PATH="${STUB_BIN}:${PATH}" CLAUDE_STUB_LOG="${home}/claude-calls.log" \
+            YCC_INSTALL_SKIP_BUILD=1 bash "${INSTALL}" sync --target claude --intent hooks ${scope_flag} 2>&1
+    )"
+    assert_contains "${out}" "--project at \$HOME: claude project scope needs a project directory" "project hooks rejects HOME ${scope_flag:-by default}"
+done
+if [[ ! -e "${home}/.claude/settings.json" && ! -e "${home}/.claude/hooks" && ! -e "${home}/claude-calls.log" ]]; then
+    ok "HOME rejection writes nothing and calls no CLI"
+else
+    ko "HOME rejection writes nothing and calls no CLI"
+fi
+
+home="$(new_home)"
+ln -s "${REPO_ROOT}/ycc/settings/hooks" "${home}/.claude/hooks"
+install_must_succeed "${home}" sync --target claude --intent hooks
+assert_contains "${INSTALL_OUT}" "WorktreeCreate would run twice" "project hooks warns about a global hooks link"
+assert_contains "${INSTALL_OUT}" "remove --target claude --intent hooks --global" "project hooks warning gives the global removal command"
+if [[ -L "${home}/.claude/hooks" && ! -e "${home}/.claude/settings.json" ]]; then
+    ok "project hooks leaves the global hooks link and settings untouched"
+else
+    ko "project hooks leaves the global hooks link and settings untouched"
+fi
+install_must_succeed "${home}" remove --target claude --intent hooks
+assert_contains "${INSTALL_OUT}" "global installer-managed hooks are still active" "project hooks removal warns about global hooks left active"
+assert_contains "${INSTALL_OUT}" "remove --target claude --intent hooks --global" "project hooks removal gives the global removal command"
+
+
+home="$(new_home)"
+install_must_succeed "${home}" sync --target claude --intent hooks --global
+install_must_succeed "${home}" remove --target claude --only settings
+assert_not_contains "$(cat "${home}/.claude/settings.json" 2>/dev/null)" '"hooks"' "settings-only removal still takes legacy hook activation"
+
+home="$(new_home)"
+out="$(CLAUDE_STUB_VERSION='2.1.200 (Claude Code)' run_install "${home}" sync --target claude --intent hooks --dry-run)"
+assert_not_contains "${out}" "ycc-hooks needs Claude Code" "project hooks dry-run skips the Claude version check"
+assert_contains "${out}" "dry-run: claude hooks step has no preview" "project hooks dry-run skips the native install"
+assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin install" "project hooks dry-run calls no native install"
+
 echo "== install.sh remove: settings, rules, hooks, plugins =="
 
 home="$(new_home)"
 cat > "${home}/.claude/settings.json" <<'JSON'
 { "editorMode": "vim", "env": { "MY_LOCAL_TOKEN": "keep-me" } }
 JSON
-install_must_succeed "${home}" sync --target claude --intent settings,rules,hooks,plugins
-install_must_succeed "${home}" remove --target claude --intent settings,rules,hooks,plugins
+install_must_succeed "${home}" sync --target claude --intent settings,rules,hooks,plugins --global
+install_must_succeed "${home}" remove --target claude --intent settings,rules,hooks,plugins --global
 out="${INSTALL_OUT}"
 assert_contains "${out}" "Claude remove complete" "claude remove of every config intent completes"
 merged="$(cat "${home}/.claude/settings.json")"
@@ -462,7 +643,7 @@ entry = json.load(open(sys.argv[1])).get(sys.argv[2], {})
 print(" ".join(f"{k}={v.get('last_applied_sha256')}" for k, v in sorted(entry.items()) if k.startswith("/hooks/")))
 PY
 }
-install_must_succeed "${home}" sync --target claude --intent hooks --hooks WorktreeCreate
+install_must_succeed "${home}" sync --target claude --intent hooks --hooks WorktreeCreate --global
 assert_contains "${INSTALL_OUT}" "Hook events: WorktreeCreate" "--hooks names the selection"
 merged="$(cat "${home}/.claude/settings.json")"
 assert_contains "${merged}" '"WorktreeCreate"' "--hooks merges the selected event"
@@ -472,7 +653,7 @@ if [[ -L "${home}/.claude/hooks" ]]; then ok "sync --hooks links ~/.claude/hooks
 
 # A trailing slash in HOME must still find the recorded state key (the
 # helper keys it by a normalised path).
-install_must_succeed "${home}/" remove --target claude --intent hooks --hooks WorktreeCreate
+install_must_succeed "${home}/" remove --target claude --intent hooks --hooks WorktreeCreate --global
 merged="$(cat "${home}/.claude/settings.json")"
 assert_not_contains "${merged}" '"WorktreeCreate"' "remove --hooks takes the selected event"
 assert_contains "${merged}" 'old.sh' "remove --hooks keeps the unselected event"
@@ -485,17 +666,17 @@ if [[ -L "${home}/.claude/hooks" ]]; then ok "remove --hooks keeps the hooks lin
 assert_contains "${INSTALL_OUT}" "managed hook events outside --hooks still use it" "remove --hooks says why the link stays"
 
 home="$(new_home)"
-install_must_succeed "${home}" sync --target claude --intent hooks
-install_must_succeed "${home}" remove --target claude --intent hooks --hooks WorktreeCreate
+install_must_succeed "${home}" sync --target claude --intent hooks --global
+install_must_succeed "${home}" remove --target claude --intent hooks --hooks WorktreeCreate --global
 if [[ ! -e "${home}/.claude/hooks" && ! -L "${home}/.claude/hooks" ]]; then ok "remove --hooks unlinks ~/.claude/hooks once no managed event remains"; else ko "remove --hooks unlinks ~/.claude/hooks once no managed event remains"; fi
 
 home="$(new_home)"
 out="$(run_install "${home}" sync --target claude --intent settings --hooks WorktreeCreate)"
 assert_contains "${out}" "--hooks needs the settings step (it narrows the hooks config group" "--hooks without the hooks group rejected"
 if [[ ! -e "${home}/.claude/settings.json" ]]; then ok "--hooks rejection writes nothing"; else ko "--hooks rejection writes nothing"; fi
-out="$(run_install "${home}" sync --target claude --intent hooks --hooks Bogus)"
+out="$(run_install "${home}" sync --target claude --intent hooks --hooks Bogus --global)"
 assert_contains "${out}" "unknown hook event 'Bogus'" "unknown hook event rejected"
-install_must_succeed_stubbed "${home}" install --target claude --hooks
+install_must_succeed_stubbed "${home}" install --target claude --hooks --global
 if [[ -L "${home}/.claude/hooks" ]]; then ok "install --hooks stays the boolean 'also run hooks' flag"; else ko "install --hooks stays the boolean 'also run hooks' flag" "${INSTALL_OUT}"; fi
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then install_tests_finish; fi

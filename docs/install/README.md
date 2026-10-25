@@ -54,7 +54,7 @@ cannot do.
 ./install.sh remove --target all --only mcp --global
 ```
 
-`mcp` defaults to project scope on every target; see
+`mcp` and Claude `hooks` default to project scope; see
 [Project Vs Global Scope](#project-vs-global-scope). To undo any of it, see
 [Removing Installed Config](#removing-installed-config).
 
@@ -160,33 +160,33 @@ symlink pointing elsewhere unless you pass `--force`. Without bash-completion or
 the zsh `fpath` entry, source the script instead: `eval "$(ycc completion --shell bash)"`
 or `source <(ycc completion --shell zsh)`.
 
-| Intent     | Meaning                                                                                                                                            |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `base`     | Install or register the target's native bundle surface.                                                                                            |
-| `skills`   | Standalone skills, one entry each, in the tool's own skills dir (no plugin).                                                                       |
-| `agents`   | Standalone agents, one entry each, in the tool's own agents dir (no plugin).                                                                       |
-| `commands` | Slash commands. Claude aliases this to standalone skills. Cursor installs wrappers in `~/.cursor/commands/`. opencode installs generated commands. |
-| `settings` | Merge repo-managed config keys (models, effort levels, statusline, ...).                                                                           |
-| `rules`    | Symlink the global rules file each runtime reads (Cursor: manual, see its page).                                                                   |
-| `mcp`      | Merge MCP server definitions into the target's MCP surface.                                                                                        |
-| `hooks`    | Merge hook configuration. Claude also links the hook scripts directory. Cursor installs the optional `sessionStart` hook.                          |
-| `plugins`  | Merge plugin enablement and marketplace entries. Add `base` for CLI-side registration too.                                                         |
-| `mods`     | Install the Claude Code mods under `ycc/mods` (claude only for now).                                                                               |
+| Intent     | Meaning                                                                                                                                                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base`     | Install or register the target's native bundle surface.                                                                                                                                                          |
+| `skills`   | Standalone skills, one entry each, in the tool's own skills dir (no plugin).                                                                                                                                     |
+| `agents`   | Standalone agents, one entry each, in the tool's own agents dir (no plugin).                                                                                                                                     |
+| `commands` | Slash commands. Claude aliases this to standalone skills. Cursor installs wrappers in `~/.cursor/commands/`. opencode installs generated commands.                                                               |
+| `settings` | Merge repo-managed config keys (models, effort levels, statusline, ...).                                                                                                                                         |
+| `rules`    | Symlink the global rules file each runtime reads (Cursor: manual, see its page).                                                                                                                                 |
+| `mcp`      | Merge MCP server definitions into the target's MCP surface.                                                                                                                                                      |
+| `hooks`    | Install hook support. Claude defaults to the native `ycc-hooks` plugin at project scope; `--global` merges hook configuration and links the scripts directory. Cursor installs the optional `sessionStart` hook. |
+| `plugins`  | Merge plugin enablement and marketplace entries. Add `base` for CLI-side registration too.                                                                                                                       |
+| `mods`     | Install the Claude Code mods under `ycc/mods` (claude only for now).                                                                                                                                             |
 
 Per-target mapping (intents a target cannot execute are skipped with a notice):
 
-| Intent     | claude             | cursor     | codex      | opencode   | omp    |
-| ---------- | ------------------ | ---------- | ---------- | ---------- | ------ |
-| `base`     | `base`             | `base`     | `base`     | `base`     | `base` |
-| `skills`   | `skills`           | `skills`   | `skills`   | `skills`   | no-op  |
-| `agents`   | `agents`           | `agents`   | `agents`   | `agents`   | no-op  |
-| `commands` | `skills` (alias)   | `commands` | no-op      | `commands` | no-op  |
-| `settings` | `settings`         | `settings` | `settings` | `settings` | no-op  |
-| `rules`    | `rules`            | `rules`    | `rules`    | `rules`    | no-op  |
-| `mcp`      | `mcp`              | `mcp`      | `mcp`      | `mcp`      | no-op  |
-| `hooks`    | `settings`+`hooks` | `hooks`    | no-op      | no-op      | no-op  |
-| `plugins`  | `settings`         | no-op      | `settings` | `settings` | `base` |
-| `mods`     | `mods`             | no-op      | no-op      | no-op      | no-op  |
+| Intent     | claude                                         | cursor     | codex      | opencode   | omp    |
+| ---------- | ---------------------------------------------- | ---------- | ---------- | ---------- | ------ |
+| `base`     | `base`                                         | `base`     | `base`     | `base`     | `base` |
+| `skills`   | `skills`                                       | `skills`   | `skills`   | `skills`   | no-op  |
+| `agents`   | `agents`                                       | `agents`   | `agents`   | `agents`   | no-op  |
+| `commands` | `skills` (alias)                               | `commands` | no-op      | `commands` | no-op  |
+| `settings` | `settings`                                     | `settings` | `settings` | `settings` | no-op  |
+| `rules`    | `rules`                                        | `rules`    | `rules`    | `rules`    | no-op  |
+| `mcp`      | `mcp`                                          | `mcp`      | `mcp`      | `mcp`      | no-op  |
+| `hooks`    | `hooks` (project); `settings`+`hooks` (global) | `hooks`    | no-op      | no-op      | no-op  |
+| `plugins`  | `settings`                                     | no-op      | `settings` | `settings` | `base` |
+| `mods`     | `mods`                                         | no-op      | no-op      | no-op      | no-op  |
 
 `sync` is exclusive: it never implicitly runs `base`.
 
@@ -367,18 +367,39 @@ trusted projects, provider credentials, or CLI-written marketplace entries.
 `--project` and `--global` (mutually exclusive) work with `install`, `sync`,
 and `remove`. Without either flag, steps that support project scope use it and
 every other step stays global. The project is the git root of the current
-directory, else the current directory. Today the `mcp` step is
-project-capable, the omp `base` step accepts an explicit `--project` (omp's own
-default stays user scope), and so does the opencode `settings` step for
-[third-party catalog plugins](opencode.md#third-party-plugins) only:
+directory, else the current directory. Today the `mcp` step and Claude `hooks`
+are project-capable by default, the omp `base` step accepts an explicit
+`--project` (omp's own default stays user scope), and so does the opencode
+`settings` step for [third-party catalog plugins](opencode.md#third-party-plugins)
+only:
 
-| Target   | `--project`                                                                                                                                         | `--global`                         |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| claude   | `<project>/.mcp.json` (default)                                                                                                                     | `~/.claude.json`                   |
-| cursor   | `<project>/.cursor/mcp.json` (default)                                                                                                              | `~/.cursor/mcp.json`               |
-| codex    | `<project>/.codex/config.toml` (default)                                                                                                            | `~/.codex/config.toml`             |
-| opencode | `<project>/opencode.json` (default); catalog plugins (`--intent plugins --plugins <catalog names> --project`): companions in `<project>/.opencode/` | `~/.config/opencode/opencode.json` |
-| omp      | `base`: `omp plugin install --scope project <package>@ycc` (`ycc`, `ycc-mcp`)                                                                       | `--scope user` (default)           |
+| Target   | Step    | `--project`                                                                                                                                                                                                             | `--global`                              |
+| -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| claude   | `mcp`   | `<project>/.mcp.json` (default)                                                                                                                                                                                         | `~/.claude.json`                        |
+| claude   | `hooks` | `claude plugin install ycc-hooks@ycc --scope project` (default; needs Claude Code >= 2.1.300). Marketplace declaration, when needed: `.claude/settings.local.json` (local mode) or `.claude/settings.json` (repo mode). | settings merge + `~/.claude/hooks` link |
+| cursor   | `mcp`   | `<project>/.cursor/mcp.json` (default)                                                                                                                                                                                  | `~/.cursor/mcp.json`                    |
+| codex    | `mcp`   | `<project>/.codex/config.toml` (default)                                                                                                                                                                                | `~/.codex/config.toml`                  |
+| opencode | `mcp`   | `<project>/opencode.json` (default); catalog plugins (`--intent plugins --plugins <catalog names> --project`): companions in `<project>/.opencode/`                                                                     | `~/.config/opencode/opencode.json`      |
+| omp      | `base`  | `omp plugin install --scope project <package>@ycc` (`ycc`, `ycc-mcp`)                                                                                                                                                   | `--scope user` (default)                |
+
+Claude project hooks reuse a known `ycc` marketplace without repointing it. When
+the marketplace list confirms it is absent, local mode declares the absolute
+checkout path with `--scope local` in `<project>/.claude/settings.local.json`
+(machine-specific and gitignored by Claude); repo mode declares `yandy-r/ystack`
+with `--scope project` in `<project>/.claude/settings.json` (portable). If the
+marketplace list cannot be read, the installer warns and attempts the plugin
+install without adding or repointing a marketplace. Plugin enablement always
+goes in the project's `settings.json`.
+
+The plugin carries its own activation, so a combined `settings,hooks` sync does
+not write the global `hooks` config group. Removing hooks uninstalls the project
+plugin; only a local declaration matching this checkout or a project declaration
+matching the upstream repo is removed, and only when no other `@ycc` plugin is
+enabled in either project settings file. A global installer-managed hooks link
+is left alone and reported to avoid running `WorktreeCreate` twice. Explicit
+Claude selection refuses project hooks at `$HOME`, without the Claude CLI, or
+with a version older than 2.1.300; `--target all` warns and skips that hooks step
+instead. `install --package` keeps Claude hooks global alongside its package-wide steps.
 
 Codex loads a project `.codex/config.toml` only for trusted projects; the
 installer warns when it writes one. An OMP project install shadows the user
@@ -500,9 +521,9 @@ ycc list plugins --target claude
 ### Selecting Mods And Hook Events
 
 On claude, `--mods <names>` and `--hooks <events>` (comma-separated) narrow the
-`mods` step and the `hooks` config group the same way `--plugins` narrows
-plugins. Other targets have no mods step or hooks group, so `ycc list mods` and
-`ycc list hooks` print nothing for them:
+`mods` step and the `--global` `hooks` config group the same way `--plugins`
+narrows plugins. Other targets have no mods step or hooks group, so
+`ycc list mods` and `ycc list hooks` print nothing for them:
 
 ```bash
 ycc list mods --target claude                   # what --mods accepts (status-bar)
@@ -510,8 +531,8 @@ ycc list hooks --target claude                  # what --hooks accepts (Worktree
 ycc sync    --target claude --intent mods --mods status-bar
 ycc install --target claude --only mods --mods status-bar
 ycc remove  --target claude --intent mods --mods status-bar
-ycc sync    --target claude --intent hooks --hooks WorktreeCreate
-ycc remove  --target claude --intent hooks --hooks WorktreeCreate
+ycc sync    --target claude --intent hooks --hooks WorktreeCreate --global
+ycc remove  --target claude --intent hooks --hooks WorktreeCreate --global
 ```
 
 - `--mods` registers the `ycc-mods` marketplace and installs only the named
@@ -521,15 +542,16 @@ ycc remove  --target claude --intent hooks --hooks WorktreeCreate
   `~/.claude/settings.json` (enabled or not).
   Without `--mods`, `remove` uninstalls every mod and the marketplace.
 - `--hooks` selects whole hook **events** (`settings.json` `hooks` keys), not
-  individual scripts. Only the named events are merged or removed; the other
-  managed events keep their entries and ownership state. Sync with `--hooks`
-  still creates (or keeps) the `~/.claude/hooks` directory link; a selective
-  `remove` keeps that link while any managed hook event outside the selection
-  is still recorded, and unlinks it once none remains.
+  individual scripts, only with Claude's `--global` hooks step; the project
+  native plugin always installs its whole hook set. Only the named events are
+  merged or removed; the other managed events keep their entries and ownership
+  state. Sync with `--hooks` still creates (or keeps) the `~/.claude/hooks`
+  directory link; a selective `remove` keeps that link while any managed hook
+  event outside the selection is still recorded, and unlinks it once none remains.
 - `--hooks` is a selector only on `sync` and `remove`. On `install` it stays
   the boolean "also run the hooks step" flag and takes no value.
 - `--mods` needs the `mods` step (`--intent mods`, `--only mods`); `--hooks`
-  needs the `hooks` config group (for example `--intent hooks`). Another
+  needs the `hooks` config group (for example `--intent hooks --global`). Another
   target whose `hooks` step has no hook-event selection (cursor) skips that
   step with a warning instead of running it whole. Unknown names,
   or a run where no selected target has the step, stop before anything is
@@ -549,6 +571,10 @@ ycc remove  --target claude --intent hooks --hooks WorktreeCreate
 ./install.sh remove --target opencode --intent plugins --plugins oh-my-opencode-slim --purge-cache
 ```
 
+The example removing every intent above still uses project scope for Claude
+hooks. Global installer-managed hooks need a separate
+`./install.sh remove --target claude --intent hooks --global`.
+
 `remove` undoes any intent on any target, using the same intent → step mapping
 as `sync` (an intent a target does not support is reported and skipped). It
 requires `--only` or `--intent`, and rejects `--mode` and the additive
@@ -556,15 +582,16 @@ requires `--only` or `--intent`, and rejects `--mode` and the additive
 events). Only what the installer owns is
 taken back:
 
-| Step / intent                  | What `remove` does                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `settings`, `plugins`, `hooks` | Strips repo-managed keys from the structured config (`settings.json`, `cli-config.json`, `config.toml`, `opencode.json`). List entries (plugin lists, Cursor permissions) lose only the items the installer appended. A claude marketplace stays while an enabled plugin still uses it. opencode catalog plugins (the selected ones, else every one ycc installed) also lose their companion files when unchanged; `--purge-cache` also deletes their opencode package cache. |
-| `mcp`                          | Strips managed MCP servers, including ones the repo has since dropped. Servers you added are never touched.                                                                                                                                                                                                                                                                                                                                                                   |
-| `rules`, claude `hooks` dir    | Removes the symlinks, only while they still point at this checkout. A real file you put there is never deleted.                                                                                                                                                                                                                                                                                                                                                               |
-| claude statusline script       | Removed while identical to the repo copy; an edited copy needs `--force`.                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `base`                         | claude: `claude plugin uninstall ycc@ycc` + marketplace remove. cursor / opencode: the bundle's entries in the synced dirs (your own skills stay). codex: plugin links, plugin cache, custom agents, marketplace entry. omp: the recorded `ycc@ycc` and `ycc-mcp@ycc` installs for the scope, then the `ycc` marketplace and export once unused.                                                                                                                              |
-| `skills`, `agents`, `commands` | Removes the standalone entries ycc recorded (or that are still identical to the bundle). Never the plugin, never your own entries without `--force`. On claude, `commands` retires only the recorded legacy `~/.claude/commands/` wrappers.                                                                                                                                                                                                                                   |
-| `mods` (claude)                | Uninstalls each mod and the `ycc-mods` marketplace. With `--mods`, only the named mods; the marketplace stays while another ycc mod is still listed in `enabledPlugins`.                                                                                                                                                                                                                                                                                                      |
+| Step / intent                      | What `remove` does                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `settings`, `plugins`, `hooks`     | Strips repo-managed keys from the structured config (`settings.json`, `cli-config.json`, `config.toml`, `opencode.json`). List entries (plugin lists, Cursor permissions) lose only the items the installer appended. A claude marketplace stays while an enabled plugin still uses it. opencode catalog plugins (the selected ones, else every one ycc installed) also lose their companion files when unchanged; `--purge-cache` also deletes their opencode package cache. |
+| `mcp`                              | Strips managed MCP servers, including ones the repo has since dropped. Servers you added are never touched.                                                                                                                                                                                                                                                                                                                                                                   |
+| `rules`, claude global `hooks` dir | Removes the symlinks, only while they still point at this checkout. A real file you put there is never deleted.                                                                                                                                                                                                                                                                                                                                                               |
+| claude project `hooks`             | Uninstalls `ycc-hooks@ycc` at project scope; removes only the local marketplace declaration matching this checkout or the project declaration matching `yandy-r/ystack`, when no other `@ycc` plugin is enabled in either project settings file.                                                                                                                                                                                                                              |
+| claude statusline script           | Removed while identical to the repo copy; an edited copy needs `--force`.                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `base`                             | claude: `claude plugin uninstall ycc@ycc` + marketplace remove. cursor / opencode: the bundle's entries in the synced dirs (your own skills stay). codex: plugin links, plugin cache, custom agents, marketplace entry. omp: the recorded `ycc@ycc` and `ycc-mcp@ycc` installs for the scope, then the `ycc` marketplace and export once unused.                                                                                                                              |
+| `skills`, `agents`, `commands`     | Removes the standalone entries ycc recorded (or that are still identical to the bundle). Never the plugin, never your own entries without `--force`. On claude, `commands` retires only the recorded legacy `~/.claude/commands/` wrappers.                                                                                                                                                                                                                                   |
+| `mods` (claude)                    | Uninstalls each mod and the `ycc-mods` marketplace. With `--mods`, only the named mods; the marketplace stays while another ycc mod is still listed in `enabledPlugins`.                                                                                                                                                                                                                                                                                                      |
 
 - Cursor `hooks` removes the owned session script in `~/.cursor/hooks/` and the managed `sessionStart` entries in `~/.cursor/hooks.json`.
 - A managed value you edited is kept with a warning; `--force` removes it.

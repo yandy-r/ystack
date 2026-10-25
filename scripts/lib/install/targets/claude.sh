@@ -21,8 +21,15 @@ claude_dry_run_steps() { echo "mcp"; }
 claude_intent_steps() {
     case "$1" in
         base|settings|rules|mcp) echo "$1" ;;
-        # Hook activation lives in settings.json; hook scripts live in hooks/.
-        hooks) echo "settings,hooks" ;;
+        # Project hooks use the native plugin, which carries its own activation;
+        # the settings group remains global until its own project support lands.
+        hooks)
+            if [[ "$(step_scope claude hooks)" == "project" ]]; then
+                echo "hooks"
+            else
+                echo "settings,hooks"
+            fi
+            ;;
         # Claude plugin enablement is pure settings.json state (enabledPlugins,
         # extraKnownMarketplaces). Add 'base' explicitly to also run the CLI's
         # marketplace registration, which needs network access.
@@ -44,6 +51,201 @@ claude_supports_repo_mode() { return 0; }
 
 # Claude Code does not read ~/.agents/skills.
 claude_reads_agents_skills() { return 1; }
+
+# claude_marketplace_source — local checkout or upstream source for ycc.
+claude_marketplace_source() {
+    if [[ "${1:-${MODE:-local}}" == "local" ]]; then
+        realpath "${SCRIPT_DIR}"
+    else
+        echo "yandy-r/ystack"
+    fi
+}
+
+# claude_marketplace_known — report known, absent, or unknown. Only a parsed
+# list can establish absence; a failed lookup must never repoint an existing ycc.
+claude_marketplace_known() {
+    local marketplaces
+    marketplaces="$(claude plugin marketplace list --json 2>/dev/null)" || { echo unknown; return; }
+    python3 -c '
+import json
+import sys
+
+try:
+    entries = json.load(sys.stdin)
+except (ValueError, TypeError):
+    entries = None
+if not isinstance(entries, list):
+    print("unknown")
+elif any(isinstance(entry, dict) and entry.get("name") == "ycc" for entry in entries):
+    print("known")
+else:
+    print("absent")
+' <<< "${marketplaces}"
+}
+
+# claude_project_install_plugin <plugin> — enable a native package in this
+# project, registering ycc there only when no existing declaration supplies it.
+claude_project_install_plugin() {
+    local plugin="$1" root
+    root="$(project_root)"
+    require_claude_cli
+    command -v python3 >/dev/null 2>&1 || { err "python3 is required but not found"; exit 1; }
+    (
+        cd "${root}" || exit 1
+        case "$(claude_marketplace_known)" in
+            known) info "reusing the existing ycc marketplace (not repointing it)" ;;
+            absent)
+                local source_arg marketplace_scope=project
+                source_arg="$(claude_marketplace_source)"
+                [[ "${MODE:-local}" == "local" ]] && marketplace_scope=local
+                info "Running: claude plugin marketplace add ${source_arg} --scope ${marketplace_scope}"
+                claude plugin marketplace add "${source_arg}" --scope "${marketplace_scope}"
+                ;;
+            unknown)
+                warn "The marketplace list could not be read; no marketplace is added because adding could repoint an existing ycc marketplace"
+                ;;
+        esac
+        info "Running: claude plugin install ${plugin}@ycc --scope project"
+        claude plugin install "${plugin}@ycc" --scope project \
+            || warn "plugin install returned non-zero — check 'claude plugin list'"
+    )
+}
+
+# claude_project_remove_plugin <plugin> — retract project enablement; remove
+# only declarations the installer could write, once neither project file needs ycc.
+claude_project_remove_plugin() {
+    local plugin="$1" root actions action
+    root="$(project_root)"
+    require_claude_cli
+    (
+        cd "${root}" || exit 1
+        run_claude_cli plugin uninstall "${plugin}@ycc" --scope project
+    )
+    actions="$(python3 - "${root}/.claude" "${plugin}" "$(realpath "${SCRIPT_DIR}")" <<'PY'
+import json
+import pathlib
+import re
+import sys
+
+directory, removed, checkout = pathlib.Path(sys.argv[1]), f"{sys.argv[2]}@ycc", sys.argv[3]
+configs = {}
+for scope, filename in (("project", "settings.json"), ("local", "settings.local.json")):
+    path = directory / filename
+    try:
+        config = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        if not isinstance(config, dict):
+            raise ValueError("settings must be an object")
+    except (OSError, ValueError):
+        print(f"keep:{filename} could not be read")
+        sys.exit(0)
+    configs[scope] = config
+others = set()
+for config in configs.values():
+    enabled = config.get("enabledPlugins")
+    if isinstance(enabled, dict):
+        others.update(key for key, value in enabled.items()
+                      if isinstance(key, str) and key != removed and key.endswith("@ycc") and value is True)
+if others:
+    print("keep:other ycc plugins are still enabled: " + ", ".join(sorted(others)))
+    sys.exit(0)
+for scope, config in configs.items():
+    marketplaces = config.get("extraKnownMarketplaces")
+    declaration = marketplaces.get("ycc") if isinstance(marketplaces, dict) else None
+    source = declaration.get("source") if isinstance(declaration, dict) else None
+    owned = False
+    if isinstance(source, dict):
+        if scope == "local":
+            owned = source.get("source") == "directory" and source.get("path") == checkout
+        else:
+            url = source.get("url")
+            owned = source.get("repo") == "yandy-r/ystack" or (
+                isinstance(url, str) and re.search(r"[/:]yandy-r/ystack(?:\.git)?$", url) is not None
+            )
+    if owned:
+        print(f"remove:{scope}")
+    elif declaration is not None:
+        print(f"keep:{scope} ycc marketplace source does not match the installer source")
+if not any(isinstance(config.get("extraKnownMarketplaces"), dict)
+           and "ycc" in config["extraKnownMarketplaces"] for config in configs.values()):
+    print("keep:no project or local ycc marketplace declaration")
+PY
+)"
+    while IFS= read -r action; do
+        if [[ "${action}" == remove:* ]]; then
+            (
+                cd "${root}" || exit 1
+                run_claude_cli plugin marketplace remove ycc --scope "${action#remove:}"
+            )
+        else
+            info "kept the ycc marketplace: ${action#keep:}"
+        fi
+    done <<< "${actions}"
+}
+
+# claude_project_hooks_selected — compute the current target's hook selection
+# without letting intent/package mapping leak out of preflight.
+claude_project_hooks_selected() {
+    (
+        if [[ -n "${PACKAGE:-}" ]]; then
+            package_configure_steps "$(package_steps_csv claude)"
+        elif [[ ${#INTENTS[@]} -gt 0 ]]; then
+            configure_intents_for_target claude >/dev/null
+        fi
+        step_enabled hooks && [[ "$(step_scope claude hooks)" == "project" ]]
+    )
+}
+
+# claude_project_hooks_unavailable_reason — shared preflight/step availability
+# check. An empty result means project hooks can run.
+claude_project_hooks_unavailable_reason() {
+    local root home
+    root="$(cd "$(project_root)" && pwd -P)"
+    home="$(cd "${HOME}" && pwd -P)"
+    if [[ "${root}" == "${home}" ]]; then
+        echo '--project at $HOME: claude project scope needs a project directory (cd into a project, or use --global)'
+        return
+    fi
+    if ! command -v claude >/dev/null 2>&1; then
+        echo "'claude' CLI is required but not found in PATH"
+        return
+    fi
+    [[ "${DRY_RUN:-0}" == "1" ]] && return 0
+    local version major minor patch
+    version="$(claude --version 2>/dev/null)" || version=""
+    version="${version%%[[:space:]]*}"
+    if [[ "${version}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+        major="${BASH_REMATCH[1]}"
+        minor="${BASH_REMATCH[2]}"
+        patch="${BASH_REMATCH[3]}"
+        if ((10#${major} < 2 || (10#${major} == 2 && (10#${minor} < 1 || (10#${minor} == 1 && 10#${patch} < 300))))); then
+            echo "ycc-hooks needs Claude Code 2.1.300 or later (found ${version}); use --global for the installer-managed hooks"
+        fi
+    fi
+    return 0
+}
+
+# claude_preflight — reject invalid selection always, unavailable hooks only
+# when Claude was explicitly selected (all-target runs skip this step instead).
+claude_preflight() {
+    claude_project_hooks_selected || return 0
+    if has_selection hooks; then
+        err "--hooks <events> narrows settings.json hook events, which only the --global hooks step manages; at project scope the ycc-hooks plugin installs its whole hook set"
+        err "  use --global, or drop --hooks"
+        exit 1
+    fi
+    [[ "${TARGET}" == "all" ]] && return 0
+    local reason
+    reason="$(claude_project_hooks_unavailable_reason)"
+    if [[ -n "${reason}" ]]; then
+        err "${reason}"
+        exit 1
+    fi
+}
+
+claude_global_hooks_link_managed() {
+    [[ -L "${HOME}/.claude/hooks" ]] || return 1
+    [[ "$(readlink -f "${HOME}/.claude/hooks" 2>/dev/null || true)" == "$(realpath "${SCRIPT_DIR}/ycc/settings/hooks")" ]]
+}
 
 # ---------------------------------------------------------------------------
 # Claude marketplace — registers ycc as a marketplace via the canonical CLI:
@@ -83,11 +285,7 @@ register_claude_marketplace() {
     command -v realpath >/dev/null 2>&1 || { err "realpath is required but not found"; exit 1; }
 
     local source_arg
-    if [[ "$mode" == "local" ]]; then
-        source_arg="$(realpath "${SCRIPT_DIR}")"
-    else
-        source_arg="yandy-r/ystack"
-    fi
+    source_arg="$(claude_marketplace_source "${mode}")"
 
     local settings="${HOME}/.claude/settings.json"
 
@@ -224,12 +422,27 @@ sync_claude_target() {
         ran=1
     fi
     if step_enabled hooks; then
-        printf '\n%sClaude: link hooks directory into ~/.claude/hooks%s\n' "${BOLD}" "${NC}"
-        # Directory-level symlink so new hook scripts are picked up automatically.
-        # link_file refuses to replace a real directory at the destination, so an
-        # existing ~/.claude/hooks (non-symlink) surfaces as an error rather than
-        # being silently clobbered.
-        link_file "${SCRIPT_DIR}/ycc/settings/hooks" "${HOME}/.claude/hooks"
+        if [[ "$(step_scope claude hooks)" == "project" ]]; then
+            local root reason
+            reason="$(claude_project_hooks_unavailable_reason)"
+            if [[ -n "${reason}" ]]; then
+                warn "Skipping Claude project hooks: ${reason}"
+            else
+                root="$(project_root)"
+                printf '\n%sClaude: install ycc-hooks@ycc at project scope (%s)%s\n' "${BOLD}" "${root}" "${NC}"
+                claude_project_install_plugin ycc-hooks
+                if claude_global_hooks_link_managed; then
+                    warn "The global hooks install is still active; WorktreeCreate would run twice. Remove it with: ${CLI_NAME} remove --target claude --intent hooks --global"
+                fi
+            fi
+        else
+            printf '\n%sClaude: link hooks directory into ~/.claude/hooks%s\n' "${BOLD}" "${NC}"
+            # Directory-level symlink so new hook scripts are picked up automatically.
+            # link_file refuses to replace a real directory at the destination, so an
+            # existing ~/.claude/hooks (non-symlink) surfaces as an error rather than
+            # being silently clobbered.
+            link_file "${SCRIPT_DIR}/ycc/settings/hooks" "${HOME}/.claude/hooks"
+        fi
         ran=1
     fi
     if step_enabled mods; then
@@ -325,11 +538,25 @@ remove_claude_target() {
         remove_claude_mods
     fi
     if step_enabled hooks; then
-        printf '\n%sClaude: unlink hooks directory%s\n' "${BOLD}" "${NC}"
-        if claude_hooks_still_managed; then
-            info "kept ${claude_dir}/hooks: managed hook events outside --hooks still use it"
+        if [[ "$(step_scope claude hooks)" == "project" ]]; then
+            local reason
+            reason="$(claude_project_hooks_unavailable_reason)"
+            if [[ -n "${reason}" ]]; then
+                warn "Skipping Claude project hooks: ${reason}"
+            else
+                printf '\n%sClaude: uninstall ycc-hooks@ycc at project scope%s\n' "${BOLD}" "${NC}"
+                claude_project_remove_plugin ycc-hooks
+            fi
+            if claude_global_hooks_link_managed; then
+                warn "The global installer-managed hooks are still active. Remove them with: ${CLI_NAME} remove --target claude --intent hooks --global"
+            fi
         else
-            unlink_owned_link "${SCRIPT_DIR}/ycc/settings/hooks" "${claude_dir}/hooks"
+            printf '\n%sClaude: unlink hooks directory%s\n' "${BOLD}" "${NC}"
+            if claude_hooks_still_managed; then
+                info "kept ${claude_dir}/hooks: managed hook events outside --hooks still use it"
+            else
+                unlink_owned_link "${SCRIPT_DIR}/ycc/settings/hooks" "${claude_dir}/hooks"
+            fi
         fi
     fi
     if step_enabled mcp; then

@@ -70,7 +70,15 @@ STUB_BIN="${SANDBOX_ROOT}/stub-bin"
 mkdir -p "${STUB_BIN}"
 cat > "${STUB_BIN}/claude" <<'SH'
 #!/usr/bin/env bash
+if [[ "${1:-}" == "--version" ]]; then
+    printf '%s\n' "${CLAUDE_STUB_VERSION:-2.1.310 (Claude Code)}"
+    exit 0
+fi
 printf '%s\n' "$*" >> "${CLAUDE_STUB_LOG}"
+if [[ "$*" == "plugin marketplace list --json" ]]; then
+    printf '%s\n' "${CLAUDE_STUB_MARKETPLACES:-[]}"
+    exit "${CLAUDE_STUB_MARKETPLACES_STATUS:-0}"
+fi
 SH
 cat > "${STUB_BIN}/codex" <<'SH'
 #!/usr/bin/env bash

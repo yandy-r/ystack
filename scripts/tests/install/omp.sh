@@ -110,7 +110,7 @@ home="$(new_home)"
 if out="$(run_install "${home}" install --target cursor --only base --project)"; then
     ko "--project still rejects cursor base"
 else
-    assert_contains "${out}" "project scope currently supports: mcp; omp: base" "--project still rejects cursor base"
+    assert_contains "${out}" "project scope currently supports: mcp; claude: hooks; omp: base" "--project still rejects cursor base"
 fi
 
 echo

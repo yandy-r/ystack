@@ -187,6 +187,15 @@ config_groups_for_target() {
         fi
         return 0
     fi
+    local groups_csv="${defaults}"
+    # The native project plugin carries its own hook activation; never write
+    # the global hooks group alongside it. Settings-only removal still owns
+    # that legacy group because its hooks step is not enabled.
+    if [[ "${target}" == "claude" ]] && step_enabled hooks \
+        && [[ "$(step_scope claude hooks)" == "project" ]]; then
+        groups_csv="${defaults//,hooks/}"
+    fi
+    defaults="${groups_csv}"
     if [[ ${#INTENTS[@]} -eq 0 ]]; then
         echo "${defaults}"
         return 0
@@ -542,7 +551,7 @@ preflight_step_support() {
     for step in ${valid_csv//,/ }; do
         step_enabled "${step}" || continue
         if [[ "${SCOPE}" == "project" ]] && ! step_allows_project "${target}" "${step}"; then
-            err "--project is not supported by step '${step}' for target '${target}' (project scope currently supports: mcp; omp: base, dedupe; opencode: settings for catalog plugins)"
+            err "--project is not supported by step '${step}' for target '${target}' (project scope currently supports: mcp; claude: hooks; omp: base, dedupe; opencode: settings for catalog plugins)"
             err "  use --global, or select only project-capable steps with --only / --intent."
             exit 1
         fi
