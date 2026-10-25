@@ -103,8 +103,8 @@ Apply the common worktree precedence/deduction in standalone-dispatch.md §8.1. 
 
 ```bash
 # grep -c prints the count itself; exit 1 only means zero matches, so
-# exit codes 0 and 1 both leave exactly one integer on stdout. Anything
-# higher (unreadable/missing file) is a real error and aborts the snippet.
+# exit codes 0 and 1 both leave exactly one integer on stdout. A status
+# above 1 (unreadable/missing file) is a real error and makes the line fail.
 grep -c "^## Worktree Setup" "$PLAN_PATH"; [ $? -le 1 ]
 grep -c "^\- \*\*Worktree\*\*:" "$PLAN_PATH"; [ $? -le 1 ]
 ```
