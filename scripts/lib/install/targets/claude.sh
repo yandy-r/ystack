@@ -73,7 +73,8 @@ claude_marketplace_source() {
 # github repo[#ref], a normalised absolute directory path, or a git url ending
 # in .git (https, http or git@) with an optional ref. <exact> is 1 when the
 # entry holds nothing but that source, so `marketplace add <source>` would
-# reproduce it byte for byte (extra keys such as autoUpdate, and anything else
+# reproduce its content (the CLI may still reorder keys and re-indent the file;
+# extra keys such as autoUpdate, and anything else
 # the CLI rewrites, are lost by an add). An unreadable file counts as
 # undeclared (adding is then guarded by the registration check). Scopes: user,
 # project, local; "skip-user" ignores the user file, "only-user" reads only it.
@@ -285,7 +286,7 @@ claude_project_install_plugin() {
             if [[ "${declared_exact}" != "1" ]]; then
                 warn "ycc is declared in ${declared_file} but not registered on this machine; re-registering would rewrite that declaration"
                 if [[ -n "${declared_source}" ]]; then
-                    warn "Skipped the plugin install; to register it as declared, run: claude plugin marketplace add ${declared_source} --scope ${marketplace_scope}"
+                    warn "Skipped the plugin install. Register ycc yourself (note: 'claude plugin marketplace add ${declared_source} --scope ${marketplace_scope}' would drop the declaration's other keys), or rerun with --global"
                 else
                     warn "Skipped the plugin install. Register ycc yourself with claude plugin marketplace add <source> --scope ${marketplace_scope}, or rerun with --global"
                 fi
@@ -312,7 +313,8 @@ claude_project_remove_plugin() {
         run_claude_cli plugin uninstall "${plugin}@ycc" --scope project
     )
     actions="$(python3 - "${root}/.claude" "${plugin}" "$(realpath "${SCRIPT_DIR}")" \
-        "${HOME}/.claude/plugins/installed_plugins.json" "$(cd "${root}" && pwd -P)" <<'PY'
+        "${HOME}/.claude/plugins/installed_plugins.json" "$(cd "${root}" && pwd -P)" \
+        "${HOME}/.claude/settings.json" <<'PY'
 import json
 import pathlib
 import sys
@@ -365,12 +367,21 @@ for scope, config in configs.items():
     marketplaces = config.get("extraKnownMarketplaces")
     declaration = marketplaces.get("ycc") if isinstance(marketplaces, dict) else None
     # Owned only on the exact shape the installer writes (via the CLI): a
-    # local directory declaration pointing at this checkout, or the unpinned
-    # upstream github repo. ref/path/url pins and forks are the user's.
+    # local directory declaration pointing at this checkout, or the upstream
+    # github repo — unpinned, or pinned exactly as the user declaration that
+    # repo mode copies. Other pins, paths, urls and forks are the user's.
     if scope == "local":
         owned = declaration == {"source": {"source": "directory", "path": checkout}}
     else:
-        owned = declaration == {"source": {"source": "github", "repo": "yandy-r/ystack"}}
+        upstream = {"source": "github", "repo": "yandy-r/ystack"}
+        try:
+            user = json.loads(pathlib.Path(sys.argv[6]).read_text(encoding="utf-8"))
+            user_source = user["extraKnownMarketplaces"]["ycc"]["source"]
+        except (OSError, ValueError, KeyError, TypeError):
+            user_source = None
+        copied = (isinstance(user_source, dict) and user_source.get("source") == "github"
+                  and user_source.get("repo") == "yandy-r/ystack" and set(user_source) <= {"source", "repo", "ref"})
+        owned = declaration == {"source": upstream} or (copied and declaration == {"source": user_source})
     if owned:
         print(f"remove:{scope}")
     elif declaration is not None:

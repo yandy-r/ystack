@@ -392,13 +392,15 @@ path into an absolute one, appending `.git` to a git url). So when the machine
 has no `ycc` registration (a fresh clone, or another project's `remove` dropped
 it), the installer re-registers a project or local declaration with
 `claude plugin marketplace add <source> --scope <declaration scope>` only when
-that add reproduces the declaration exactly: the entry holds nothing but
+that add reproduces the declaration's content (the CLI may reorder keys and
+re-indent the file): the entry holds nothing but
 `source`, and the source is github (`repo[#ref]`), a directory with an absolute
 normalised `path`, or a git url ending in `.git` (https, http or `git@`, with an
 optional `#ref`). Any other declaration is left untouched: the installer warns
 `ycc is declared in <file> but not registered on this machine; re-registering
-would rewrite that declaration`, adds `run: claude plugin marketplace add
-<source> --scope <scope>` as a hint when the source is rebuildable, and skips
+would rewrite that declaration`, notes the manual `claude plugin marketplace add
+<source> --scope <scope>` command (which would drop the other keys) when the
+source is rebuildable, and skips
 the plugin install. A declaration in `~/.claude/settings.json` (the `settings` step writes
 one) is not a registration, but the CLI rejects a project or local add whose
 source differs from it (directory sources excepted). With no registration and
@@ -423,11 +425,12 @@ always goes in the project's `settings.json`.
 The plugin carries its own activation, so a combined `settings,hooks` sync does
 not write the global `hooks` config group. Removing hooks uninstalls the project
 plugin; only a declaration exactly matching what the installer writes — the
-local directory shape pointing at this checkout, or the unpinned upstream
-`yandy-r/ystack` project shape — is removed, and only when no other `@ycc`
+local directory shape pointing at this checkout, the unpinned upstream
+`yandy-r/ystack` project shape, or that repo pinned exactly as the user
+declaration repo mode copies — is removed, and only when no other `@ycc`
 plugin is enabled in either project settings file and no other project or user
 scope still has a `@ycc` install (removing the declaration drops the CLI's
-machine-wide registration); pinned (`ref`) and forked declarations are kept. A
+machine-wide registration); other pins and forked declarations are kept. A
 global installer-managed hooks link is left alone and
 reported to avoid running `WorktreeCreate` twice. Explicit
 Claude selection refuses project hooks at `$HOME`, without the Claude CLI, or

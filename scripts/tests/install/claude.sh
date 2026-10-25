@@ -258,7 +258,7 @@ calls="$(cat "${home}/claude-calls.log")"
 assert_not_contains "${calls}" "plugin marketplace add" "a declaration with extra keys is never re-registered"
 assert_not_contains "${calls}" "plugin install" "a declaration with extra keys skips the install"
 assert_contains "${INSTALL_OUT}" "ycc is declared in .claude/settings.json but not registered on this machine; re-registering would rewrite that declaration" "a declaration with extra keys warns"
-assert_contains "${INSTALL_OUT}" "run: claude plugin marketplace add yandy-r/ystack#v6.1.0 --scope project" "a declaration with extra keys names the manual command"
+assert_contains "${INSTALL_OUT}" "'claude plugin marketplace add yandy-r/ystack#v6.1.0 --scope project' would drop the declaration's other keys" "a declaration with extra keys warns that the manual add drops them"
 assert_contains "$(cat "${home}/project/.claude/settings.json")" "${before}" "a declaration with extra keys is left untouched"
 
 home="$(new_home)"
@@ -352,6 +352,22 @@ install_must_succeed "${home}" remove --target claude --intent hooks
 calls="$(cat "${home}/claude-calls.log")"
 assert_contains "${calls}" "plugin uninstall ycc-hooks@ycc --scope project" "project hooks remove uninstalls the native plugin"
 assert_contains "${calls}" "plugin marketplace remove ycc --scope project" "project hooks remove retracts its unused marketplace"
+
+# Repo mode copies the user declaration's pinned upstream source into the
+# project; remove recognizes that copy as installer-written. A different pin stays.
+for pin in main v6.1.0; do
+    home="$(new_home)"
+    mkdir -p "${home}/project/.claude"
+    printf '{"extraKnownMarketplaces":{"ycc":{"source":{"source":"github","repo":"yandy-r/ystack","ref":"main"}}}}\n' > "${home}/.claude/settings.json"
+    printf '{"extraKnownMarketplaces":{"ycc":{"source":{"source":"github","repo":"yandy-r/ystack","ref":"%s"}}},"enabledPlugins":{"ycc-hooks@ycc":true}}\n' "${pin}" > "${home}/project/.claude/settings.json"
+    install_must_succeed "${home}" remove --target claude --intent hooks
+    calls="$(cat "${home}/claude-calls.log")"
+    if [[ "${pin}" == main ]]; then
+        assert_contains "${calls}" "plugin marketplace remove ycc --scope project" "project hooks remove retracts the user-pinned upstream copy repo mode wrote"
+    else
+        assert_not_contains "${calls}" "plugin marketplace remove" "project hooks remove keeps a pin that differs from the user declaration"
+    fi
+done
 
 home="$(new_home)"
 mkdir -p "${home}/project/.claude"
