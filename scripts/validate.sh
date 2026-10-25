@@ -16,7 +16,8 @@
 # Targets: inventory, cursor, codex, opencode, omp, agents, claude, claude-native,
 #          cursor-native, codex-native, json, config, packages, release, mods, practices, scope, types
 #   - inventory  validates ycc skill frontmatter, the shared inventory, the formatter bundle and
-#                plan-workflow regressions and per-runtime worktree roots (scripts/test-worktree-roots.sh)
+#                plan-workflow regressions, per-runtime worktree roots (scripts/test-worktree-roots.sh) and
+#                the clean skill report generator (scripts/test-clean-report.sh)
 #   - omp        checks generated OMP skill, agent and command drift (bytes and modes), content policy and golden
 #                tests, plus native package manifests, catalog listing, lockstep versions and closure, and the
 #                built-in command pin against a live omp (warns and skips when omp is absent)
@@ -233,6 +234,8 @@ run_target() {
             "${REPO_ROOT}/scripts/test-plan-workflow-validators.sh" || fail "test-plan-workflow-validators.sh"
             echo "== validate: per-runtime worktree roots =="
             "${REPO_ROOT}/scripts/test-worktree-roots.sh" || fail "test-worktree-roots.sh"
+            echo "== validate: clean report generator =="
+            "${REPO_ROOT}/scripts/test-clean-report.sh" || fail "test-clean-report.sh"
             echo "== validate: helper root discovery =="
             "${REPO_ROOT}/scripts/test-helper-root-discovery.sh" || fail "test-helper-root-discovery.sh"
             echo "== validate: formatter bundle smoke =="

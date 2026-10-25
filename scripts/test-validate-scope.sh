@@ -145,6 +145,7 @@ expect_targets "package install plan tests select config" "config" scripts/test_
 expect_targets "mods select mods and the install tests" "config mods" ycc/mods/README.md
 expect_targets "release tests select release" "release" scripts/test-release-model.sh
 expect_targets "plan-workflow validator test selects inventory" "inventory" scripts/test-plan-workflow-validators.sh
+expect_targets "clean report test selects inventory" "inventory" scripts/test-clean-report.sh
 expect_targets "rename wrapper selects inventory" "inventory" scripts/rename-repo.sh
 expect_targets "rename engine selects inventory and types" "inventory types" scripts/rename_repo.py
 expect_targets "rename shell tests select inventory" "inventory" scripts/test-rename-repo.sh
