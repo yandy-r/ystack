@@ -100,8 +100,14 @@ check_search_queries() {
     fi
 
     # Count "Search Queries Executed" section entries
-    local query_count
-    query_count=$(grep -c "^[0-9]\+\." "$file" 2>/dev/null | tail -1 || echo "0")
+    local query_count status=0
+    # grep -c prints the count itself; exit 1 only means zero matches. Any
+    # other non-zero status (e.g. unreadable file) is a real read failure.
+    query_count=$(grep -c "^[0-9]\+\." "$file" 2>/dev/null) || status=$?
+    if [ "$status" -gt 1 ]; then
+        echo "Error: Failed to read findings file: $file" >&2
+        return "$status"
+    fi
 
     if [ "$query_count" -lt "$min_queries" ]; then
         echo -e "${YELLOW}⚠${NC} $persona: Only $query_count search queries (expected $min_queries+)"

@@ -157,7 +157,10 @@ echo ""
 if [ "$UNIQUE_DIRS" -gt 0 ]; then
     echo -e "${GREEN}Changed Directories:${NC}"
     echo "$ALL_CHANGED_FILES" | grep -v '^$' | xargs -r dirname | sort -u | while IFS= read -r dir; do
-        file_count=$(echo "$ALL_CHANGED_FILES" | grep -c "^${dir}/" || echo "0")
+        # Count by fixed-string prefix: dir comes from the filesystem and may
+        # contain regex metacharacters (e.g. app/[[...slug]]), so grep would
+        # either miscount or fail with exit 2. awk index() cannot fail.
+        file_count=$(awk -v p="${dir}/" 'index($0, p) == 1 {n++} END {print n + 0}' <<<"$ALL_CHANGED_FILES")
         echo "  - $dir/ ($file_count files)"
     done
     echo ""

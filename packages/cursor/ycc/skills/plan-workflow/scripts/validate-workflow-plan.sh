@@ -78,12 +78,14 @@ fi
 echo "Validating plan structure: $PLAN_FILE"
 echo ""
 
-# Read file content
+# Read file content. Match against it with here-strings, not `echo | grep -q`:
+# under pipefail an early-exiting reader SIGPIPEs the echo writer and a
+# present section reads as missing (YAN-1285).
 CONTENT=$(cat "$PLAN_FILE")
 
 # Title check
 echo "Checking document structure..."
-if echo "$CONTENT" | head -5 | grep -q "^# "; then
+if grep -q "^# " <<<"$(head -n 5 <<<"$CONTENT")"; then
   success "Title present"
 else
   error "Missing title (# heading)"
@@ -108,7 +110,7 @@ fi
 # Critically Relevant Files section
 echo ""
 echo "Checking required sections..."
-if echo "$CONTENT" | grep -q "## Critically Relevant Files"; then
+if grep -q "## Critically Relevant Files" <<<"$CONTENT"; then
   success "Critically Relevant Files section present"
 
   # Count files listed (absolute or relative paths)
@@ -123,14 +125,14 @@ else
 fi
 
 # Implementation Plan section
-if echo "$CONTENT" | grep -q "## Implementation Plan"; then
+if grep -q "## Implementation Plan" <<<"$CONTENT"; then
   success "Implementation Plan section present"
 else
   error "Missing 'Implementation Plan' section"
 fi
 
 # Advice section
-if echo "$CONTENT" | grep -q "## Advice"; then
+if grep -q "## Advice" <<<"$CONTENT"; then
   success "Advice section present"
 
   # Count advice items
@@ -148,7 +150,7 @@ fi
 # per-task **Worktree** lines are legacy and not required in new plans.
 echo ""
 echo "Checking optional worktree annotations..."
-if echo "$CONTENT" | grep -q "^## Worktree Setup"; then
+if grep -q "^## Worktree Setup" <<<"$CONTENT"; then
   success "Worktree Setup section present (single feature worktree — see worktree-strategy.md)"
   WORKTREE_TASK_FIELDS=$(echo "$CONTENT" | grep -c '\*\*Worktree\*\*:' || true)
   success "  $WORKTREE_TASK_FIELDS legacy per-task **Worktree** field(s) (expected 0 in new plans)"

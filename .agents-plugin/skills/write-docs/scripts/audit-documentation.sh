@@ -38,7 +38,14 @@ echo ""
 echo "## README Files"
 echo ""
 readme_files=$(find . -name "README.md" -not -path "./node_modules/*" -not -path "./.git/*" 2>/dev/null)
-readme_count=$(echo "$readme_files" | grep -c "README.md" || echo "0")
+# grep -c prints the count itself; exit 1 only means zero matches. Any other
+# non-zero status is a real failure.
+readme_count_status=0
+readme_count=$(grep -c "README.md" <<<"$readme_files") || readme_count_status=$?
+if [ "$readme_count_status" -gt 1 ]; then
+    echo "Error: Failed to count README.md files" >&2
+    exit "$readme_count_status"
+fi
 echo "📊 **Total README.md files**: ${readme_count}"
 echo ""
 if [[ -n "$readme_files" ]]; then
@@ -59,7 +66,14 @@ echo ""
 echo "## AGENTS.md Files"
 echo ""
 claude_files=$(find . -name "AGENTS.md" -not -path "./node_modules/*" -not -path "./.git/*" 2>/dev/null)
-claude_count=$(echo "$claude_files" | grep -c "AGENTS.md" || echo "0")
+# grep -c prints the count itself; exit 1 only means zero matches. Any other
+# non-zero status is a real failure.
+claude_count_status=0
+claude_count=$(grep -c "AGENTS.md" <<<"$claude_files") || claude_count_status=$?
+if [ "$claude_count_status" -gt 1 ]; then
+    echo "Error: Failed to count AGENTS.md files" >&2
+    exit "$claude_count_status"
+fi
 echo "📊 **Total AGENTS.md files**: ${claude_count}"
 echo ""
 if [[ -n "$claude_files" && "$claude_count" -gt 0 ]]; then

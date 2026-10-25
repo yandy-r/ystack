@@ -27,7 +27,10 @@ Note available commands for: type-check, lint, test, build.
 After reading the plan, check whether it was written in parallel mode by looking for a `## Batches` section:
 
 ```bash
-grep -c "^## Batches" "$PLAN_PATH" || echo 0
+# grep -c prints the count itself; exit 1 only means zero matches. Exit codes
+# 0 and 1 both leave exactly one integer on stdout; a status above 1
+# (unreadable or missing file) is a real read error and makes the line fail.
+grep -c "^## Batches" "$PLAN_PATH"; [ $? -le 1 ]
 ```
 
 - **Count > 0** → Plan is **parallel-capable**. Parse the `Batches` table to extract batch ordering and `BATCH:` fields from tasks.
