@@ -196,8 +196,11 @@ the `ycc` marketplace at project scope (repo mode, committed) or local scope
 existing declaration — while `--global` links `~/.claude/hooks`; `mods`
 registers the `ycc-mods` directory marketplace; and `skills`/`agents`
 install standalone copies into `~/.claude/` (warning about duplicate names if
-`ycc@ycc` is also installed). `remove --target claude` uninstalls `ycc@ycc`
-and the `ycc` marketplace.
+`ycc@ycc` is also installed). The `base` step of `remove --target claude`
+uninstalls `ycc@ycc` and the `ycc` marketplace. The `hooks` intent removes
+`ycc-hooks@ycc` at project scope, then removes only installer-written
+marketplace declarations when no other `@ycc` install remains; with
+`--global`, it removes the installer-managed global hooks link.
 
 **INSTALL_PATH:cursor**
 Sources under `ycc/` generate `packages/cursor/ycc/{skills,agents,commands}/`,
