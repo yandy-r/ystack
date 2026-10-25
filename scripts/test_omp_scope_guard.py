@@ -192,6 +192,27 @@ class ScopeGuardTest(unittest.TestCase):
         self.assert_allowed([bash("architecture-analyst", "find . -name '*.py' | wc -l")])
         self.assert_blocked([bash("architecture-analyst", "find . -exec rm {} +")], "runs another command")
 
+    def test_fixers_run_only_their_validation_commands(self) -> None:
+        # YAN-1276: the narrowed fixer allowlists hold on OMP too, so a fixer cannot run an
+        # interpreter one-liner or a shell wrapper next to its allowed validation command.
+        for agent in ("pr-comment-fixer", "review-fixer", "release-fix-applier"):
+            self.assert_allowed([bash(agent, "pytest -q tests/test_a.py"), bash(agent, "cargo check")])
+            self.assert_blocked(
+                [
+                    bash(agent, command)
+                    for command in (
+                        "python3 -c 'print(1)'",
+                        "python -c 'print(1)'",
+                        "node -e '1'",
+                        "bash -c 'pytest'",
+                        "sh -c 'cargo check'",
+                        "pytest && python3 -c 'print(1)'",
+                        "cat setup.cfg",
+                    )
+                ],
+                "outside the allowed prefixes",
+            )
+
     def test_digit_word_before_ampersand_redirect_stays_an_argument(self) -> None:
         # `python3 2&>/dev/null -m mypy` runs the file `2`; only `2>`/`2<` name an fd.
         self.assert_blocked([bash("review-fixer", "python3 2&>/dev/null -m mypy")], "outside the allowed prefixes")

@@ -134,7 +134,7 @@ Validate `PROJECT TYPE-CHECK COMMAND` against this allowlist before execution:
 
 If the value starts with `SKIP (` and ends with `)`, skip validation and report `TYPE-CHECK: Skipped (<reason>)`.
 
-If the value is not allowlisted and is not a `SKIP (...)` token, do NOT run it (on OpenCode, native rules deny any other shell command). Report `STATUS: Failed` with `BLOCKER: type-check command not allowlisted — <value>`.
+If the value is not allowlisted and is not a `SKIP (...)` token, do NOT run it (OpenCode and OMP block any other shell command natively; on other runtimes this rule is yours to keep). Report `STATUS: Failed` with `BLOCKER: type-check command not allowlisted — <value>`.
 
 Execute the allowlisted command via Bash. If type-check passes for your modified file: report success.
 

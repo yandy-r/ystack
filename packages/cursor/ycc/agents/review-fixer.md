@@ -123,7 +123,7 @@ other non-allowlisted value as safe.
 
 Execute the validated command via a safe program+args API (for example, `spawn` or `execFile`), never via shell-string interpolation. If file scoping is used, pass the filename as a separate argument token.
 
-If `PROJECT TYPE-CHECK COMMAND` is not allowlisted, do NOT run it (on OpenCode, native rules deny any other shell command). Report `STATUS: Failed` with `BLOCKER: type-check command not allowlisted — <value>`.
+If `PROJECT TYPE-CHECK COMMAND` is not allowlisted, do NOT run it (OpenCode and OMP block any other shell command natively; on other runtimes this rule is yours to keep). Report `STATUS: Failed` with `BLOCKER: type-check command not allowlisted — <value>`.
 
 If the type-check passes for your modified file: report success.
 
