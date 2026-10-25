@@ -382,21 +382,28 @@ only:
 | opencode | `mcp`   | `<project>/opencode.json` (default); catalog plugins (`--intent plugins --plugins <catalog names> --project`): companions in `<project>/.opencode/`                                                                     | `~/.config/opencode/opencode.json`      |
 | omp      | `base`  | `omp plugin install --scope project <package>@ycc` (`ycc`, `ycc-mcp`)                                                                                                                                                   | `--scope user` (default)                |
 
-Claude project hooks reuse a `ycc` marketplace this project or the user
-already declares — in `~/.claude/settings.json`, `<project>/.claude/settings.json`,
-or `<project>/.claude/settings.local.json` — without repointing it, so a
-committed or pinned declaration (a `ref`, a fork) is never rewritten. When no
-declaration is visible, the machine registration decides: absent or from the
-same source the installer would declare, local mode declares the absolute
-checkout path with `--scope local` in `<project>/.claude/settings.local.json`
-(machine-specific and gitignored by Claude) and repo mode declares
-`yandy-r/ystack` with `--scope project` in `<project>/.claude/settings.json`
-(portable); registered from a different source, or the list is unreadable, the
-installer warns and skips the plugin install rather than repoint anything.
-Adding a same-source declaration never repoints (verified against Claude Code
-2.1.310). Re-running sync also re-registers the machine after another
-project's `remove` dropped the registration while this project still declares
-ycc. Plugin enablement always goes in the project's `settings.json`.
+Claude project hooks reuse a `ycc` marketplace this project already declares —
+in `<project>/.claude/settings.json` or `<project>/.claude/settings.local.json`
+— without repointing it, so a committed or pinned declaration (a `ref`, a fork)
+is never rewritten. The CLI never creates a registration from a declaration
+alone, so when the machine has no `ycc` registration (a fresh clone, or another
+project's `remove` dropped it) the installer first runs
+`claude plugin marketplace add <source> --scope <declaration scope>`, rebuilding
+the source from the declaration (`repo[#ref]` for github, `path` for directory,
+`url[#ref]` for git); re-adding the same source leaves the file untouched
+(verified against Claude Code 2.1.310). A declaration shape the installer cannot
+rebuild is warned about and the plugin install is skipped. A declaration in
+`~/.claude/settings.json` (the `settings` step writes one) counts only while the
+CLI has a registration; with none it is treated as undeclared. When no
+declaration is visible, the machine registration decides: absent, or exactly the
+unpinned source the installer would declare (no `ref`, no `path`), local mode
+declares the absolute checkout path with `--scope local` in
+`<project>/.claude/settings.local.json` (machine-specific and gitignored by
+Claude) and repo mode declares `yandy-r/ystack` with `--scope project` in
+`<project>/.claude/settings.json` (portable); registered from any other source
+(a fork, a `ref` pin, a subpath), or the list is unreadable, the installer warns
+and skips the plugin install rather than repoint anything. Plugin enablement
+always goes in the project's `settings.json`.
 
 The plugin carries its own activation, so a combined `settings,hooks` sync does
 not write the global `hooks` config group. Removing hooks uninstalls the project

@@ -146,20 +146,81 @@ assert_not_contains "${calls}" "plugin install" "a foreign-source registration s
 assert_contains "${INSTALL_OUT}" "registered from a different source" "a foreign-source registration warns"
 assert_contains "${INSTALL_OUT}" "Skipped the plugin install" "a foreign-source registration explains the skip"
 
-# A committed pinned declaration is reused, never repointed: no add runs, and
-# remove keeps the declaration (the pin makes it user-owned).
+# A committed pinned declaration is reused, never repointed, while the machine
+# registration is live: no add runs, and remove keeps the declaration (the pin
+# makes it user-owned).
 home="$(new_home)"
 mkdir -p "${home}/project/.claude"
 cat > "${home}/project/.claude/settings.json" <<'JSON'
 { "extraKnownMarketplaces": { "ycc": { "source": { "source": "github", "repo": "yandy-r/ystack", "ref": "v6.1.0" } } }, "enabledPlugins": { "ycc-hooks@ycc": true } }
 JSON
-install_must_succeed "${home}" sync --target claude --intent hooks
+CLAUDE_STUB_MARKETPLACES='[{"name":"ycc","source":"github","repo":"yandy-r/ystack","ref":"v6.1.0"}]' \
+    install_must_succeed "${home}" sync --target claude --intent hooks
 calls="$(cat "${home}/claude-calls.log")"
 assert_not_contains "${calls}" "plugin marketplace add" "a pinned project declaration is never rewritten"
 assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "a pinned project declaration still installs ycc-hooks"
 assert_contains "${INSTALL_OUT}" "reusing the ycc marketplace declared in project settings" "a pinned project declaration is reused"
 install_must_succeed "${home}" remove --target claude --intent hooks
 assert_not_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace remove" "remove keeps a pinned (ref) project declaration"
+
+# A fresh clone: the committed pinned declaration is visible but the CLI has no
+# registration yet, so it is registered from the declaration's own source,
+# ref and scope (adding never rewrites the file).
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "github", "repo": "yandy-r/ystack", "ref": "v6.1.0" } } } }
+JSON
+install_must_succeed "${home}" sync --target claude --intent hooks
+calls="$(cat "${home}/claude-calls.log")"
+assert_contains "${calls}" "plugin marketplace add yandy-r/ystack#v6.1.0 --scope project" "a pinned project declaration with no registration is registered from its own source"
+assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "a registered pinned declaration installs ycc-hooks"
+
+# Other declaration shapes rebuild their own source; unknown shapes skip.
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.local.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "directory", "path": "/fork/ystack" } } } }
+JSON
+install_must_succeed "${home}" sync --target claude --intent hooks
+assert_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace add /fork/ystack --scope local" "a local directory declaration is registered from its own path"
+
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "git", "url": "https://example.com/ystack.git", "ref": "main" } } } }
+JSON
+install_must_succeed "${home}" sync --target claude --intent hooks
+assert_contains "$(cat "${home}/claude-calls.log")" "plugin marketplace add https://example.com/ystack.git#main --scope project" "a git declaration is registered from its own url and ref"
+
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "extraKnownMarketplaces": { "ycc": { "source": { "source": "settings", "plugins": [] } } } }
+JSON
+install_must_succeed "${home}" sync --target claude --intent hooks
+calls="$(cat "${home}/claude-calls.log")"
+assert_not_contains "${calls}" "plugin marketplace add" "an unrecognised declaration shape is never re-registered"
+assert_not_contains "${calls}" "plugin install" "an unrecognised declaration shape skips the install"
+assert_contains "${INSTALL_OUT}" "cannot re-register" "an unrecognised declaration shape warns"
+
+# A pinned registration is not the installer's unpinned source: an undeclared
+# project must not repoint it.
+home="$(new_home)"
+CLAUDE_STUB_MARKETPLACES='[{"name":"ycc","source":"github","repo":"yandy-r/ystack","ref":"v6.1.0"}]' \
+    install_must_succeed "${home}" sync --target claude --intent hooks --mode repo
+calls="$(cat "${home}/claude-calls.log")"
+assert_not_contains "${calls}" "plugin marketplace add" "a pinned registration is never repointed"
+assert_not_contains "${calls}" "plugin install" "a pinned registration skips the install"
+assert_contains "${INSTALL_OUT}" "registered from a different source" "a pinned registration warns"
+
+# A user-scope declaration (the settings merge writes one) is not a
+# registration: settings,hooks on a fresh home still adds and installs.
+home="$(new_home)"
+install_must_succeed "${home}" install --target claude --only settings,hooks
+calls="$(cat "${home}/claude-calls.log")"
+assert_contains "${calls}" "plugin marketplace add ${REPO_REAL} --scope local" "settings,hooks on a fresh home registers the marketplace"
+assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "settings,hooks on a fresh home installs ycc-hooks"
 
 # The machine registration can vanish while this project still declares ycc
 # (another project's remove does that): an installer-shaped declaration is
