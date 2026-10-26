@@ -55,6 +55,10 @@ make_repo() {
   git -C "$dir" commit -q --allow-empty -m init
   printf 'scope: local\n' >"${dir}/.plans-config"
 }
+make_linear_repo() {
+  make_repo "$1"
+  printf 'scope: local\nstore: linear\n' >"$1/.plans-config"
+}
 # Always source from the fixture so auto-resolution cannot see this checkout.
 run() { local dir="$1"; shift; (CDPATH='' cd -- "$dir" >/dev/null && "$BASH_BIN" -c 'source "$1"; shift; "$@"' _ "$HELPER" "$@"); }
 # shellcheck disable=SC2016 # The inner Bash evaluates the fixture's exported values.
@@ -62,14 +66,14 @@ field() { local dir="$1" key="$2"; shift 2; (CDPATH='' cd -- "$dir" >/dev/null &
 # Store precedence and sources; resolving and sourcing never create the cache.
 repo="${SCRATCH}/repo with space"
 make_repo "$repo"
-assert_eq 'default store' linear "$(field "$repo" ARTIFACT_STORE)"
+assert_eq 'default store' local "$(field "$repo" ARTIFACT_STORE)"
 assert_eq 'default source' default "$(field "$repo" ARTIFACT_STORE_SOURCE)"
-assert_eq 'linear cache path' "${repo}/.ycc/artifacts" "$(field "$repo" ARTIFACT_DIR)"
+assert_eq 'default local plans path' "${repo}/docs/plans" "$(field "$repo" ARTIFACT_DIR)"
 assert_eq 'artifact root' "$repo" "$(field "$repo" ARTIFACT_ROOT)"
 assert_ok 'resolution is read-only' test ! -e "${repo}/.ycc"
 assert_eq 'ancestor team outside repo ignored' '' "$(field "$repo" ARTIFACT_LINEAR_TEAM)"
 ln -s "$repo" "${SCRATCH}/repo-link"
-assert_eq 'symlink checkout ignores ancestor store' linear "$(field "${SCRATCH}/repo-link" ARTIFACT_STORE)"
+assert_eq 'symlink checkout ignores ancestor store' local "$(field "${SCRATCH}/repo-link" ARTIFACT_STORE)"
 assert_eq 'symlink checkout ignores ancestor team' '' "$(field "${SCRATCH}/repo-link" ARTIFACT_LINEAR_TEAM)"
 assert_eq 'symlink checkout local parity' "$(CDPATH='' cd -- "${SCRATCH}/repo-link" >/dev/null && "$BASH_BIN" "$PLANS")" "$(field "${SCRATCH}/repo-link" ARTIFACT_DIR --store=local)"
 printf 'store: local\n' >"${XDG_CONFIG_HOME}/ycc/config"
@@ -156,7 +160,7 @@ done
 printf 'scope: local\nlinear_team: Y.N\n' >"${fresh}/.plans-config"
 git -C "$fresh" checkout -q -B feat/YAN-1-x
 assert_eq 'non-alphanumeric configured team gives no hint' '' "$(field "$fresh" ARTIFACT_LINEAR_HINT)"
-printf 'scope: local\n' >"${fresh}/.plans-config"
+  printf 'scope: local\nstore: linear\n' >"${fresh}/.plans-config"
 for pair in 'feat/abc2-123_x ABC2-123' 'feat/A-1-x -' 'feat/ABCDEFGHIJK-1-x -' 'feat/AB-1-x-CD-2 AB-1'; do
   read -r branch expected <<<"$pair"
   git -C "$fresh" checkout -q -B "$branch"
@@ -166,11 +170,11 @@ done
 git -C "$fresh" checkout -q --detach
 assert_eq 'detached hint empty' '' "$(field "$fresh" ARTIFACT_LINEAR_HINT)"
 no_git="${SCRATCH}/not git"; mkdir -p "$no_git"
-printf 'scope: local\n' >"${no_git}/.plans-config"
+printf 'scope: local\nstore: linear\n' >"${no_git}/.plans-config"
 assert_eq 'no Git hint empty' '' "$(field "$no_git" ARTIFACT_LINEAR_HINT)"
 # Gitignore writes only on first save, preserving existing bytes and wider rules.
 for variant in missing no-newline exact slash rooted rooted-slash wider; do
-  ignore_repo="${SCRATCH}/ignore-${variant}"; make_repo "$ignore_repo"
+  ignore_repo="${SCRATCH}/ignore-${variant}"; make_linear_repo "$ignore_repo"
   case "$variant" in
     no-newline) printf '# existing' >"${ignore_repo}/.gitignore" ;;
     exact) printf '.ycc/artifacts' >"${ignore_repo}/.gitignore" ;;
@@ -189,7 +193,7 @@ for variant in missing no-newline exact slash rooted rooted-slash wider; do
   esac
   assert_ok "ignore ${variant}: no cache created" test ! -e "${ignore_repo}/.ycc/artifacts"
 done
-negation_repo="${SCRATCH}/ignore-negation"; make_repo "$negation_repo"
+negation_repo="${SCRATCH}/ignore-negation"; make_linear_repo "$negation_repo"
 printf '.ycc/artifacts/*\n!.ycc/artifacts/feat/\n' >"${negation_repo}/.gitignore"
 run "$negation_repo" ensure_artifact_gitignore
 assert_eq 'negated exception gets repo coverage line' $'.ycc/artifacts/*\n!.ycc/artifacts/feat/\n.ycc/artifacts/' "$(cat "${negation_repo}/.gitignore")"
@@ -208,7 +212,7 @@ run "${SCRATCH}/subdir-link/packages/app" ensure_artifact_dir
 assert_ok 'symlink scope-local ignore stays unchanged' cmp -s "${SCRATCH}/before" "${sub_root}/.gitignore"
 # Refuse every write entry point if a tracked or untracked symlink can escape.
 for link_kind in gitignore ycc artifacts; do
-  link_repo="${SCRATCH}/symlink-${link_kind}"; make_repo "$link_repo"
+  link_repo="${SCRATCH}/symlink-${link_kind}"; make_linear_repo "$link_repo"
   target="${SCRATCH}/target-${link_kind}"
   case "$link_kind" in
     gitignore)
@@ -230,7 +234,7 @@ for link_kind in gitignore ycc artifacts; do
     assert_ok "${link_kind} symlink refusal creates no ignore" test ! -e "${link_repo}/.gitignore"
   fi
 done
-global_ignore_repo="${SCRATCH}/global-ignore"; make_repo "$global_ignore_repo"
+global_ignore_repo="${SCRATCH}/global-ignore"; make_linear_repo "$global_ignore_repo"
 printf '.ycc/\n' >"${SCRATCH}/global-excludes"
 git config --file "${GIT_CONFIG_GLOBAL}.excludes" core.excludesFile "${SCRATCH}/global-excludes"
 if (CDPATH='' cd -- "$global_ignore_repo" >/dev/null && GIT_CONFIG_GLOBAL="${GIT_CONFIG_GLOBAL}.excludes" "$BASH_BIN" -c 'source "$1" || exit 1; ensure_artifact_gitignore' _ "$HELPER"); then
@@ -240,7 +244,7 @@ else
 fi
 assert_ok 'global excludes does not leave partial ignore' test ! -e "${global_ignore_repo}/.gitignore"
 rm "${GIT_CONFIG_GLOBAL}.excludes"
-info_ignore_repo="${SCRATCH}/info-ignore"; make_repo "$info_ignore_repo"
+info_ignore_repo="${SCRATCH}/info-ignore"; make_linear_repo "$info_ignore_repo"
 printf '.ycc/\n' >"${info_ignore_repo}/.git/info/exclude"
 if run "$info_ignore_repo" ensure_artifact_gitignore; then
   fail 'Git info excludes unexpectedly accepted as repository ignore'
@@ -264,6 +268,98 @@ assert_eq 'feature path' "${fresh}/.ycc/artifacts/good-slug" "$(run "$fresh" get
 for slug in '' .. . -x ../bad bad/name 'white space'; do assert_bad "invalid slug '${slug}'" run "$fresh" get_feature_artifact_dir "$slug"; done
 assert_eq 'embedded dots in slug allowed' "${fresh}/.ycc/artifacts/v1..2" "$(run "$fresh" get_feature_artifact_dir v1..2)"
 assert_ok 'feature lookup remains pure' test ! -e "${fresh}/.ycc/artifacts/good-slug"
+path_repo="${SCRATCH}/artifact-paths"; make_repo "$path_repo"
+printf 'scope: local\nplans_dir: custom plans\n' >"${path_repo}/.plans-config"
+linear_base="${path_repo}/.ycc/artifacts/Feature_1"
+local_base="${path_repo}/custom plans/Feature_1"
+for pair in \
+  "prd|${linear_base}/prd.md|${path_repo}/docs/prps/prds/Feature_1.prd.md" \
+  "spec|${linear_base}/spec.md|${path_repo}/docs/prps/specs/Feature_1.spec.md" \
+  "prp-plan|${linear_base}/prp-plan.md|${path_repo}/docs/prps/plans/Feature_1.plan.md" \
+  "feature-spec|${linear_base}/feature-spec.md|${local_base}/feature-spec.md" \
+  "parallel-plan|${linear_base}/parallel-plan.md|${local_base}/parallel-plan.md" \
+  "shared|${linear_base}/shared.md|${local_base}/shared.md" \
+  "research-external|${linear_base}/research/research-external.md|${local_base}/research-external.md" \
+  "research-deep-research|${linear_base}/research/research-deep-research.md|${local_base}/research-deep-research.md" \
+  "analysis-context|${linear_base}/analysis-context.md|${local_base}/analysis-context.md" \
+  "prp-research|${linear_base}/.prp-research|${path_repo}/docs/prps/plans/.prp-research/Feature_1" \
+  "deep-research|${linear_base}/deep-research|-" \
+  "blueprint|${linear_base}/blueprint.md|${path_repo}/docs/blueprint.md" \
+  "research-dir|${linear_base}/research|${local_base}" \
+  "feature-dir|${linear_base}|${local_base}"; do
+  IFS='|' read -r kind linear_expected local_expected <<<"$pair"
+  assert_eq "linear ${kind} sourced path" "$linear_expected" "$(CDPATH='' cd -- "$path_repo" >/dev/null && "$BASH_BIN" -c 'source "$1"; resolve_artifact_store --store=linear "$2" && get_artifact_path "$3" Feature_1' _ "$HELPER" "$path_repo" "$kind")"
+  assert_eq "linear ${kind} CLI path" "$linear_expected" "$("$BASH_BIN" "$HELPER" --store=linear --kind="$kind" --slug=Feature_1 "$path_repo")"
+  if [[ "$local_expected" == - ]]; then
+    assert_bad 'local deep-research keeps its own output directory' run "$path_repo" get_artifact_path "$kind" Feature_1
+    assert_eq 'local deep-research diagnostic' "ERROR: local mode keeps the skill's own output dir" "$(cat "${SCRATCH}/err")"
+  else
+    assert_eq "local ${kind} sourced path" "$local_expected" "$(run "$path_repo" get_artifact_path "$kind" Feature_1)"
+    assert_eq "local ${kind} CLI path" "$local_expected" "$("$BASH_BIN" "$HELPER" --store=local --kind="$kind" --slug=Feature_1 "$path_repo")"
+  fi
+done
+for bad_kind in '' unknown research- research-Upper research-bad_name analysis- analysis-Upper analysis-bad_name; do
+  assert_bad "invalid kind '${bad_kind}'" run "$path_repo" get_artifact_path "$bad_kind" Feature_1
+done
+assert_bad 'artifact path missing kind' run "$path_repo" get_artifact_path
+assert_bad 'artifact path missing slug' run "$path_repo" get_artifact_path prd
+for slug in '' .. . -x ../bad bad/name 'white space'; do
+  assert_bad "artifact path invalid slug '${slug}'" run "$path_repo" get_artifact_path prd "$slug"
+done
+assert_bad 'CLI kind requires slug' "$BASH_BIN" "$HELPER" --kind=prd "$path_repo"
+assert_bad 'CLI slug requires kind' "$BASH_BIN" "$HELPER" --slug=Feature_1 "$path_repo"
+assert_bad 'CLI rejects invalid kind before ensure' "$BASH_BIN" "$HELPER" --store=linear --ensure --kind=unknown --slug=Feature_1 "$path_repo"
+assert_ok 'invalid CLI ensure creates no cache' test ! -e "${path_repo}/.ycc"
+assert_bad 'CLI rejects local deep-research before ensure' "$BASH_BIN" "$HELPER" --store=local --ensure --kind=deep-research --slug=Feature_1 "$path_repo"
+assert_ok 'local deep-research ensure creates no plans directory' test ! -e "${path_repo}/custom plans"
+assert_eq 'CLI ensure returns linear path' "$linear_base" "$("$BASH_BIN" "$HELPER" --store=linear --ensure --kind=feature-dir --slug=Feature_1 "$path_repo")"
+assert_ok 'CLI linear ensure creates cache' test -d "${path_repo}/.ycc/artifacts"
+assert_ok 'CLI linear ensure ignores cache' git -C "$path_repo" check-ignore -q -- .ycc/artifacts/Feature_1/plan.md
+assert_eq 'CLI ensure returns local path' "$local_base" "$("$BASH_BIN" "$HELPER" --store=local --ensure --kind=feature-dir --slug=Feature_1 "$path_repo")"
+assert_ok 'CLI local ensure creates the feature directory' test -d "$local_base"
+rm -rf "${path_repo}/custom plans"
+"$BASH_BIN" "$HELPER" --store=local --kind=feature-dir --slug=Feature_1 "$path_repo" >/dev/null
+assert_ok 'CLI path without ensure creates no feature directory' test ! -e "${path_repo}/custom plans"
+# Local --ensure creates only the parent of the resolved file, never PLANS_DIR.
+for kind in prd spec prp-plan blueprint; do
+  "$BASH_BIN" "$HELPER" --store=local --ensure --kind="$kind" --slug=Feature_1 "$path_repo" >/dev/null
+done
+assert_ok 'local ensure prd leaves plans dir absent' test ! -e "${path_repo}/custom plans"
+assert_ok 'local ensure prd creates docs/prps/prds' test -d "${path_repo}/docs/prps/prds"
+assert_ok 'local ensure prp-plan creates docs/prps/plans' test -d "${path_repo}/docs/prps/plans"
+assert_ok 'local ensure blueprint creates docs' test -d "${path_repo}/docs"
+assert_ok 'local ensure creates no prd file' test ! -e "${path_repo}/docs/prps/prds/Feature_1.prd.md"
+"$BASH_BIN" "$HELPER" --store=local --ensure --kind=shared --slug=Feature_1 "$path_repo" >/dev/null
+assert_ok 'local ensure shared creates feature dir' test -d "$local_base"
+assert_ok 'local ensure shared creates no file' test ! -e "${local_base}/shared.md"
+"$BASH_BIN" "$HELPER" --store=local --ensure --kind=prp-research --slug=Feature_1 "$path_repo" >/dev/null
+assert_ok 'local ensure prp-research creates the directory itself' test -d "${path_repo}/docs/prps/plans/.prp-research/Feature_1"
+# Repo-level kinds follow the current checkout, not PLANS_ROOT (nested worktree).
+wt_parent="${SCRATCH}/wt-parent"; make_repo "$wt_parent"
+git -C "$wt_parent" add .plans-config; git -C "$wt_parent" commit -q -m cfg
+wt_child="${wt_parent}/.worktrees/feat"
+git -C "$wt_parent" worktree add -q -b wt-feat "$wt_child"
+mkdir -p "${wt_child}/sub/dir"
+for kind in prd spec prp-plan blueprint; do
+  case "$kind" in
+    prd) wt_rel="docs/prps/prds/foo.prd.md" ;;
+    spec) wt_rel="docs/prps/specs/foo.spec.md" ;;
+    prp-plan) wt_rel="docs/prps/plans/foo.plan.md" ;;
+    blueprint) wt_rel="docs/blueprint.md" ;;
+  esac
+  assert_eq "worktree ${kind} resolves under worktree toplevel" "${wt_child}/${wt_rel}" "$("$BASH_BIN" "$HELPER" --store=local --kind="$kind" --slug=foo "${wt_child}/sub/dir")"
+done
+assert_eq 'worktree prp-research resolves under worktree toplevel' "${wt_child}/docs/prps/plans/.prp-research/foo" "$("$BASH_BIN" "$HELPER" --store=local --kind=prp-research --slug=foo "$wt_child")"
+nogit_repo="${SCRATCH}/nogit-repo"; mkdir -p "$nogit_repo"
+assert_eq 'non-git local prd resolves under start dir' "${nogit_repo}/docs/prps/prds/foo.prd.md" "$("$BASH_BIN" "$HELPER" --store=local --kind=prd --slug=foo "$nogit_repo")"
+# get_artifact_path resolves lazily when the caller unset the exports.
+assert_eq 'get_artifact_path resolves after exports are unset' "${path_repo}/custom plans/Feature_1/shared.md" "$(CDPATH='' cd -- "$path_repo" >/dev/null && "$BASH_BIN" -c 'source "$1"; unset ARTIFACT_DIR ARTIFACT_STORE ARTIFACT_ROOT; get_artifact_path shared Feature_1' _ "$HELPER")"
+# get_plans_feature_dir keeps legacy local names and stays strict in linear mode.
+assert_eq 'local feature dir accepts nested name' "${local_base%/Feature_1}/team/auth" "$(run "$path_repo" get_plans_feature_dir team/auth)"
+assert_eq 'local feature dir accepts spaces' "${local_base%/Feature_1}/My Feature" "$(run "$path_repo" get_plans_feature_dir 'My Feature')"
+for bad_name in '' .. ../x a/../b; do assert_bad "local feature dir rejects '${bad_name}'" run "$path_repo" get_plans_feature_dir "$bad_name"; done
+assert_bad 'linear feature dir rejects spaces' "$BASH_BIN" -c 'source "$1"; resolve_artifact_store --store=linear "$2" && get_plans_feature_dir "My Feature"' _ "$HELPER" "$path_repo"
+assert_eq 'linear feature dir uses cache' "${linear_base}" "$("$BASH_BIN" -c 'source "$1"; resolve_artifact_store --store=linear "$2" && get_plans_feature_dir Feature_1' _ "$HELPER" "$path_repo")"
 assert_bad 'non-Git ignore refuses' run "$no_git" ensure_artifact_gitignore
 assert_bad 'non-Git cache refuses' run "$no_git" ensure_artifact_dir
 assert_ok 'non-Git refusal creates no ignore' test ! -e "${no_git}/.gitignore"

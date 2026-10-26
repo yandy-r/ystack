@@ -28,11 +28,13 @@ summary, no interactive checkpoint), regardless of `$ARGUMENTS`.
 
 **Outputs**:
 
-- `${PLANS_DIR}/[feature-name]/research-architecture.md`
-- `${PLANS_DIR}/[feature-name]/research-patterns.md`
-- `${PLANS_DIR}/[feature-name]/research-integration.md`
-- `${PLANS_DIR}/[feature-name]/research-docs.md`
-- `${PLANS_DIR}/[feature-name]/shared.md`
+- `${research_dir}/research-architecture.md`
+- `${research_dir}/research-patterns.md`
+- `${research_dir}/research-integration.md`
+- `${research_dir}/research-docs.md`
+- `${shared_file}`
+
+Canonical `plan-workflow` resolves these paths with the artifact-store `research-<lens>` and `shared` kinds. Local mode keeps today's `docs/plans/<feature>/` paths; linear mode resolves under `.ycc/artifacts/<feature>/`, places research under `research/`, and saves the research and shared documents to Linear.
 
 After creating the shared context files and displaying the summary, **STOP COMPLETELY**.
 
@@ -47,7 +49,8 @@ After creating the shared context files and displaying the summary, **STOP COMPL
 **Target**: `$ARGUMENTS`
 
 - **--dry-run**: Show orchestration plan without creating files. Writes nothing.
-- **feature-name**: Required. Directory name under `${PLANS_DIR}` (kebab-case).
+- **feature-name**: Required. Feature slug passed to canonical `plan-workflow` for artifact-store resolution (kebab-case).
+- **--store=local|linear**: Optional artifact-store override, forwarded to canonical `plan-workflow`. Local is the default.
 
 If any unsupported flag is present (see Flag policy above), abort with a usage error and STOP:
 
@@ -84,14 +87,14 @@ Build the **effective `$ARGUMENTS`** for canonical `plan-workflow`:
 
 ## Location
 
-${feature_dir}/shared.md
+${shared_file}
 
 ## Research Files
 
-- ${feature_dir}/research-architecture.md
-- ${feature_dir}/research-patterns.md
-- ${feature_dir}/research-integration.md
-- ${feature_dir}/research-docs.md
+- ${research_dir}/research-architecture.md
+- ${research_dir}/research-patterns.md
+- ${research_dir}/research-integration.md
+- ${research_dir}/research-docs.md
 
 ## Next Step (User Triggered)
 

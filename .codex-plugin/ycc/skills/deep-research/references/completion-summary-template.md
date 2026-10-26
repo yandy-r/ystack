@@ -36,7 +36,8 @@
 
 ### Phase 4: Report Synthesis
 
-- Final report: $OUTPUT_DIR/report.md
+- Final saved report: $FINAL_REPORT
+- Local working report: $OUTPUT_DIR/report.md
 
 ## Key Discoveries
 
@@ -59,7 +60,7 @@
 
 ## Next Steps
 
-1. **Review the report**: Read $OUTPUT_DIR/report.md
+1. **Review the report**: Read $FINAL_REPORT
 2. **Examine specific personas**: Dive into $OUTPUT_DIR/persona-findings/ for details
 3. **Review synthesis**: Check $OUTPUT_DIR/synthesis/ for analysis
 4. **Verify evidence**: See $OUTPUT_DIR/evidence/verification-log.md

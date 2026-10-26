@@ -20,7 +20,7 @@ These prompts are used to spawn analysis teammates for condensing planning conte
 
 Apply this contract to every teammate prompt in this file:
 
-- Write only your assigned output file under `{{FEATURE_DIR}}`.
+- Write only your assigned `{{ANALYSIS_<NAME>_FILE}}`; the orchestrator resolves it with the artifact-store `analysis-<name>` kind. Analysis artifacts remain local-only in linear mode.
 - Do not edit any other files.
 - After writing the file, verify it exists using the Read tool or equivalent.
 - **Share key findings** with relevant teammates using send follow-up instructions.
@@ -41,7 +41,7 @@ Apply this contract to every teammate prompt in this file:
 ````markdown
 ## PRIMARY DELIVERABLE
 
-**Output File**: {{FEATURE_DIR}}/analysis-context.md
+**Output File**: {{ANALYSIS_CONTEXT_FILE}}
 
 You MUST write this file using the Write tool. This is your #1 job. Everything else is secondary.
 
@@ -61,7 +61,7 @@ Read and analyze all planning documentation:
 1. **Core Planning Documents**
    - {{FEATURE_DIR}}/shared.md
    - {{FEATURE_DIR}}/requirements.md (if exists)
-   - All other .md files in {{FEATURE_DIR}}/
+   - All other .md files in {{FEATURE_DIR}}/, plus research files in {{RESEARCH_DIR}}/ when it differs from {{FEATURE_DIR}}/
 
 2. **Extract Key Information**
    - Architecture decisions relevant to implementation
@@ -157,7 +157,7 @@ Be concise. Each bullet should be information-dense. Aim for 60-80% compression 
 
 You MUST complete ALL of these steps in order:
 
-1. **Write file**: Use the Write tool to create {{FEATURE_DIR}}/analysis-context.md
+1. **Write file**: Use the Write tool to create {{ANALYSIS_CONTEXT_FILE}}
 2. **Verify file**: Use the Read tool to confirm the file exists and has content
 3. **Share findings**: Message teammates with key insights
 4. **Mark complete**: Update your task status to completed
@@ -178,7 +178,7 @@ You MUST complete ALL of these steps in order:
 ````markdown
 ## PRIMARY DELIVERABLE
 
-**Output File**: {{FEATURE_DIR}}/analysis-code.md
+**Output File**: {{ANALYSIS_CODE_FILE}}
 
 You MUST write this file using the Write tool. This is your #1 job. Everything else is secondary.
 
@@ -336,7 +336,7 @@ Focus on patterns that inform implementation. Extract actual code patterns, not 
 
 You MUST complete ALL of these steps in order:
 
-1. **Write file**: Use the Write tool to create {{FEATURE_DIR}}/analysis-code.md
+1. **Write file**: Use the Write tool to create {{ANALYSIS_CODE_FILE}}
 2. **Verify file**: Use the Read tool to confirm the file exists and has content
 3. **Share findings**: Message teammates with key insights
 4. **Mark complete**: Update your task status to completed
@@ -357,7 +357,7 @@ You MUST complete ALL of these steps in order:
 ````markdown
 ## PRIMARY DELIVERABLE
 
-**Output File**: {{FEATURE_DIR}}/analysis-tasks.md
+**Output File**: {{ANALYSIS_TASKS_FILE}}
 
 You MUST write this file using the Write tool. This is your #1 job. Everything else is secondary.
 
@@ -533,7 +533,7 @@ Focus on actionable structure suggestions. The goal is to help organize the para
 
 You MUST complete ALL of these steps in order:
 
-1. **Write file**: Use the Write tool to create {{FEATURE_DIR}}/analysis-tasks.md
+1. **Write file**: Use the Write tool to create {{ANALYSIS_TASKS_FILE}}
 2. **Verify file**: Use the Read tool to confirm the file exists and has content
 3. **Share findings**: Message teammates with key insights
 4. **Mark complete**: Update your task status to completed
@@ -548,7 +548,9 @@ When spawning analysis teammates:
 1. **Read this file** to get the prompt templates
 2. **Substitute variables**:
    - `{{FEATURE_NAME}}` - The feature directory name
-   - `{{FEATURE_DIR}}` - Full output directory (`${feature_dir}`, resolved in Step 1)
+   - `{{FEATURE_DIR}}` - Resolved feature directory (`${feature_dir}`, resolved in Step 2)
+   - `{{RESEARCH_DIR}}` - Resolved research directory (`${research_dir}`; equals `${feature_dir}` in local mode)
+   - `{{ANALYSIS_<NAME>_FILE}}` - Absolute output path resolved for kind `analysis-<name>`
 3. **Create tasks** - Use record the task to create 3 analysis tasks
 4. **Spawn in parallel** - Use a single message with 3 parallel agent runs, each with `name`
 5. **Monitor progress** - Use the task tracker to check when all tasks complete

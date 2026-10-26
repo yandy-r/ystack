@@ -12,6 +12,8 @@
 
 Templates for user interaction points during the unified planning workflow.
 
+`{{RESEARCH_DIR}}` is the resolved research directory: equal to `{{FEATURE_DIR}}` in local mode, or `{{FEATURE_DIR}}/research` in linear mode. Other artifacts use their resolved feature-directory paths.
+
 ---
 
 ## Dry Run Output
@@ -74,10 +76,10 @@ Agents to deploy:
 
 ### Research Files
 
-- {{FEATURE_DIR}}/research-architecture.md
-- {{FEATURE_DIR}}/research-patterns.md
-- {{FEATURE_DIR}}/research-integration.md
-- {{FEATURE_DIR}}/research-docs.md
+- {{RESEARCH_DIR}}/research-architecture.md
+- {{RESEARCH_DIR}}/research-patterns.md
+- {{RESEARCH_DIR}}/research-integration.md
+- {{RESEARCH_DIR}}/research-docs.md
 - {{FEATURE_DIR}}/shared.md
 
 ### Analysis Files (Standard Mode)
@@ -142,10 +144,10 @@ Display after research phase (if --research-only or user stops at checkpoint):
 
 Standard mode:
 
-- {{FEATURE_DIR}}/research-architecture.md - System structure analysis
-- {{FEATURE_DIR}}/research-patterns.md - Coding patterns identified
-- {{FEATURE_DIR}}/research-integration.md - APIs and integrations
-- {{FEATURE_DIR}}/research-docs.md - Relevant documentation
+- {{RESEARCH_DIR}}/research-architecture.md - System structure analysis
+- {{RESEARCH_DIR}}/research-patterns.md - Coding patterns identified
+- {{RESEARCH_DIR}}/research-integration.md - APIs and integrations
+- {{RESEARCH_DIR}}/research-docs.md - Relevant documentation
 - {{FEATURE_DIR}}/shared.md - Consolidated shared context
 
 Optimized mode (`--research-only --optimized`) — no `research-*.md`; the unified artifacts are:
@@ -198,10 +200,10 @@ Display after all phases complete:
 
 ### Research Phase
 
-- {{FEATURE_DIR}}/research-architecture.md
-- {{FEATURE_DIR}}/research-patterns.md
-- {{FEATURE_DIR}}/research-integration.md
-- {{FEATURE_DIR}}/research-docs.md
+- {{RESEARCH_DIR}}/research-architecture.md
+- {{RESEARCH_DIR}}/research-patterns.md
+- {{RESEARCH_DIR}}/research-integration.md
+- {{RESEARCH_DIR}}/research-docs.md
 - {{FEATURE_DIR}}/shared.md
 
 ### Analysis Phase
@@ -245,11 +247,14 @@ Optimized mode — the five unified files replace both the research and analysis
 
 ## Next Steps
 
-The implementation plan is ready. Run:
+In local mode only, print:
 
 /implement-plan {{FEATURE_NAME}}
 
 This will execute the plan with parallel agents where dependencies allow.
+
+In linear mode, replace that command and explanation with:
+Linear-mode plans are not yet consumable by implement-plan or prp-implement (YAN-1155); use --store=local for plans you will implement now.
 
 To review the plan:
 
@@ -348,7 +353,7 @@ Examples of valid names:
 Read when the feature name is missing; abort with this complete usage block.
 
 ```
-Usage: /plan-workflow [--team] [options] [--visual] [feature-name]
+Usage: /plan-workflow [--team] [options] [--visual] [--store=local|linear] [feature-name]
 
 Options:
   --team            (Claude Code only) Dispatch stages as agent team (default: standalone sub-agents)
@@ -360,6 +365,7 @@ Options:
   --worktree        (legacy — now default; safe to omit) Worktree annotations emitted by default
   --no-worktree     Opt out of worktree annotations in the generated parallel-plan.md
   --visual          Render the finished plan as a visual artifact via visual-plan (local-files by default; hosted link requires --share)
+  --store=local|linear  Optional artifact-store override (default: local)
 
 Examples:
   /plan-workflow user-authentication

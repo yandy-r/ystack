@@ -149,7 +149,7 @@ validate_scope_owned_targets() {
         # Single-target tests and validators.
         scripts/test-release-*.sh) echo "release" ;;
         scripts/test-plan-workflow-validators.sh) echo "inventory" ;;
-        scripts/test-helper-root-discovery.sh | scripts/test-artifact-store.sh) echo "inventory" ;;
+        scripts/test-helper-root-discovery.sh | scripts/test-artifact-store.sh | scripts/test-artifact-body.sh) echo "inventory" ;;
         scripts/test-clean-report.sh | scripts/test-grep-count-helpers.sh | scripts/test-pipefail-grep-helpers.sh) echo "inventory" ;;
         scripts/rename-repo.sh | scripts/rename_repo.py | scripts/test-rename-repo.sh | scripts/test_rename_repo.py) echo "inventory" ;;
         scripts/validate-mods.sh) echo "mods" ;;

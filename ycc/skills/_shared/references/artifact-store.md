@@ -4,6 +4,7 @@
 
 - Status
 - Kinds
+- Planning skills
 - Layout
 - Frontmatter
 - Sync
@@ -29,33 +30,35 @@ It sources `resolve-plans-dir.sh` from its own directory. Sourcing resolves from
 
 ## Status
 
-The helper and this reference ship unwired. Nothing user-visible changes until the follow-up issues consume them.
+Planning artifacts default to their existing local paths. Linear storage is opt-in until the default-store flip; see Store resolution.
 
-| Piece                                       | Issue    | State            |
-| ------------------------------------------- | -------- | ---------------- |
-| `resolve-artifact-store.sh`                 | YAN-1153 | Shipped, unwired |
-| This reference                              | YAN-1152 | Shipped, unwired |
-| Planning skills and validators              | YAN-1154 | Not migrated     |
-| Implementation skills and validators        | YAN-1155 | Not migrated     |
-| Review and report skills                    | YAN-1156 | Not migrated     |
-| Generators, capability matrix, `ycc:init`   | YAN-1157 | Not migrated     |
-| Existing `docs/plans` and `docs/prps` trees | YAN-1158 | Leave in place   |
+| Piece                                       | Issue    | State             |
+| ------------------------------------------- | -------- | ----------------- |
+| `resolve-artifact-store.sh`                 | YAN-1153 | Shipped           |
+| This reference                              | YAN-1152 | Shipped           |
+| Planning skills and validators              | YAN-1154 | Migrated (opt-in) |
+| Implementation skills and validators        | YAN-1155 | Not migrated      |
+| Review and report skills                    | YAN-1156 | Not migrated      |
+| Generators, capability matrix, `ycc:init`   | YAN-1157 | Not migrated      |
+| Existing `docs/plans` and `docs/prps` trees | YAN-1158 | Leave in place    |
 
 ## Kinds
 
-| Kind                           | Linear object                                                     | Cache file                      |
-| ------------------------------ | ----------------------------------------------------------------- | ------------------------------- |
-| prd                            | Document on the feature Project                                   | `prd.md`                        |
-| feature-research spec          | Document on the feature Project                                   | `feature-spec.md`               |
-| prp-spec                       | Document on the feature Project                                   | `spec.md`                       |
-| research                       | One Document per lens on the feature Project                      | `research/research-<lens>.md`   |
-| shared-context                 | Document on the feature Project                                   | `shared.md`                     |
-| plan-workflow / parallel-plan  | Document, plus one Issue per task                                 | `parallel-plan.md`              |
-| prp-plan / `ycc:plan --visual` | Document, plus one Issue per task                                 | `prp-plan.md`                   |
-| review                         | One Document per review, attached to the issue or feature Project | `reviews/<review-id>-review.md` |
-| report                         | Project status update, plus a Document when long                  | `report.md`                     |
-| analysis                       | Local-only scratch; never pushed                                  | `analysis-*.md`                 |
-| prp-plan research backstop     | Local-only scratch; never pushed                                  | `.prp-research/<role>.md`       |
+| Kind                           | Linear object                                                       | Cache file                      |
+| ------------------------------ | ------------------------------------------------------------------- | ------------------------------- |
+| prd                            | Document on the feature Project                                     | `prd.md`                        |
+| feature-research spec          | Document on the feature Project                                     | `feature-spec.md`               |
+| prp-spec                       | Document on the feature Project                                     | `spec.md`                       |
+| research                       | One Document per lens on the feature Project                        | `research/research-<lens>.md`   |
+| shared-context                 | Document on the feature Project                                     | `shared.md`                     |
+| plan-workflow / parallel-plan  | Document, plus one Issue per task                                   | `parallel-plan.md`              |
+| prp-plan / `ycc:plan --visual` | Document, plus one Issue per task                                   | `prp-plan.md`                   |
+| review                         | One Document per review, attached to the issue or feature Project   | `reviews/<review-id>-review.md` |
+| report                         | Project status update, plus a Document when long                    | `report.md`                     |
+| analysis                       | Local-only scratch; never pushed                                    | `analysis-*.md`                 |
+| prp-plan research backstop     | Local-only scratch; never pushed                                    | `.prp-research/<role>.md`       |
+| blueprint                      | Document on the feature Project                                     | `blueprint.md`                  |
+| deep-research                  | Final report as research lens `deep-research`; scratch never pushed | `deep-research/` (scratch)      |
 
 Document titles are `<slug> · <kind>`. `<kind>` is the cache filename stem, omitting the conventional `research/` and `reviews/` directories: `shared` → `shared.md`, `parallel-plan` → `parallel-plan.md`, `prp-plan` → `prp-plan.md`, `feature-spec` → `feature-spec.md`, `report` → `report.md`, `research-<lens>` → `research/research-<lens>.md`, and `<pr-N|local-<stamp>|quick-<stamp>>-review` → the matching `reviews/<review-id>-review.md`. `prd` and `spec` map to their same-named files. Load maps that title suffix back to the cache filename. Each split part uses `<basename>-part-N` as its kind and filename stem.
 
@@ -71,6 +74,55 @@ A review keeps its PR comment unchanged. With no reviewed issue, attach its Docu
 - Re-save updates mapped issues, creates only new task ids, and rebuilds a missing map from existing sub-issues by literal heading id before creating anything.
 - Before updating a task issue, fetch its `updatedAt` and compare it with the timestamp stored under `tasks`. A mismatch, or no stored timestamp for an existing mapped issue, means Linear changed independently: skip the update and report it, or run Conflict. Never overwrite without resolving that state. After each successful update, re-stamp that task's `updatedAt`.
 - Never change issue state except to cancel an **open** issue whose task was removed. Never cancel a Done or already-cancelled issue, and never delete an issue.
+
+## Planning skills
+
+Planning skills resolve artifact paths with the helper rather than constructing cache paths themselves. Shell state does not persist between tool calls; retain the printed mode and resolved absolute paths. Parse and strip any `--store=local|linear` flag first, retain it as `STORE_FLAG` (empty when absent), and pass `${STORE_FLAG}` to every resolver call.
+
+1. Resolve and **print** the mode; read `ARTIFACT_STORE=` from stdout:
+
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   ```
+
+2. In linear mode only, apply the **Linear call gate** below before any write or `--ensure`. Dry runs stop before this step and only resolve paths without `--ensure`.
+3. Once writing is permitted, resolve the destination:
+
+   ```bash
+   OUT="$(bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=<kind> --slug=<slug>)"
+   ```
+
+In local mode (the default), write `$OUT` at the existing local path, without identity frontmatter or Linear calls. In linear mode, prepare identity as described below before writing, then Save.
+
+| Skill               | Kind or path operation                                                                                                                                                                                                                                                        |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prp-prd`           | `prd`                                                                                                                                                                                                                                                                         |
+| `prp-spec`          | `spec`                                                                                                                                                                                                                                                                        |
+| `prp-plan`          | `prp-plan`; research backstops use `prp-research` and remain local-only                                                                                                                                                                                                       |
+| `ycc:plan --visual` | Forced source plan uses `prp-plan`                                                                                                                                                                                                                                            |
+| `plan-workflow`     | Research uses `research-<lens>`, shared context uses `shared`, analysis uses `analysis-<name>`, and the final plan uses `parallel-plan`                                                                                                                                       |
+| `parallel-plan`     | `parallel-plan`; prerequisites use the same research/shared/analysis kinds as `plan-workflow`                                                                                                                                                                                 |
+| `shared-context`    | `shared`, with `research-<lens>` inputs                                                                                                                                                                                                                                       |
+| `feature-research`  | `feature-spec` plus one `research-<lens>` document per research lens                                                                                                                                                                                                          |
+| `deep-research`     | Linear working tree uses `deep-research`; save its final `report.md` as `research-deep-research`                                                                                                                                                                              |
+| `blueprint`         | `blueprint`; derive the slug from `git rev-parse --path-format=absolute --git-common-dir`: its parent's basename when it is named `.git`, else its own basename minus `.git` (bare repo or submodule), else the current directory name outside Git; lowercase and sanitize it |
+| `visual-plan`       | Reads the caller-selected `prp-plan` or `parallel-plan`; generated visual files follow Size and diagrams and are not uploaded                                                                                                                                                 |
+
+`get_artifact_path <kind> <slug>` prints an absolute path without creating anything. Its `--kind=... --slug=...` CLI form requires both options. With a kind and slug, `--ensure` in linear mode calls `ensure_artifact_dir` to create the cache base and repository gitignore rule; in local mode it creates only the returned file's parent directory (or the returned directory for directory kinds), never an unrelated `PLANS_DIR`. Without a kind, `--ensure` retains the `ensure_artifact_dir` behavior below. Repo-level local kinds `prd`, `spec`, `prp-plan`, `prp-research`, and `blueprint` resolve under the current checkout's physical git toplevel, or the physical start directory outside git; feature kinds retain `PLANS_DIR`. Create any needed parent directory for the returned file when writing. An explicit deep-research `--output-dir` always wins. Local deep-research keeps `research/<subject>` and does not call `get_artifact_path deep-research`; its linear final Document is `<slug> · research-deep-research`, cached as `research/research-deep-research.md`.
+
+For each uploaded planning document in linear mode:
+
+1. Resolve the feature Project, apply the Linear call gate, and run `--ensure` before any cache write or pull. Read cached identity. If no `linear.document` identity exists (or a plan has no `tasks` identity), run Lookup steps 3–6 now, before writing; on a hit, Load the object first and preserve its identity so the new body replaces it through Conflict rather than creating a duplicate.
+2. Write the body at the resolved path, preserving existing identity and non-identity frontmatter.
+3. Run Save from the Sync section, including Lookup whenever document/task identity is missing and Conflict when remote state differs. Use Document title `<slug> · <kind>`.
+4. For `prp-plan` and `parallel-plan`, also apply Plan task issues: create or update task sub-issues under the parent tracking issue and set `blocks` relations to mirror dependency batches and task dependencies. Keep task issue state and timestamp handling unchanged from that protocol.
+5. Push only uploaded kinds. Analysis files, PRP research backstops, deep-research scratch, and visual output remain local-only.
+
+Validators inspect content through `artifact_body` so leading identity frontmatter cannot satisfy or hide body headings. Research lookup uses `<feature>/research/` when that directory exists and `<feature>/` otherwise. Local mode retains the flat research filenames; linear mode writes them under `research/`.
+
+Linear planning artifacts belong to the current worktree's `.ycc/artifacts/` cache. Do not move them between worktrees; Load pulls remote changes into a clean cache. Local mode retains the existing committed-docs worktree behavior.
+
+Linear-mode plans are not yet consumable by the implementation skills (YAN-1155). Use `--store=local` for plans you will implement now; completion messages must print this caveat instead of an implementation command in linear mode.
 
 ## Layout
 
@@ -97,10 +149,17 @@ Linear mode stores a gitignored cache:
 │   ├── research-security.md
 │   ├── research-practices.md
 │   ├── research-external.md
-│   └── research-recommendations.md
+│   ├── research-recommendations.md
+│   └── research-deep-research.md
+├── blueprint.md
+├── deep-research/
+│   └── report.md
 └── .prp-research/
     └── <role>.md
+
 ```
+
+`blueprint.md` is a sibling of `shared.md`. The `deep-research/` directory contains the skill's local-only objective, findings, synthesis, evidence, and working report; only the final report is uploaded as research lens `deep-research`.
 
 `plan-workflow` and `parallel-plan` both write `parallel-plan.md`; there is no plan-workflow `plan.md`. `prp-plan` and the forced file from `ycc:plan --visual` use `prp-plan.md`. Feature-research and PRP specs remain distinct. Analysis files and PRP research backstops keep their current basenames under the slug directory but are never pushed.
 
@@ -119,6 +178,8 @@ Linear mode stores a gitignored cache:
 | `.ycc/artifacts/<slug>/report.md`                       | `docs/plans/<slug>/report.md` or `docs/prps/reports/<plan>-report.md` |
 | `.ycc/artifacts/<slug>/analysis-*.md`                   | `docs/plans/<slug>/analysis-*.md`                                     |
 | `.ycc/artifacts/<slug>/.prp-research/<role>.md`         | `docs/prps/plans/.prp-research/<slug>/<role>.md`                      |
+| `.ycc/artifacts/<slug>/blueprint.md`                    | `docs/blueprint.md`                                                   |
+| `.ycc/artifacts/<slug>/deep-research/`                  | `research/<subject>/` or the skill's explicit `--output-dir`          |
 
 ### Slugs
 
@@ -194,7 +255,7 @@ Skills run these procedures; the helper never calls Linear.
 ### Save
 
 1. Resolve the store and check `${ARTIFACT_STORE:-}`.
-2. In linear mode, apply the Linear call gate, then call `ensure_artifact_dir` and read any cached identity. If the cache file is absent, run Lookup steps 3–6 to find an existing object before creating one; reuse its Document, status update, parent, and task issues rather than duplicating them.
+2. In linear mode, apply the Linear call gate, then call `ensure_artifact_dir` before any cache write or pull and read cached identity. If the cache file is absent or has no `linear.document` identity (or, for a plan, no `tasks` identity), run Lookup steps 3–6 before creating anything; reuse its Document, status update, parent, and task issues rather than duplicating them. On a hit, Load first, preserve that identity, and use Conflict before replacing its body when no prior sync state exists.
 3. Write the new body. Local mode writes today's path without identity frontmatter and **stops here**. Linear mode preserves existing identity frontmatter, including `tasks`, and all non-identity keys; only the body is replaced.
 4. Before updating an existing object, fetch its `updatedAt`. If it differs from `syncedAt`, run Conflict and do not push until answered. A discovered existing object with no prior `syncedAt` also requires Conflict before its body is replaced.
 5. Create or update the object using the Kinds and naming rules. For plans, apply the task-issue rules above. On creation, record all returned ids.
@@ -205,6 +266,7 @@ If the MCP fails during step 4 or 5, keep the local file and follow Offline.
 ### Load
 
 1. An explicit path, URL, or id selects that object; otherwise run Lookup.
+   Before any pull writes the cache, apply the Linear call gate and resolve the selected kind and slug with `--ensure` (forwarding `STORE_FLAG`) to establish the safe cache and gitignore rule.
 2. If the local file is missing, pull it, write the cache file, and stamp identity frontmatter.
 3. If it exists, compute its current body hash and read `syncedAt`.
 4. If Linear `updatedAt` differs from `syncedAt` and the current hash equals `contentHash` with no pending edit, pull; Linear wins because the cache is clean.
@@ -232,9 +294,11 @@ If the MCP fails during step 4 or 5, keep the local file and follow Offline.
 1. `--store=` argument → `ARTIFACT_STORE_SOURCE=flag`.
 2. Nearest in-scope `.plans-config` defining `store:` → `config`.
 3. `${XDG_CONFIG_HOME:-$HOME/.config}/ycc/config`, key `store:` → `global`.
-4. Default `linear` → `default`.
+4. Default `local` → `default`.
 
 An invalid value at the selected level does not fall through. An explicit resolve prints an error and returns 1; sourced auto-resolution prints `WARNING`, unsets every `ARTIFACT_*` variable, and does not fail the caller.
+
+The default is intentionally `local` while implementation-side Linear reads and init wiring remain unfinished. Linear mode is opt-in through `--store=linear` or `store: linear`; a later default-store flip issue changes step 4. Local resolution and writes do not require a Linear MCP.
 
 The `store` and `linear_*` walks compare physical paths (`pwd -P`) and stop after the start directory's physical Git toplevel, or physical `PLANS_ROOT` without Git. Symlinked paths therefore cannot escape the boundary. The original start directory still goes to `resolve_plans_dir`, whose upward/topmost `PLANS_*` behavior is unchanged.
 
@@ -272,26 +336,37 @@ In linear mode, `ARTIFACT_ROOT` is `PLANS_ROOT` unless `PLANS_ROOT` lies outside
 | `ARTIFACT_LINEAR_LABEL`     | `linear_label`, or empty                                                                                           |
 | `ARTIFACT_LINEAR_HINT`      | Branch issue-key hint, or empty; skills must verify it in Linear                                                   |
 
-| Function                                                     | Behavior                                                                                                                   |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| `resolve_artifact_store [--store=linear\|local] [start-dir]` | Export all variables and re-export `PLANS_DIR`/`PLANS_ROOT` for the start directory. No writes. Return 1 on invalid input. |
-| `get_feature_artifact_dir <slug>`                            | Print `${ARTIFACT_DIR}/<slug>` after the slug validation above. Do not create it.                                          |
-| `ensure_artifact_gitignore`                                  | Linear: ensure the repository gitignore rule. Local: return 0 without writing.                                             |
-| `ensure_artifact_dir`                                        | Create `ARTIFACT_DIR`, then run `ensure_artifact_gitignore`; the write-on-first-save entry point.                          |
+| Function                                                     | Behavior                                                                                                                                                             |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resolve_artifact_store [--store=linear\|local] [start-dir]` | Export all variables and re-export `PLANS_DIR`/`PLANS_ROOT` for the start directory. No writes. Return 1 on invalid input.                                           |
+| `get_feature_artifact_dir <slug>`                            | Print `${ARTIFACT_DIR}/<slug>` after the slug validation above. Do not create it.                                                                                    |
+| `get_artifact_path <kind> <slug>`                            | Print the kind's absolute local or linear path. Validate the slug like `get_feature_artifact_dir` and research/analysis suffixes as lowercase kebab-case. No writes. |
+| `ensure_artifact_gitignore`                                  | Linear: ensure the repository gitignore rule. Local: return 0 without writing.                                                                                       |
+| `ensure_artifact_dir`                                        | Create `ARTIFACT_DIR`, then run `ensure_artifact_gitignore`; the write-on-first-save entry point.                                                                    |
 
 Executed form; default output is `ARTIFACT_DIR` only:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" [--store=linear|local] [--debug] [--shell] [start-dir]
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" [--store=linear|local] [--debug] [--shell] [--kind=<kind> --slug=<slug>] [--ensure] [start-dir]
 ```
 
-- `--shell` prints every `ARTIFACT_*` variable using Bash `printf %q`; evaluate it in Bash, not a POSIX shell.
+- `--shell` prints every existing `ARTIFACT_*` mode/config variable using Bash `printf %q`; planning skills print it and read `ARTIFACT_STORE` from stdout rather than silently evaluating it. `ARTIFACT_REPO_ROOT` is used by sourced local path resolution but is not added to `--shell` output.
 - `--help` prints usage. `--debug` or `PLANS_DEBUG=1` enables debug output.
+- `--kind` and `--slug` together print `get_artifact_path`; without them, default output remains `ARTIFACT_DIR`. With both options, local `--ensure` creates only that file's parent or that directory itself; linear `--ensure` calls `ensure_artifact_dir` for the cache base and gitignore rule. Without kind/slug, `--ensure` calls `ensure_artifact_dir` unchanged.
 - Sourcing auto-resolves without `exit` or enabling `set -e`; check `${ARTIFACT_STORE:-}` before use. Call `resolve_artifact_store` explicitly to pass a flag/start directory or receive invalid-input status.
 
 ```bash
 # shellcheck source=/dev/null
 source "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh"
+```
+
+For body-only validation, source or execute `artifact-body.sh`. It removes only a leading block whose first line is exactly `---` and whose later closing line is exactly `---`; CRLF delimiters are accepted. An unterminated block and every other file are printed unchanged. Body bytes after the block are not normalized.
+
+```bash
+# shellcheck source=/dev/null
+source "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/artifact-body.sh"
+artifact_body path/to/artifact.md
+bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/artifact-body.sh" path/to/artifact.md
 ```
 
 ## Repository mapping
@@ -304,7 +379,7 @@ A plan's parent tracking issue is the verified hint issue when present; otherwis
 
 ## Worktrees
 
-- Linear mode does not move plan files between worktrees. A worktree pulls from Linear instead of following the committed-docs move in `worktree-strategy.md`; local mode retains that existing behavior. Pushing from the main checkout does not refresh another worktree's clean cache: Load's differing-`updatedAt` rule pulls the new remote body there.
+- Linear mode does not move plan files between worktrees. Planning skills use Load to pull into a worktree cache instead of following the committed-docs move in `worktree-strategy.md`; local mode retains that existing behavior. Implementation skills have not migrated (YAN-1155), so linear-mode plans are not yet consumable there: use `--store=local` for implementation now. Pushing from the main checkout does not refresh another worktree's clean cache: Load's differing-`updatedAt` rule pulls the new remote body there.
 - Push every pending artifact before removing a worktree. Unpushed pending files block routine cleanup.
 - Lookup step 2 checks both the current worktree cache and the main checkout cache, so per-worktree roots do not hide existing work.
 
@@ -312,14 +387,14 @@ A plan's parent tracking issue is the verified hint issue when present; otherwis
 
 Ignore `.ycc/artifacts/` only, never all of `.ycc/`; a committed pointer may live there later.
 
-In linear mode, both `ensure_*` functions refuse when `ARTIFACT_ROOT` is outside a Git work tree. They also refuse symlinked `${ARTIFACT_ROOT}/.gitignore`, `${ARTIFACT_ROOT}/.ycc`, or `ARTIFACT_DIR` rather than writing through them. Local mode creates only the plans directory and never edits Git metadata.
+In linear mode, both `ensure_*` functions refuse when `ARTIFACT_ROOT` is outside a Git work tree. They also refuse symlinked `${ARTIFACT_ROOT}/.gitignore`, `${ARTIFACT_ROOT}/.ycc`, or `ARTIFACT_DIR` rather than writing through them. Local mode never edits Git metadata; CLI `--ensure --kind=... --slug=...` creates only the resolved parent/directory, while `ensure_artifact_dir` (or bare `--ensure`) creates `ARTIFACT_DIR`.
 
 The linear gitignore check returns without editing when either condition holds:
 
 - `git check-ignore -v --no-index` ignores `.ycc/artifacts/probe` and the reported source is a `.gitignore` inside this repository. Global excludes and `.git/info/exclude` do not count.
 - `${ARTIFACT_ROOT}/.gitignore` already contains `.ycc/artifacts/`, `/.ycc/artifacts/`, `.ycc/artifacts`, or `/.ycc/artifacts`.
 
-Otherwise append `.ycc/artifacts/`, creating `.gitignore` if needed and adding a missing trailing newline before the entry. Skills call `ensure_artifact_dir` on first save; `ycc:init` handles setup up front (YAN-1157).
+Otherwise append `.ycc/artifacts/`, creating `.gitignore` if needed and adding a missing trailing newline before the entry. Skills call `--ensure` after the Linear gate and before the first cache write or pull; `ycc:init` handles setup up front (YAN-1157).
 
 ## Fresh clone
 
@@ -367,8 +442,8 @@ Never conclude "no plan" without querying Linear and asking the user. If Linear 
 `store: local` preserves today's paths and filenames, adds no identity frontmatter, and makes no Linear calls. Save stops after step 3 and Lookup uses today's local discovery only.
 
 - `ARTIFACT_ROOT=PLANS_ROOT`, `ARTIFACT_DIR=PLANS_DIR`, and `get_feature_artifact_dir <slug>` prints `${PLANS_DIR}/<slug>`.
-- Existing `docs/prps/` files stay there rather than moving under `docs/plans/`.
-- `ensure_artifact_gitignore` is a no-op; `ensure_artifact_dir` only creates `ARTIFACT_DIR`.
+- Existing `docs/prps/` files stay there rather than moving under `docs/plans/`. Repo-level kinds resolve under `ARTIFACT_REPO_ROOT` (the physical current checkout git toplevel, or physical start directory outside git), independent of `PLANS_ROOT`.
+- `ensure_artifact_gitignore` is a no-op; `ensure_artifact_dir` only creates `ARTIFACT_DIR`. CLI `--ensure --kind=... --slug=...` instead creates only the resolved file's parent or the resolved directory, never an unrelated plans directory.
 - The new slug helper is stricter than `get_feature_plan_dir`. Existing names it rejects keep their existing paths rather than being silently renamed.
 
 ## Size and diagrams

@@ -3,14 +3,14 @@ name: prp-plan
 description: Creates self-contained PRP plans with codebase patterns. Use when planning
   from a PRD, writing a .plan.md artifact, or capturing patterns for prp-implement.
 argument-hint: '[--parallel | --team] [--enhanced] [--no-worktree] [--visual] [--dry-run]
-  <feature description | path/to/prd.md>'
+  [--store=local|linear] <feature description | path/to/prd.md>'
 ---
 
 # PRP Plan
 
 Create a detailed, self-contained implementation plan that captures all codebase patterns, conventions, and context needed to implement a feature in a single pass.
 
-**Operational context:** Detect PRD versus free-form input, discover codebase patterns through prp-researcher with optional external research, and write docs/prps/plans/{name}.plan.md for /skill:prp-implement.
+**Operational context:** Detect PRD versus free-form input, discover codebase patterns through prp-researcher with optional external research, and write the resolved `prp-plan` artifact for /skill:prp-implement.
 
 > Adapted from PRPs-agentic-eng by Wirasm. Part of the PRP workflow series.
 
@@ -26,19 +26,26 @@ Create a detailed, self-contained implementation plan that captures all codebase
 
 Extract flags from `$ARGUMENTS`:
 
-| Flag            | Effect                                                                                                                                                                                                                                                                                                                       |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--parallel`    | Fan out research into 3 **standalone sub-agent** researchers; emit tasks with batch/dependency annotations. Works in Claude Code, Cursor, and Codex.                                                                                                                                                                         |
-| `--team`        | (Claude Code only) Fan out the same 3 researchers as **teammates** as teammates under the implicit session team with `todo` and coordinated shutdown via `SendMessage`. Same plan output as `--parallel`, but with shared task-graph observability. Heavier dispatch.                                                    |
-| `--worktree`    | (legacy — now default; safe to omit) Worktree annotations are emitted by default. Accepted as a silent no-op so existing pipelines continue to work.                                                                                                                                                                         |
-| `--no-worktree` | Opt out of worktree annotations. The plan will not contain a `## Worktree Setup` section or per-task `**Worktree**:` annotations.                                                                                                                                                                                            |
-| `--dry-run`     | Only valid with `--team`. Prints the team name and teammate roster, then exits without spawning any teammates.                                                                                                                                                                                                               |
-| `--enhanced`    | Enhanced research mode: grow the research fan-out from 3 to 7 specialized researchers (api/business/tech/ux/security/practices/recommendations — same coverage as /skill:feature-research). Output is still a single PRP-compliant plan file. Composes with --parallel (default), --team (Claude Code only), and --no-worktree. |
-| `--visual`      | Render the finished plan as an Agent-Native visual artifact (MDX) via `/skill:visual-plan`; local-files by default, hosted shareable link requires `--share`.                                                                                                                                                                   |
+| Flag                    | Effect                                                                                                                                                                                                                                                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--parallel`            | Fan out research into 3 **standalone sub-agent** researchers; emit tasks with batch/dependency annotations. Works in Claude Code, Cursor, and Codex.                                                                                                                                                                         |
+| `--team`                | (Claude Code only) Fan out the same 3 researchers as **teammates** as teammates under the implicit session team with `todo` and coordinated shutdown via `SendMessage`. Same plan output as `--parallel`, but with shared task-graph observability. Heavier dispatch.                                                    |
+| `--worktree`            | (legacy — now default; safe to omit) Worktree annotations are emitted by default. Accepted as a silent no-op so existing pipelines continue to work.                                                                                                                                                                         |
+| `--no-worktree`         | Opt out of worktree annotations. The plan will not contain a `## Worktree Setup` section or per-task `**Worktree**:` annotations.                                                                                                                                                                                            |
+| `--dry-run`             | Only valid with `--team`. Prints the team name and teammate roster, then exits without spawning any teammates.                                                                                                                                                                                                               |
+| `--enhanced`            | Enhanced research mode: grow the research fan-out from 3 to 7 specialized researchers (api/business/tech/ux/security/practices/recommendations — same coverage as /skill:feature-research). Output is still a single PRP-compliant plan file. Composes with --parallel (default), --team (Claude Code only), and --no-worktree. |
+| `--visual`              | Render the finished plan as an Agent-Native visual artifact (MDX) via `/skill:visual-plan`; local-files by default, hosted shareable link requires `--share`.                                                                                                                                                                   |
+| `--store=local\|linear` | Artifact-store override; strip it before interpreting the feature description or input path and forward it to every resolver and visual-plan call.                                                                                                                                                                           |
 
-Strip the flags. Set `PARALLEL_MODE=true|false`, `AGENT_TEAM_MODE=true|false`, `DRY_RUN=true|false`. Default `WORKTREE_MODE=true`; set `WORKTREE_MODE=false` if `--no-worktree` is present. `--worktree` is accepted as a legacy no-op (matches the default). Remaining text is the feature description or PRD path.
+Strip the flags. Set `PARALLEL_MODE=true|false`, `AGENT_TEAM_MODE=true|false`, `DRY_RUN=true|false`. Default `WORKTREE_MODE=true`; set false for `--no-worktree`. `--worktree` is a legacy no-op. Parse and strip the store override as below; reject invalid `--store=` values or conflicting overrides rather than including them in the description. Only the remaining text is the feature description or PRD/spec path.
 
 ```bash
+STORE_FLAG=
+case " $ARGUMENTS " in
+  *" --store=linear "*) STORE_FLAG=--store=linear ;;
+  *" --store=local "*) STORE_FLAG=--store=local ;;
+esac
+if [ -n "$STORE_FLAG" ]; then ARGUMENTS="${ARGUMENTS//$STORE_FLAG/}"; fi
 # Default ON; pass --no-worktree to opt out. --worktree accepted as legacy no-op.
 WORKTREE_MODE=true
 case " $ARGUMENTS " in
@@ -75,14 +82,14 @@ ARGUMENTS="${ARGUMENTS//--visual/}"
 
 ### Input Detection
 
-| Input Pattern             | Action                                                            |
-| ------------------------- | ----------------------------------------------------------------- |
-| Path ending in `.prd.md`  | Parse PRD, find next pending phase                                |
-| Path ending in `.spec.md` | Read spec, extract requirements and technical approach as context |
-| Path to `.md` with phases | Parse phases, find next pending                                   |
-| Path to other file        | Read for context, treat as free-form                              |
-| Free-form text            | Proceed to Phase 1                                                |
-| Empty                     | Ask user what feature to plan                                     |
+| Input Pattern                                | Action                                                            |
+| -------------------------------------------- | ----------------------------------------------------------------- |
+| Path ending in `.prd.md` or named `prd.md`   | Parse PRD, find next pending phase                                |
+| Path ending in `.spec.md` or named `spec.md` | Read spec, extract requirements and technical approach as context |
+| Path to `.md` with phases                    | Parse phases, find next pending                                   |
+| Path to other file                           | Read for context, treat as free-form                              |
+| Free-form text                               | Proceed to Phase 1                                                |
+| Empty                                        | Ask user what feature to plan                                     |
 
 ### PRD Parsing (when input is a PRD)
 
@@ -108,6 +115,25 @@ Assess complexity: Small (1-3 files) | Medium (3-10 files) | Large (10+ files) |
 ### Ambiguity Gate
 
 If the core deliverable is vague, success criteria undefined, multiple valid interpretations exist, or there are major technical unknowns — **STOP and ask the user**. Do NOT guess.
+
+### Resolve artifact paths
+
+Derive `<slug>` from the feature name (kebab-case), not the cache filename `prp-plan.md`. If the input is a linear cache `prd.md` or `spec.md`, reuse its parent directory name as `<slug>` so the plan shares its source's feature Project. Retain the parsed `STORE_FLAG` and pass it to every resolver call.
+
+1. Resolve and print the mode, then read `ARTIFACT_STORE=` from stdout:
+
+   ```bash
+   bash "skill://ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   OUT="$(bash "skill://ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=prp-plan --slug=<slug>)"
+   RESEARCH_DIR="$(bash "skill://ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=prp-research --slug=<slug>)"
+   ```
+
+   These calls resolve only; do not run `--ensure`, `mkdir`, Load, or any other write before the C.2 dry-run exit. Dry runs write nothing and require no Linear gate.
+
+2. For a real linear run, apply the **Linear call gate** from `skill://ycc-shared/references/artifact-store.md` before any write, including a cache pull or research backstop.
+3. At the first permitted write, run the resolver with `${STORE_FLAG} --ensure --kind=<kind> --slug=<slug>` for that destination. Plan output is ensured only at Phase 6. Before loading a linear PRD/spec, ensure its source kind and slug, then apply Load; skip identity frontmatter when reading its body. Before research dispatch that writes backstops, ensure `prp-research`, then `mkdir -p "$RESEARCH_DIR"`; default sequential research creates no scratch directory.
+
+Local mode (default) keeps `docs/prps/plans/<slug>.plan.md` and `docs/prps/plans/.prp-research/<slug>/` under the current checkout's git toplevel, with no identity frontmatter. Linear research backstops remain local-only. Follow artifact-store.md **Planning skills** for identity Lookup/Load before writing and Save, including task sub-issues. Shell state does not persist across tool calls: retain the printed mode, absolute `OUT` and `RESEARCH_DIR`, and substitute them in all later commands and prompts.
 
 ---
 
@@ -142,7 +168,7 @@ sub-agents** using the **`task`** tool:
 | `quality-research`  | Error Handling, Logging, Tests         | State Changes, Patterns |
 | `infra-research`    | Configuration, Dependencies            | Data Flow               |
 
-Dispatch every researcher in one `task` batch. Results arrive as background jobs; call `wait` until every job settles before synthesis, and never end the turn while one is pending. In addition to returning findings, instruct each researcher to write its discovery table to a backstop file at `docs/prps/plans/.prp-research/<feature-slug>/<role>.md` (`patterns-research.md`, `quality-research.md`, `infra-research.md`) using the `Write` tool, mirroring the phrasing `/skill:feature-research`'s researcher prompts use ("Write your findings to: ..."). The backstop guarantees the findings survive even if the inline return is interrupted or truncated. See `skill://ycc-shared/references/standalone-dispatch.md` for the full contract.
+Before dispatch, ensure the `prp-research` directory after the Linear gate when applicable, then create `$RESEARCH_DIR` with `mkdir -p`. Dispatch every researcher in one `task` batch. Results arrive as background jobs; call `wait` until every job settles before synthesis, and never end the turn while one is pending. In addition to returning findings, instruct each researcher to write its discovery table to `${RESEARCH_DIR}/<role>.md` (`patterns-research.md`, `quality-research.md`, `infra-research.md`) using `Write`; substitute the retained absolute `RESEARCH_DIR` into every prompt (including any `{{RESEARCH_DIR}}` placeholder). The local-only backstop guarantees findings survive an interrupted or truncated inline return. See `skill://ycc-shared/references/standalone-dispatch.md`.
 
 **IMPORTANT — Researcher prompt constraints**: Tell each researcher to keep code snippets to **5 lines max** per finding and limit the total response to the discovery table format only — no prose summaries.
 
@@ -155,8 +181,8 @@ After all 3 return: merge tables, de-duplicate, verify all 8 categories covered.
 #### Path B (enhanced) — when `ENHANCED_MODE=true`
 
 - Replace the 3-row researcher table above with the 7-row roster from `skill://prp-plan/references/enhanced-researchers.md`.
-- Dispatch in a **SINGLE message** with **SEVEN `task` tool calls** (standalone). Wait for all researcher results, whether returned directly or delivered asynchronously, before synthesis.
-- Each call uses `agent: "prp-researcher"` with `name` set to the role name (`api-researcher`, `business-analyzer`, `tech-designer`, `ux-researcher`, `security-researcher`, `practices-researcher`, `recommendations-agent`) and the role-specific prompt copied verbatim from `enhanced-researchers.md`. Per `enhanced-researchers.md`, each role-specific prompt also instructs the researcher to write a backstop file at `docs/prps/plans/.prp-research/<feature-slug>/<role-name>.md` (`api-researcher.md`, `business-analyzer.md`, `tech-designer.md`, `ux-researcher.md`, `security-researcher.md`, `practices-researcher.md`, `recommendations-agent.md`) in addition to returning the same content inline.
+- Before dispatch, ensure `prp-research` after the Linear gate when applicable, then create `$RESEARCH_DIR` with `mkdir -p`. Dispatch in a **SINGLE message** with **SEVEN `task` tool calls** (standalone). Wait for all researcher results, whether returned directly or delivered asynchronously, before synthesis.
+- Each call uses `agent: "prp-researcher"` with `name` set to the role name (`api-researcher`, `business-analyzer`, `tech-designer`, `ux-researcher`, `security-researcher`, `practices-researcher`, `recommendations-agent`) and the role-specific prompt from `enhanced-researchers.md`. Substitute `{{RESEARCH_DIR}}` with the resolved absolute directory in every prompt. Each role writes `${RESEARCH_DIR}/<role-name>.md` in addition to returning the same content inline.
 - The 5-line snippet cap and discovery-table-only constraints used in the 3-researcher path apply unchanged.
 
 ### Path C — Agent team (`AGENT_TEAM_MODE=true`, Claude Code only)
@@ -165,9 +191,7 @@ Use shared team lifecycle with prefix `prpp-` and researcher roster from Path B 
 
 #### C.1 Build the team name
 
-Sanitize the feature name (kebab-case slug; if input is a PRD, use its filename minus
-extension; if free-form text, slugify). Lowercase, kebab, max **20 chars**, fall back
-to `untitled` if empty.
+Use the feature `<slug>` already resolved in Phase 1 (including the source PRD/spec's parent slug in linear mode), never its cache filename. For the team-name suffix only, truncate that slug to **20 chars**, falling back to `untitled` if empty.
 
 Team name: `prpp-<sanitized-feature>`.
 
@@ -205,7 +229,7 @@ Do **not** call any team/task/agent tools. Exit the skill.
 
 #### C.3–C.5 Register and dispatch
 
-Use shared lifecycle §§2 and 8.1: flat researcher roster from Path B, full category/trace spec per task; 5-line snippet cap and discovery-table-only prompts. Default worktree annotations use standalone-dispatch §8.4; omit for --no-worktree.
+Use shared lifecycle §§2 and 8.1: flat researcher roster from Path B, full category/trace spec per task; 5-line snippet cap and discovery-table-only prompts. Before spawning, ensure `prp-research` after the Linear gate when applicable and create `$RESEARCH_DIR` with `mkdir -p`. Give each of the three researchers its `${RESEARCH_DIR}/<role>.md` backstop path, substituting the retained absolute directory into every prompt and every `{{RESEARCH_DIR}}` placeholder. Default worktree annotations use standalone-dispatch §8.4; omit for --no-worktree.
 
 #### C.6 Monitor and merge
 
@@ -227,7 +251,7 @@ Complete shared lifecycle cleanup before continuing to Phase 3, even on partial 
 
 - Team name stays `prpp-<sanitized-feature>`.
 - Register 7 tasks instead of 3 via `todo`, using the role names from `skill://prp-plan/references/enhanced-researchers.md` (`api-researcher`, `business-analyzer`, `tech-designer`, `ux-researcher`, `security-researcher`, `practices-researcher`, `recommendations-agent`).
-- Spawn 7 teammates in a **single message** with `name=`, all using `agent: "prp-researcher"` with the role-specific prompt from `enhanced-researchers.md`.
+- Before spawning, ensure `prp-research` after the Linear gate when applicable and create `$RESEARCH_DIR` with `mkdir -p`. Spawn 7 teammates in a **single message** with `name=`, all using `agent: "prp-researcher"` with the role-specific prompt from `enhanced-researchers.md`. Substitute `{{RESEARCH_DIR}}` with the retained absolute `RESEARCH_DIR` in every prompt; each role must write its backstop there as well as returning findings inline.
 - Apply shared lifecycle to all seven teammates.
 - Failure policy: a single teammate failure → continue with a stub note in synthesis ("{role} did not complete — {section} may be incomplete"); ≥4 teammate failures → abort, shut down survivors via `SendMessage`, fall back to suggesting the user re-run with `--enhanced --parallel`.
 
@@ -264,11 +288,14 @@ Define:
 
 **CRITICAL: Write the plan progressively in chunks to avoid timeouts.**
 
-Save to `docs/prps/plans/{kebab-case-feature-name}.plan.md`. Create directory first:
+Now that the dry-run exit is past, in linear mode apply the Linear call gate before ensuring the plan destination:
 
 ```bash
-mkdir -p docs/prps/plans
+OUT="$(bash "skill://ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=prp-plan --slug=<slug>)"
+mkdir -p "$(dirname "$OUT")"
 ```
+
+Before writing in linear mode, follow artifact-store.md **Planning skills**: if document or task identity is missing, run Lookup steps 3–6 and Load any hit, preserving identity and using Conflict for replacement. Write progressively to this same absolute `$OUT`; use it throughout validation, visualization, and handoff, never a second destination.
 
 ### Step 1: Read the template
 
@@ -276,7 +303,7 @@ Read the plan template from `skill://prp-plan/references/plan-template.md`.
 
 If `PARALLEL_MODE=true` **or** `AGENT_TEAM_MODE=true`, also read `skill://prp-plan/references/parallel-additions.md`. Both modes emit the same parallel-capable plan format (Batches section, hierarchical task IDs, `Depends on` annotations) — they only differ in how the research phase was dispatched.
 
-If `ENHANCED_MODE=true` or `PARALLEL_MODE=true` was used for research dispatch (Path B / Path B-enhanced via `task`), **before merging researcher findings** verify each researcher's backstop file exists at `docs/prps/plans/.prp-research/<feature-slug>/<role>.md`. If an `task` call's inline return was empty, truncated, or otherwise unusable, re-read that researcher's backstop file from disk and treat its contents as the source of truth before concluding the researcher's findings are a gap. Only record a missing-researcher gap in the plan if both the inline return AND the backstop file are absent.
+If `ENHANCED_MODE=true` or `PARALLEL_MODE=true` was used for research dispatch (Path B / Path B-enhanced via `task`), **before merging researcher findings** verify each researcher's backstop file exists at `${RESEARCH_DIR}/<role>.md`. If an `task` call's inline return was empty, truncated, or otherwise unusable, re-read that researcher's backstop file from disk and treat its contents as the source of truth before concluding the researcher's findings are a gap. Only record a missing-researcher gap in the plan if both the inline return AND the backstop file are absent.
 
 If `ENHANCED_MODE=true`, also read `skill://prp-plan/references/synthesis-map.md` and use it to route each researcher's findings into the correct plan section. The plan template is unchanged. Enhanced mode produces a richer plan because each section gets dedicated researcher input, not because new sections are added. Avoid section bloat — if a researcher returns no findings for a section, leave the existing N/A language in place or omit fully optional sections.
 
@@ -296,7 +323,7 @@ Each chunk should be a separate Write or Edit call. This prevents any single gen
 
 ### Worktree annotations (default — `WORKTREE_MODE=true`; skipped when `--no-worktree`)
 
-Derive `<feature-slug>` from the kebab-case plan file name (same value used for `{kebab-case-feature-name}.plan.md`). Derive `<repo>` from `git rev-parse --show-toplevel` basename.
+Use the feature slug resolved in Phase 1 for `<feature-slug>` (never derive it from the linear cache filename). Derive `<repo>` from `git rev-parse --show-toplevel` basename.
 
 **`## Worktree Setup` section** (top-level, before Batches/implementation):
 
@@ -308,7 +335,7 @@ Derive `<feature-slug>` from the kebab-case plan file name (same value used for 
 
 All tasks — parallel and sequential — share this one feature worktree path. No `**Children**:` list and no per-task `**Worktree**:` annotation lines are emitted.
 
-> **Plan-file handoff**: leave the emitted plan file in `docs/prps/plans/<name>.plan.md` (in the main checkout). The implementor (`/skill:prp-implement`) will **move** it into the feature worktree once the worktree is created — do not pre-write the plan to a worktree path, and do not copy it. See `worktree-strategy.md` §7.
+> **Plan-file handoff**: in local mode, leave `$OUT` in the current checkout; the implementor (`/skill:prp-implement`) will **move** it into the feature worktree once created — do not pre-write or copy it there (see `worktree-strategy.md` §7). Linear-mode plans are not yet consumable by `/skill:prp-implement` or `/skill:implement-plan` (YAN-1155); use `--store=local` for plans you will implement now. Do not move the linear cache or print an implementation command for it.
 
 Follow `skill://ycc-shared/references/worktree-strategy.md` for the full naming scheme and annotation contract.
 
@@ -326,7 +353,7 @@ Follow `skill://ycc-shared/references/worktree-strategy.md` for the full naming 
 After writing the plan file, run the structural validator:
 
 ```bash
-skill://prp-plan/scripts/validate-prp-plan.sh "docs/prps/plans/{name}.plan.md"
+skill://prp-plan/scripts/validate-prp-plan.sh "$OUT"
 ```
 
 ### On errors (exit 1)
@@ -346,13 +373,15 @@ Include a brief note in the report: "Plan validated with N warning(s) — see va
 
 **Do NOT loop more than once.** One fix pass maximum.
 
+After the validation/fix pass, Save the final `$OUT` in linear mode through artifact-store.md **Planning skills**, including its task sub-issues and dependency relations. Preserve existing identity frontmatter while editing. Local mode stops after the file write and validation.
+
 ---
 
 ## Phase 7 — VISUALIZE (optional)
 
 This step runs after the plan is written (Phase 6) and validated (Phase 6.5), regardless of the dispatch path taken (`--parallel`, `--team`, or sequential):
 
-- If `VISUAL_MODE=true` and `--dry-run` is NOT set, invoke `/skill:visual-plan <plan-path>` — passing the absolute path of the just-written `docs/prps/plans/{name}.plan.md` — and capture its printed link.
+- If `VISUAL_MODE=true` and `--dry-run` is NOT set, invoke `/skill:visual-plan ${STORE_FLAG} <plan-path>` — passing the resolved absolute `$OUT` and the retained override — and capture its printed link.
 - If `--dry-run` is set, print `visual generation would run` and skip the invocation.
 
 ---
@@ -361,7 +390,7 @@ This step runs after the plan is written (Phase 6) and validated (Phase 6.5), re
 
 This skill exposes the shared `--visual` decorator. The canonical contract lives at `skill://ycc-shared/references/visual-mode.md` — follow it for composition, timing, and hand-off rules.
 
-When `VISUAL_MODE` is set and `--dry-run` is NOT, the skill invokes `/skill:visual-plan <absolute-plan-path>` AFTER Phase 6, passing the just-written `.plan.md` path (the file written in Phase 6 and validated in Phase 6.5). `/skill:visual-plan` derives its own `visual/` output directory from that path and prints the resulting link; the skill surfaces that link in the Report block. When `--dry-run` is set, print `visual generation would run` and skip — no visual artifacts, directories, or links are produced.
+When `VISUAL_MODE` is set and `--dry-run` is NOT, invoke `/skill:visual-plan ${STORE_FLAG} <absolute-plan-path>` after Phase 6.5 with the resolved absolute `$OUT`. It resolves the store-specific `visual/` output directory and prints the link; surface it in the Report block. When `--dry-run` is set, print `visual generation would run` and skip — no visual artifacts, directories, or links are produced.
 
 ---
 
@@ -369,14 +398,14 @@ When `VISUAL_MODE` is set and `--dry-run` is NOT, the skill invokes `/skill:visu
 
 ### Update PRD (if input was a PRD)
 
-Update the phase status from `pending` to `in-progress` and add the plan file path.
+Update the phase status from `pending` to `in-progress` and add the actual resolved plan path. In linear mode preserve the source PRD's identity and Save that updated `prd` artifact through artifact-store.md **Planning skills**.
 
 ### Report to User
 
 ```
 ## Plan Created
 
-- **File**: docs/prps/plans/{name}.plan.md
+- **File**: {resolved absolute OUT path}
 - **Source PRD**: [path or "N/A"]
 - **Phase**: [phase name or "standalone"]
 - **Complexity**: [level]
@@ -391,7 +420,8 @@ Update the phase status from `pending` to `in-progress` and add the plan file pa
 - **Visual Artifact**: [Generated via /skill:visual-plan | n/a (--visual not set)]
 - **Visual Link**: [hosted URL | http://127.0.0.1:PORT/... | local files only | n/a (--visual not set)]
 
-> Next step: Run `/skill:prp-implement docs/prps/plans/{name}.plan.md` to execute this plan.
+> Next step (local mode only): Run `/skill:prp-implement {resolved absolute OUT path}` to execute this plan.
+> In linear mode replace that command with: Linear-mode plans are not yet consumable by /skill:prp-implement or /skill:implement-plan (YAN-1155); use --store=local for plans you will implement now.
 ```
 
 ---
@@ -422,7 +452,7 @@ The `validate-prp-plan.sh` script The script checks:
 
 ## Next Steps
 
-- Run `/skill:prp-implement <plan-path>` to execute this plan
+- Local mode: run `/skill:prp-implement <plan-path>` to execute this plan. Linear mode: print the YAN-1155 caveat above instead; use `--store=local` for implementation now.
 - Run `/skill:plan` for quick conversational planning without artifacts
 - Run `/skill:plan-workflow` for the heavyweight parallel-agent planning track
 

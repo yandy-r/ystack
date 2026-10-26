@@ -19,21 +19,23 @@
 
 set -uo pipefail
 
-PLAN_FILE="${1:-}"
 ERRORS=0
 WARNINGS=0
 
-# Source the shared resolver to get PLANS_ROOT for file path validation
+# Source the artifact-store resolver to get PLANS_ROOT/ARTIFACT_ROOT for path
+# resolution and the store mode.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SHARED_DIR="${SCRIPT_DIR}/../../../ycc-shared/scripts"
 
-if [[ -f "${SHARED_DIR}/resolve-plans-dir.sh" ]]; then
-  # shellcheck source=../../../ycc-shared/scripts/resolve-plans-dir.sh
-  source "${SHARED_DIR}/resolve-plans-dir.sh"
+if [[ -f "${SHARED_DIR}/resolve-artifact-store.sh" ]]; then
+  # shellcheck source=../../../ycc-shared/scripts/resolve-artifact-store.sh
+  source "${SHARED_DIR}/resolve-artifact-store.sh"
+  # shellcheck source=../../../ycc-shared/scripts/artifact-body.sh
+  source "${SHARED_DIR}/artifact-body.sh"
 else
   # ponytail: resolver ships with the plugin; failing beats resolving a
   # relative plan path against the wrong cwd. Upgrade: restore the resolver.
-  echo "ERROR: resolve-plans-dir.sh not found at ${SHARED_DIR}" >&2
+  echo "ERROR: resolve-artifact-store.sh not found at ${SHARED_DIR}" >&2
   echo "Cannot resolve PLANS_ROOT safely; refusing to guess." >&2
   exit 1
 fi
@@ -58,16 +60,44 @@ success() {
   echo -e "${GREEN}✓${NC} $1"
 }
 
+PLAN_FILE=""
+STORE_FLAG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --store=*)
+      STORE_FLAG="$1"
+      ;;
+    *)
+      if [[ -z "$PLAN_FILE" ]]; then
+        PLAN_FILE="$1"
+      else
+        echo "Usage: validate-plan.sh <plan-file> [--store=linear|local]" >&2
+        exit 1
+      fi
+      ;;
+  esac
+  shift
+done
+
+if [[ -n "$STORE_FLAG" ]]; then
+  # shellcheck disable=SC2086
+  resolve_artifact_store "$PWD" "$STORE_FLAG" || {
+    echo "ERROR: invalid ${STORE_FLAG#--}" >&2
+    exit 1
+  }
+fi
+
 if [[ -z "$PLAN_FILE" ]]; then
-  echo "Usage: validate-plan.sh <plan-file>"
+  echo "Usage: validate-plan.sh <plan-file> [--store=linear|local]"
   echo ""
   echo "Validates the structure of a parallel implementation plan."
   exit 1
 fi
 
-# Always resolve relative paths against PLANS_ROOT
-if [[ "$PLAN_FILE" != /* && -n "${PLANS_ROOT:-}" ]]; then
-  PLAN_FILE="${PLANS_ROOT}/${PLAN_FILE}"
+# Resolve relative paths against the active artifact root: PLANS_ROOT in local
+# mode, ARTIFACT_ROOT in linear mode.
+if [[ "$PLAN_FILE" != /* && -n "${ARTIFACT_ROOT:-${PLANS_ROOT:-}}" ]]; then
+  PLAN_FILE="${ARTIFACT_ROOT:-$PLANS_ROOT}/${PLAN_FILE}"
 fi
 
 if [[ ! -f "$PLAN_FILE" ]]; then
@@ -78,10 +108,9 @@ fi
 echo "Validating plan structure: $PLAN_FILE"
 echo ""
 
-# Read file content. Match against it with here-strings, not `echo | grep -q`:
-# under pipefail an early-exiting reader SIGPIPEs the echo writer and a
-# present section reads as missing (YAN-1285).
-CONTENT=$(cat "$PLAN_FILE")
+# Read file content minus any leading frontmatter block (linear-mode identity
+# metadata is not body; see _shared/references/artifact-store.md, Frontmatter).
+CONTENT=$(artifact_body "$PLAN_FILE")
 
 # Title check
 echo "Checking document structure..."

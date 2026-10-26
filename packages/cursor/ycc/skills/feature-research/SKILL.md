@@ -1,7 +1,7 @@
 ---
 name: feature-research
 description: 'Researches features with seven specialists and consolidates a feature spec. Use when investigating APIs, assessing feature risks, or researching UX before planning.'
-argument-hint: '[--team] [--description "..."] [--dry-run] [feature-name]'
+argument-hint: '[--team] [--description "..."] [--dry-run] [--store=local|linear] [feature-name]'
 allowed-tools:
   - Read
   - Grep
@@ -27,7 +27,7 @@ allowed-tools:
 
 Deep research skill for application features. Goes beyond codebase analysis to research external APIs, business logic, technical specifications, UX considerations, and generate actionable recommendations. Dispatches 7 researchers in parallel — standalone sub-agents by default, or an agent team with `--team` (Claude Code only) where teammates share findings with each other.
 
-**Operational context:** Dispatch api-researcher, business-analyzer, tech-designer, ux-researcher, security-researcher, practices-researcher, and recommendations-agent; write seven research-*.md files plus feature-spec.md under docs/plans/[feature-name]/, never docs/prps/. Use /prp-spec for lightweight single-pass PRP specs.
+**Operational context:** Dispatch api-researcher, business-analyzer, tech-designer, ux-researcher, security-researcher, practices-researcher, and recommendations-agent; write seven research-*.md files plus feature-spec.md at paths resolved through the artifact store, never docs/prps/. Local mode (default) keeps `docs/plans/[feature-name]/`; linear mode uses `.ycc/artifacts/[feature-name]/`. Use /prp-spec for lightweight single-pass PRP specs.
 
 ## Workflow Integration
 
@@ -42,8 +42,8 @@ feature-spec.md        feature-spec.md     parallel-plan.md
 
 | Skill                     | Agents                            | Output Dir           | Output Files                          | Use When                                       |
 | ------------------------- | --------------------------------- | -------------------- | ------------------------------------- | ---------------------------------------------- |
-| `feature-research` (THIS) | 7 parallel agents                 | `docs/plans/[name]/` | 7 `research-*.md` + `feature-spec.md` | Deep multi-agent research before plan-workflow |
-| `shared-context`          | Agent team                        | `docs/plans/[name]/` | `shared.md`                           | Codebase-focused context for parallel-plan     |
+| `feature-research` (THIS) | 7 parallel agents                 | Resolved feature dir | 7 `research-*.md` + `feature-spec.md` | Deep multi-agent research before plan-workflow |
+| `shared-context`          | Agent team                        | Resolved feature dir | `shared.md`                           | Codebase-focused context for parallel-plan     |
 | `prp-spec`                | Single pass (optional researcher) | `docs/prps/specs/`   | `{name}.spec.md`                      | Lightweight spec for PRP workflow              |
 | `prp-prd`                 | Interactive + researcher          | `docs/prps/prds/`    | `{name}.prd.md`                       | Full PRD with hypothesis-driven questioning    |
 | `prp-plan`                | Single pass + researcher          | `docs/prps/plans/`   | `{name}.plan.md`                      | Implementation plan from PRD or description    |
@@ -52,7 +52,8 @@ feature-spec.md        feature-spec.md     parallel-plan.md
 
 - Deploys all 7 researchers in parallel (never skips agents)
 - Creates 7 `research-*.md` files + 1 `feature-spec.md`
-- Outputs ONLY to `docs/plans/[feature-name]/`
+- Outputs only to the artifact-store feature directory (`docs/plans/[feature-name]/` in local mode)
+- Uses `research-<lens>` paths, including the linear `research/` subdirectory
 - Dispatches via sub-agents by default; via an agent team only when `--team` is passed
 
 **This skill NEVER**:
@@ -71,12 +72,13 @@ Parse arguments (flags first, then the feature name):
 - **--team**: Optional. (Claude Code only) Deploy the 7 researchers as teammates under the implicit session team with `task list` and coordinated shutdown. Default is standalone parallel sub-agents via the `Agent` tool. Cursor and Codex bundles lack team tools — do not pass `--team` there.
 - **--description "..."**: Brief description of the feature (guides research agents)
 - **--dry-run**: Show execution plan without running. With `--team`, also prints the team name and 7-teammate roster.
-- **feature-name**: Required. Directory name in `docs/plans/`
+- **feature-name**: Required. Feature slug passed to the artifact-store resolver
+- **--store=local|linear**: Optional artifact-store override. Forward it to every helper call. Local is the default; linear is opt-in.
 
 If no feature name provided, abort with usage instructions:
 
 ```
-Usage: /feature-research [--team] [--description "..."] [--dry-run] [feature-name]
+Usage: /feature-research [--team] [--description "..."] [--dry-run] [--store=local|linear] [feature-name]
 
 Examples:
   /feature-research plex-integration --description "Advanced Plex media library integration with filters and playlists"
@@ -100,6 +102,7 @@ Extract from `$ARGUMENTS`:
 2. **--description**: Quoted string after flag (optional but recommended)
 3. **--dry-run**: Boolean flag. Set `DRY_RUN=true` if present, else `false`.
 4. **feature-name**: First non-flag argument (required)
+5. **--store=local|linear**: Parse and strip before selecting feature-name. Retain the exact override as `STORE_FLAG` (empty if absent), reject invalid/conflicting overrides, and pass it to every helper call and validator.
 
 Validate the feature name: must be kebab-case, no special characters except hyphens.
 
@@ -107,17 +110,32 @@ Validate the feature name: must be kebab-case, no special characters except hyph
 
 **Team opt-in note**: If `--team` is passed and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is not set to `1` in the environment, abort with: `--team requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1. Use --parallel instead, or set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 in your Claude Code settings if you intentionally want agent-team dispatch.`
 
-### Step 2: Create Directory
+### Step 2: Resolve Artifact Paths and Create Directories
 
-**CRITICAL**: Output goes to `docs/plans/[feature-name]/` — NEVER to `docs/prps/` or any other directory, regardless of the user's current working directory. If the user invokes this skill from inside `docs/prps/` or any subdirectory, still resolve the output path from the repository root as `docs/plans/[feature-name]/`.
+**CRITICAL**: Write only to paths returned by the artifact-store resolver — NEVER to `docs/prps/` or another directory, regardless of the current working directory. Local mode (default) preserves `docs/plans/[feature-name]/`; linear mode resolves under `.ycc/artifacts/[feature-name]/`.
 
-```bash
-test -d "docs/plans/[feature-name]" && echo "exists" || mkdir -p "docs/plans/[feature-name]"
-```
+1. Print the mode and read `ARTIFACT_STORE=` from stdout; resolve paths without writes:
+
+   ```bash
+   bash "${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   feature_dir="$(bash "${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=feature-dir --slug="[feature-name]")"
+   research_dir="$(bash "${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=research-dir --slug="[feature-name]")"
+   spec_file="$(bash "${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=feature-spec --slug="[feature-name]")"
+   ```
+
+2. For a non-dry linear run only, apply the **Linear call gate** from `${CURSOR_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md` before any write or pull.
+3. Once writing is permitted, establish the safe cache and gitignore rule before Lookup/Load:
+
+   ```bash
+   feature_dir="$(bash "${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=feature-dir --slug="[feature-name]")"
+   mkdir -p "$feature_dir" "$research_dir"
+   ```
+
+Dry runs only resolve paths, never ensure or Load. In local mode `research_dir` equals `feature_dir`. In a real linear run, populate missing inputs via Lookup/Load before checking research. For every research/spec document to be written, if `linear.document` identity is missing, follow artifact-store.md **Planning skills** Lookup steps 3–6 and Load any hit before dispatch/writing; preserve identity and use Conflict for replacement, then Save. Retain the printed mode and absolute paths across tool calls.
 
 ### Step 3: Check Existing Research
 
-List any existing files. If `feature-spec.md` exists, read it and ask user if they want to regenerate or enhance.
+List any existing files. If `${spec_file}` exists, read it and ask user if they want to regenerate or enhance.
 
 ### Step 4: Handle Dry Run
 
@@ -143,14 +161,14 @@ Researchers: 7 (api-researcher, business-analyzer, tech-designer, ux-researcher,
 
 ## Files That Would Be Created
 
-- docs/plans/[feature-name]/research-external.md
-- docs/plans/[feature-name]/research-business.md
-- docs/plans/[feature-name]/research-technical.md
-- docs/plans/[feature-name]/research-ux.md
-- docs/plans/[feature-name]/research-security.md
-- docs/plans/[feature-name]/research-practices.md
-- docs/plans/[feature-name]/research-recommendations.md
-- docs/plans/[feature-name]/feature-spec.md
+- ${research_dir}/research-external.md
+- ${research_dir}/research-business.md
+- ${research_dir}/research-technical.md
+- ${research_dir}/research-ux.md
+- ${research_dir}/research-security.md
+- ${research_dir}/research-practices.md
+- ${research_dir}/research-recommendations.md
+- ${spec_file}
 
 ## Execution Model
 
@@ -246,7 +264,8 @@ cat ${CURSOR_PLUGIN_ROOT}/skills/feature-research/templates/research-agents.md
 Use the prompts from `research-agents.md` with variables substituted:
 
 - `{{FEATURE_NAME}}` - The feature directory name
-- `{{FEATURE_DIR}}` - Full output directory path (`docs/plans/[feature-name]`)
+- `{{FEATURE_DIR}}` - Resolved feature directory (`${feature_dir}`)
+- `{{RESEARCH_<LENS>_FILE}}` - Absolute path from the executed resolver with kind `research-<lens>` and the same store override; in local mode these are `${feature_dir}/research-<lens>.md`, in linear mode `${feature_dir}/research/research-<lens>.md`
 - `{{FEATURE_DESCRIPTION}}` - The description provided (or feature name if none)
 
 #### Path A — Standalone sub-agents (`AGENT_TEAM_MODE=false`, default)
@@ -309,10 +328,12 @@ Wait for all 7 researchers to complete their work.
 After all 7 teammates complete, validate all `research-*.md` files:
 
 ```bash
-${CURSOR_PLUGIN_ROOT}/skills/feature-research/scripts/validate-research.sh docs/plans/[feature-name]
+${CURSOR_PLUGIN_ROOT}/skills/feature-research/scripts/validate-research.sh "${feature_dir}" ${STORE_FLAG}
 ```
 
 If validation fails: message the relevant teammate to fix their output, wait for correction, rerun validation until pass.
+
+In linear mode, after validation and fixes, follow artifact-store.md section **Planning skills** to Save each of the seven `research-<lens>` documents.
 
 ### Step 11: Shut Down Research Teammates (if `--team`)
 
@@ -334,7 +355,7 @@ Do NOT shut down teammates yet — that runs in Step 16 after spec validation.
 
 ### Step 12: Read Research Results
 
-Read all 7 research files from `docs/plans/[feature-name]/`.
+Read all 7 research files from `${research_dir}/`.
 
 ### Step 13: Read Spec Template
 
@@ -344,7 +365,7 @@ cat ${CURSOR_PLUGIN_ROOT}/skills/feature-research/templates/spec-structure.md
 
 ### Step 14: Generate feature-spec.md
 
-Create `docs/plans/[feature-name]/feature-spec.md` following the template.
+Create `${spec_file}` following the template. In linear mode use `./research/research-<lens>.md` research links; in local mode use `./research-<lens>.md`. When replacing an existing spec, preserve its identity frontmatter in linear mode and replace only the body; local mode writes the body without frontmatter.
 
 **Key Consolidation Principles**:
 
@@ -364,10 +385,12 @@ Create `docs/plans/[feature-name]/feature-spec.md` following the template.
 Run after Step 14 creates `feature-spec.md`:
 
 ```bash
-${CURSOR_PLUGIN_ROOT}/skills/feature-research/scripts/validate-spec.sh docs/plans/[feature-name]/feature-spec.md
+${CURSOR_PLUGIN_ROOT}/skills/feature-research/scripts/validate-spec.sh "${spec_file}" ${STORE_FLAG}
 ```
 
 Fix any issues reported (missing sections, empty content, formatting).
+
+In linear mode, follow artifact-store.md section **Planning skills** to Save the validated `feature-spec` document. Local mode writes no identity frontmatter and makes no Linear calls.
 
 ### Step 16: Clean Up Team (if `--team`)
 
@@ -401,7 +424,7 @@ Each research file should: focus on its specific domain, include concrete exampl
 
 1. **Do NOT skip the multi-agent pipeline**: Never generate `feature-spec.md` directly without first deploying all 7 researchers (standalone sub-agents or teammates, depending on `--team`) and collecting their `research-*.md` files. The spec is a synthesis of research, not a standalone generation. If about to write `feature-spec.md` without the 7 research files already on disk, STOP — the pipeline is off-rails.
 
-2. **Do NOT output to `docs/prps/`**: This skill's output directory is `docs/plans/[feature-name]/`. The `docs/prps/` tree belongs to the PRP workflow (`prp-prd`, `prp-spec`, `prp-plan`, `prp-implement`). Even if the user's working directory is `docs/prps/` or any subdirectory, always create output under `docs/plans/`.
+2. **Do NOT output to `docs/prps/`**: Write only to the resolved feature directory (`docs/plans/[feature-name]/` in local mode, `.ycc/artifacts/[feature-name]/` in linear mode). The `docs/prps/` tree belongs to the PRP workflow (`prp-prd`, `prp-spec`, `prp-plan`, `prp-implement`). Even if the user's working directory is `docs/prps/` or any subdirectory, always use the resolver-selected output path.
 
 3. **Do NOT generate a single file**: The minimum correct output is 8 files (7 research + 1 spec). If about to write only one file, STOP — the user likely wants the lightweight PRP spec skill. Redirect them to `/prp-spec`.
 

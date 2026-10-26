@@ -5,12 +5,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-RESOLVER="${SCRIPT_DIR}/../../../shared/scripts/resolve-plans-dir.sh"
+RESOLVER="${SCRIPT_DIR}/../../../shared/scripts/resolve-artifact-store.sh"
 
-# Source resolver to get PLANS_ROOT for path resolution
+# Source resolver to get PLANS_ROOT/ARTIFACT_ROOT for path resolution and the
+# artifact_body helper for frontmatter-skipping heading checks.
 if [[ -f "$RESOLVER" ]]; then
-    # shellcheck source=../../../shared/scripts/resolve-plans-dir.sh
+    # shellcheck source=../../../shared/scripts/resolve-artifact-store.sh
     source "$RESOLVER"
+    # shellcheck source=../../../shared/scripts/artifact-body.sh
+    source "${SCRIPT_DIR}/../../../shared/scripts/artifact-body.sh"
 fi
 
 RED='\033[0;31m'
@@ -38,7 +41,9 @@ log_success() {
 require_heading() {
     local file="$1"
     local heading="$2"
-    if grep -q "^${heading}" "$file"; then
+    # Match against the body only: identity frontmatter is not content
+    # (see _shared/references/artifact-store.md, Frontmatter).
+    if grep -q "^${heading}" < <(artifact_body "$file"); then
         log_success "$(basename "$file"): found ${heading}"
     else
         log_error "$(basename "$file"): missing required heading ${heading}"
@@ -53,7 +58,8 @@ require_any_heading() {
     local found=false
     local heading
     for heading in "$@"; do
-        if grep -q "^${heading}" "$file"; then
+        # Body-only match: identity frontmatter is not content.
+        if grep -q "^${heading}" < <(artifact_body "$file"); then
             found=true
             break
         fi
@@ -66,16 +72,43 @@ require_any_heading() {
     fi
 }
 
-if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 <feature-dir>"
+feature_dir=""
+store_flag=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --store=*)
+            store_flag="$1"
+            ;;
+        *)
+            if [[ -z "$feature_dir" ]]; then
+                feature_dir="$1"
+            else
+                echo "Usage: $0 <feature-dir> [--store=linear|local]" >&2
+                exit 1
+            fi
+            ;;
+    esac
+    shift
+done
+
+if [[ -n "$store_flag" ]]; then
+    # shellcheck disable=SC2086
+    resolve_artifact_store "$PWD" "$store_flag" || {
+        echo -e "${RED}ERROR:${NC} invalid ${store_flag#--}" >&2
+        exit 1
+    }
+fi
+
+if [[ -z "$feature_dir" ]]; then
+    echo "Usage: $0 <feature-dir> [--store=linear|local]"
     exit 1
 fi
 
-feature_dir="$1"
-
-# Always resolve relative paths against PLANS_ROOT
-if [[ "$feature_dir" != /* && -n "${PLANS_ROOT:-}" ]]; then
-    feature_dir="${PLANS_ROOT}/${feature_dir}"
+# Resolve relative paths against the active artifact root: PLANS_ROOT in local
+# mode, ARTIFACT_ROOT in linear mode.
+if [[ "$feature_dir" != /* && -n "${ARTIFACT_ROOT:-${PLANS_ROOT:-}}" ]]; then
+    feature_dir="${ARTIFACT_ROOT:-$PLANS_ROOT}/${feature_dir}"
 fi
 
 if [[ ! -d "$feature_dir" ]]; then
@@ -98,6 +131,12 @@ echo "=========================================="
 
 for file in "${files[@]}"; do
     path="${feature_dir}/${file}"
+
+    # Research files live directly in the feature dir (local layout) or in its
+    # research/ subdir (linear layout). An existing research/ directory wins.
+    if [[ "$file" == research-* && -d "${feature_dir}/research" ]]; then
+        path="${feature_dir}/research/${file}"
+    fi
 
     if [[ ! -f "$path" ]]; then
         log_error "${file}: file not found"

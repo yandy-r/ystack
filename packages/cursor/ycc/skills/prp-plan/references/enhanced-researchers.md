@@ -11,7 +11,7 @@
 - Prompt: practices-researcher
 - Prompt: recommendations-agent
 
-> **Contract**: Each of these 7 researchers feeds the `prp-plan` synthesizer in Phase 6. They are dispatched standalone via the `Agent` tool (see `${CURSOR_PLUGIN_ROOT}/skills/_shared/references/standalone-dispatch.md`). Each researcher returns its findings inline as structured rows that map directly to a section of the PRP plan template at `${CURSOR_PLUGIN_ROOT}/skills/prp-plan/references/plan-template.md`, **AND** additionally writes the same discovery table to a backstop file at `docs/prps/plans/.prp-research/<feature-slug>/<role-name>.md` using the `Write` tool, so the findings are never lost even if the inline return is interrupted or truncated. All 7 use `subagent_type: "prp-researcher"`, distinguished by `description` and the role-specific prompt below (omit `name` for standalone calls).
+> **Contract**: Each of these 7 researchers feeds the `prp-plan` synthesizer in Phase 6. They are dispatched standalone via `Agent` or as teammates in Path C enhanced. Each returns findings inline as structured rows for the PRP template, **AND** writes the same table to `{{RESEARCH_DIR}}/<role-name>.md` using `Write`. On EVERY dispatch path (including `--team --enhanced`), the caller MUST replace every `{{RESEARCH_DIR}}` with its retained absolute `prp-research` directory, ensure it after the Linear call gate when applicable, and create it with `mkdir -p` before spawning. Never send an unsubstituted placeholder. Backstops are local-only in both stores. All 7 use `subagent_type: "prp-researcher"`, distinguished by role description and prompt below (omit `name` for standalone calls). Teammates use the shared lifecycle.
 
 ## Roster
 
@@ -72,7 +72,7 @@ If no external APIs are needed, return: "No external research needed for this fe
 Constraints:
 - Code snippets: 5 lines max per finding
 - Discovery table format only — no prose summaries
-- Write your full output to the backstop file `docs/prps/plans/.prp-research/<feature-slug>/api-researcher.md` using the Write tool, AND also return the same content inline in your final response.
+- Write your full output to the caller-supplied backstop file `{{RESEARCH_DIR}}/api-researcher.md` using the Write tool, AND also return the same content inline in your final response.
 - Do NOT reference SendMessage or inter-teammate coordination
 ```
 
@@ -120,7 +120,7 @@ As a [actor], I want [capability], so that [benefit].
 Constraints:
 - Code snippets: 5 lines max per finding (cite file:line for any codebase evidence)
 - Discovery table format only — no prose summaries
-- Write your full output to the backstop file `docs/prps/plans/.prp-research/<feature-slug>/business-analyzer.md` using the Write tool, AND also return the same content inline in your final response.
+- Write your full output to the caller-supplied backstop file `{{RESEARCH_DIR}}/business-analyzer.md` using the Write tool, AND also return the same content inline in your final response.
 - Do NOT reference SendMessage or inter-teammate coordination
 ```
 
@@ -179,7 +179,7 @@ Output format — discovery table only, no prose summaries:
 Constraints:
 - Code snippets: 5 lines max per finding
 - Discovery table format only — no prose summaries
-- Write your full output to the backstop file `docs/prps/plans/.prp-research/<feature-slug>/tech-designer.md` using the Write tool, AND also return the same content inline in your final response.
+- Write your full output to the caller-supplied backstop file `{{RESEARCH_DIR}}/tech-designer.md` using the Write tool, AND also return the same content inline in your final response.
 - Do NOT reference SendMessage or inter-teammate coordination
 ```
 
@@ -232,7 +232,7 @@ any codebase evidence; ≤10 lines total]
 Constraints:
 - Code snippets: 5 lines max per finding
 - Discovery table format only — no prose summaries
-- Write your full output to the backstop file `docs/prps/plans/.prp-research/<feature-slug>/ux-researcher.md` using the Write tool, AND also return the same content inline in your final response.
+- Write your full output to the caller-supplied backstop file `{{RESEARCH_DIR}}/ux-researcher.md` using the Write tool, AND also return the same content inline in your final response.
 - Do NOT reference SendMessage or inter-teammate coordination
 ```
 
@@ -290,7 +290,7 @@ identified for this feature."
 Constraints:
 - Code snippets: 5 lines max per finding
 - Discovery table format only — no prose summaries
-- Write your full output to the backstop file `docs/prps/plans/.prp-research/<feature-slug>/security-researcher.md` using the Write tool, AND also return the same content inline in your final response.
+- Write your full output to the caller-supplied backstop file `{{RESEARCH_DIR}}/security-researcher.md` using the Write tool, AND also return the same content inline in your final response.
 - Do NOT reference SendMessage or inter-teammate coordination
 ```
 
@@ -352,7 +352,7 @@ Output format — discovery table only, no prose summaries:
 Constraints:
 - Code snippets: 5 lines max per finding
 - Discovery table format only — no prose summaries
-- Write your full output to the backstop file `docs/prps/plans/.prp-research/<feature-slug>/practices-researcher.md` using the Write tool, AND also return the same content inline in your final response.
+- Write your full output to the caller-supplied backstop file `{{RESEARCH_DIR}}/practices-researcher.md` using the Write tool, AND also return the same content inline in your final response.
 - Do NOT reference SendMessage or inter-teammate coordination
 ```
 
@@ -392,7 +392,7 @@ researchers. You surface what falls between the dimensions:
 
 Search scope:
 - Codebase: read any spec files, existing plan files, or test fixtures relevant
-  to this feature (Glob for docs/prps, Read README or CHANGELOG for context)
+  to this feature in the caller's resolved artifact directory (Read README or CHANGELOG for context)
 - No external web search needed unless the feature explicitly involves a
   third-party system not covered by api-researcher
 
@@ -420,6 +420,6 @@ Output format — discovery table only, no prose summaries:
 Constraints:
 - Code snippets: 5 lines max per finding (cite file:line for any codebase evidence)
 - Discovery table format only — no prose summaries
-- Write your full output to the backstop file `docs/prps/plans/.prp-research/<feature-slug>/recommendations-agent.md` using the Write tool, AND also return the same content inline in your final response.
+- Write your full output to the caller-supplied backstop file `{{RESEARCH_DIR}}/recommendations-agent.md` using the Write tool, AND also return the same content inline in your final response.
 - Do NOT reference SendMessage or inter-teammate coordination
 ```

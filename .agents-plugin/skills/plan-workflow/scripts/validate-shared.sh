@@ -11,21 +11,30 @@
 
 set -uo pipefail
 
-SHARED_FILE="${1:-}"
 ERRORS=0
 WARNINGS=0
 
-# Source the shared resolver to get PLANS_ROOT for file path validation
+# Source the artifact-store resolver to get PLANS_ROOT/ARTIFACT_ROOT for path
+# resolution and the store mode.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SHARED_DIR="${SCRIPT_DIR}/../../../ycc-shared/scripts"
 
-if [[ -f "${SHARED_DIR}/resolve-plans-dir.sh" ]]; then
-  # shellcheck source=../../../ycc-shared/scripts/resolve-plans-dir.sh
-  source "${SHARED_DIR}/resolve-plans-dir.sh"
+if [[ -f "${SHARED_DIR}/resolve-artifact-store.sh" ]]; then
+  # shellcheck source=../../../ycc-shared/scripts/resolve-artifact-store.sh
+  source "${SHARED_DIR}/resolve-artifact-store.sh"
+  # shellcheck source=../../../ycc-shared/scripts/artifact-body.sh
+  source "${SHARED_DIR}/artifact-body.sh"
+else
+  # ponytail: resolver ships with the plugin; failing beats guessing a wrong
+  # relative docs/plans. Upgrade path: restore resolver alongside this script.
+  echo "ERROR: resolve-artifact-store.sh not found at ${SHARED_DIR}" >&2
+  echo "Cannot resolve plans directory safely; refusing to guess." >&2
+  exit 1
 fi
 
-# Use PLANS_ROOT as base for validating file paths, fallback to current directory
-VALIDATE_ROOT="${PLANS_ROOT:-$(pwd)}"
+# Resolve relative paths against the active artifact root: PLANS_ROOT in local
+# mode, ARTIFACT_ROOT in linear mode.
+VALIDATE_ROOT="${ARTIFACT_ROOT:-${PLANS_ROOT:-$(pwd)}}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -47,16 +56,44 @@ success() {
   echo -e "${GREEN}✓${NC} $1"
 }
 
+SHARED_FILE=""
+STORE_FLAG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --store=*)
+      STORE_FLAG="$1"
+      ;;
+    *)
+      if [[ -z "$SHARED_FILE" ]]; then
+        SHARED_FILE="$1"
+      else
+        echo "Usage: validate-shared.sh <path-to-shared.md> [--store=linear|local]" >&2
+        exit 1
+      fi
+      ;;
+  esac
+  shift
+done
+
+if [[ -n "$STORE_FLAG" ]]; then
+  # shellcheck disable=SC2086
+  resolve_artifact_store "$PWD" "$STORE_FLAG" || {
+    echo "ERROR: invalid ${STORE_FLAG#--}" >&2
+    exit 1
+  }
+fi
+
 if [[ -z "$SHARED_FILE" ]]; then
-  echo "Usage: validate-shared.sh <path-to-shared.md>"
+  echo "Usage: validate-shared.sh <path-to-shared.md> [--store=linear|local]"
   echo ""
   echo "Validates the structure and content of a shared.md document."
   exit 1
 fi
 
-# Always resolve relative paths against PLANS_ROOT
-if [[ "$SHARED_FILE" != /* && -n "${PLANS_ROOT:-}" ]]; then
-  SHARED_FILE="${PLANS_ROOT}/${SHARED_FILE}"
+# Resolve relative paths against the active artifact root: PLANS_ROOT in local
+# mode, ARTIFACT_ROOT in linear mode.
+if [[ "$SHARED_FILE" != /* && -n "${ARTIFACT_ROOT:-${PLANS_ROOT:-}}" ]]; then
+  SHARED_FILE="${ARTIFACT_ROOT:-$PLANS_ROOT}/${SHARED_FILE}"
 fi
 
 if [[ ! -f "$SHARED_FILE" ]]; then
@@ -67,10 +104,12 @@ fi
 echo "Validating: $SHARED_FILE"
 echo "---"
 
-# Read file content. Match against it with here-strings, not `echo | grep -q`:
-# under pipefail an early-exiting reader SIGPIPEs the echo writer and a
-# present section reads as missing (YAN-1285).
-CONTENT=$(cat "$SHARED_FILE")
+# Read file content minus any leading frontmatter block (linear-mode identity
+# metadata is not body; see _shared/references/artifact-store.md, Frontmatter).
+# Match against it with here-strings, not `echo | grep -q`: under pipefail an
+# early-exiting reader SIGPIPEs the echo writer and a present section reads as
+# missing (YAN-1285).
+CONTENT=$(artifact_body "$SHARED_FILE")
 
 # Check for required sections
 check_section() {

@@ -9,6 +9,8 @@
 - Agent 5: Task Planner (Unified)
 - Optimized Mode Teammate Configuration
 
+Each `{{ANALYSIS_<NAME>_FILE}}` placeholder is the absolute path resolved by the orchestrator for the `analysis-<name>` kind. These artifacts remain local-only in linear mode.
+
 When `--optimized` flag is used, deploy these 5 unified teammates instead. Each prompt below carries the same write contract as the standard-mode prompts in research-agents.md (sibling file): a `## PRIMARY DELIVERABLE` block, an explicit "You MUST write this file" imperative, an `## Output Format` skeleton, and a `## Completion Checklist`. The `## Team Communication` block is Path B (`--team`) only — standalone sub-agents (Path A, default) skip it.
 
 ### Agent 1: Architecture Analyst (Unified)
@@ -22,7 +24,7 @@ When `--optimized` flag is used, deploy these 5 unified teammates instead. Each 
 ```markdown
 ## PRIMARY DELIVERABLE
 
-**Output File**: {{FEATURE_DIR}}/analysis-architecture.md
+**Output File**: {{ANALYSIS_ARCHITECTURE_FILE}}
 
 You MUST write this file using the Write tool. This is your #1 job. Everything else is secondary. Do NOT return your findings in summary text without writing the file — the orchestrator will fail the pre-generation gate and re-dispatch you.
 
@@ -82,7 +84,7 @@ Be concise. Each bullet should be information-dense.
 
 ## Completion Checklist
 
-1. **Write file**: Use the Write tool to create {{FEATURE_DIR}}/analysis-architecture.md
+1. **Write file**: Use the Write tool to create {{ANALYSIS_ARCHITECTURE_FILE}}
 2. **Verify file**: Use the Read tool to confirm the file exists and has the expected structure
 3. **(Path B only)** Share findings via SendMessage, then mark your task complete via todo
 ```
@@ -98,7 +100,7 @@ Be concise. Each bullet should be information-dense.
 ```markdown
 ## PRIMARY DELIVERABLE
 
-**Output File**: {{FEATURE_DIR}}/analysis-patterns.md
+**Output File**: {{ANALYSIS_PATTERNS_FILE}}
 
 You MUST write this file using the Write tool. This is your #1 job. Everything else is secondary. Do NOT return your findings in summary text without writing the file — the orchestrator will fail the pre-generation gate and re-dispatch you.
 
@@ -156,7 +158,7 @@ Extract actual code patterns with file paths, not just file listings.
 
 ## Completion Checklist
 
-1. **Write file**: Use the Write tool to create {{FEATURE_DIR}}/analysis-patterns.md
+1. **Write file**: Use the Write tool to create {{ANALYSIS_PATTERNS_FILE}}
 2. **Verify file**: Use the Read tool to confirm the file exists and has the expected structure
 3. **(Path B only)** Share findings via SendMessage, then mark your task complete via todo
 ```
@@ -172,7 +174,7 @@ Extract actual code patterns with file paths, not just file listings.
 ```markdown
 ## PRIMARY DELIVERABLE
 
-**Output File**: {{FEATURE_DIR}}/analysis-integration.md
+**Output File**: {{ANALYSIS_INTEGRATION_FILE}}
 
 You MUST write this file using the Write tool. This is your #1 job. Everything else is secondary. Do NOT return your findings in summary text without writing the file — the orchestrator will fail the pre-generation gate and re-dispatch you.
 
@@ -228,7 +230,7 @@ Be specific with route paths, table names, and file references.
 
 ## Completion Checklist
 
-1. **Write file**: Use the Write tool to create {{FEATURE_DIR}}/analysis-integration.md
+1. **Write file**: Use the Write tool to create {{ANALYSIS_INTEGRATION_FILE}}
 2. **Verify file**: Use the Read tool to confirm the file exists and has the expected structure
 3. **(Path B only)** Share findings via SendMessage, then mark your task complete via todo
 ```
@@ -244,7 +246,7 @@ Be specific with route paths, table names, and file references.
 ```markdown
 ## PRIMARY DELIVERABLE
 
-**Output File**: {{FEATURE_DIR}}/analysis-docs.md
+**Output File**: {{ANALYSIS_DOCS_FILE}}
 
 You MUST write this file using the Write tool. This is your #1 job. Everything else is secondary. Do NOT return your findings in summary text without writing the file — the orchestrator will fail the pre-generation gate and re-dispatch you.
 
@@ -300,7 +302,7 @@ Identify which documents are REQUIRED reading vs nice-to-have.
 
 ## Completion Checklist
 
-1. **Write file**: Use the Write tool to create {{FEATURE_DIR}}/analysis-docs.md
+1. **Write file**: Use the Write tool to create {{ANALYSIS_DOCS_FILE}}
 2. **Verify file**: Use the Read tool to confirm the file exists and has the expected structure
 3. **(Path B only)** Share findings via SendMessage, then mark your task complete via todo
 ```
@@ -316,7 +318,7 @@ Identify which documents are REQUIRED reading vs nice-to-have.
 ```markdown
 ## PRIMARY DELIVERABLE
 
-**Output File**: {{FEATURE_DIR}}/analysis-tasks.md
+**Output File**: {{ANALYSIS_TASKS_FILE}}
 
 You MUST write this file using the Write tool. This is your #1 job. Everything else is secondary. Do NOT return your findings in summary text without writing the file — the orchestrator will fail the pre-generation gate and re-dispatch you.
 
@@ -371,7 +373,7 @@ Focus on actionable structure. The goal is to help organize the parallel plan, n
 
 ## Completion Checklist
 
-1. **Write file**: Use the Write tool to create {{FEATURE_DIR}}/analysis-tasks.md
+1. **Write file**: Use the Write tool to create {{ANALYSIS_TASKS_FILE}}
 2. **Verify file**: Use the Read tool to confirm the file exists and has the expected structure
 3. **(Path B only)** Share findings via SendMessage, then mark your task complete via todo
 ```

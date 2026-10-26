@@ -3,7 +3,7 @@ description: Use when comparing two implementation options or walking through tr
   before committing to one, breaking a change into steps, or planning conversationally
   for approval.
 argument-hint: '[--parallel] [--team] [--enhanced] [--dry-run] [--no-worktree] [--visual]
-  <what you want to plan>'
+  [--store=local|linear] <what you want to plan>'
 ---
 
 Read `skill://plan` and follow its instructions with these arguments:

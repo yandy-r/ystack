@@ -149,6 +149,7 @@ expect_targets "clean report test selects inventory" "inventory" scripts/test-cl
 expect_targets "grep count helpers test selects inventory" "inventory" scripts/test-grep-count-helpers.sh
 expect_targets "pipefail grep helpers test selects inventory" "inventory" scripts/test-pipefail-grep-helpers.sh
 expect_targets "artifact store test selects inventory" "inventory" scripts/test-artifact-store.sh
+expect_targets "artifact body test selects inventory" "inventory" scripts/test-artifact-body.sh
 expect_targets "rename wrapper selects inventory" "inventory" scripts/rename-repo.sh
 expect_targets "rename engine selects inventory and types" "inventory types" scripts/rename_repo.py
 expect_targets "rename shell tests select inventory" "inventory" scripts/test-rename-repo.sh

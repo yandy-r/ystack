@@ -1,7 +1,7 @@
 ---
 name: visual-plan
 description: 'Renders existing plans as interactive visual documents. Use when visualizing a text plan, creating a plan wireframe, or reviewing planned architecture visually.'
-argument-hint: '[--share] <path/to/plan.md>'
+argument-hint: '[--share] [--store=local|linear] <path/to/plan.md>'
 allowed-tools:
   - Read
   - Write
@@ -43,9 +43,9 @@ The non-negotiable invariants:
 
 - **Accept ANY plan path.** Never assume `docs/prps/plans` or any fixed
   location. The plan path is supplied by the caller and may live anywhere.
-- **Derive `visual/` relative to the given plan path.** Output goes into a
-  `visual/` sibling of the plan file — `<dirname of plan>/visual/` — computed
-  from the path handed in, never hardcoded.
+- **Resolve `visual/` by store.** Local mode (default) keeps the sibling
+  `<dirname of plan>/visual/`. Linear mode writes under the resolved feature
+  cache's `visual/`, never beside a legacy or external source plan.
 - **NEVER edit the plan file.** Read it; write only into the derived `visual/`
   directory. The plan artifact stays byte-for-byte intact.
 - **NEVER re-run research or dispatch.** Only consume the existing plan.
@@ -62,6 +62,7 @@ Parse `$ARGUMENTS`:
   hosted egress (destination `plan.agent-native.com`). Without it, the skill
   runs in **local-files** mode and no plan content is uploaded to hosted storage.
   See **Egress & consent** below.
+- **`--store=local|linear`** — parse and strip before selecting the plan path. Retain the exact override as `STORE_FLAG` (empty when absent), reject invalid/conflicting overrides, and forward `${STORE_FLAG}` to every resolver call.
 
 ## Mode selection (auto)
 
@@ -110,14 +111,31 @@ exact tag names, required fields, and prop shapes.
 
 ## Core workflow
 
-1. **Read the source plan.** Read the file at the given path (read-only). Derive
-   the output dir with the thin helper (it computes the `visual/` sibling per the
-   contract and never hardcodes a location). Invoke it directly, then capture its
-   stdout as `OUT`:
+1. **Read the source plan.** Read the given path (read-only). Step 1: print the resolved store and read `ARTIFACT_STORE=` from stdout:
 
+   ```bash
+   bash "${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
    ```
-   ${CURSOR_PLUGIN_ROOT}/skills/visual-plan/scripts/derive-visual-dir.sh <plan> --mkdir
+
+   In local mode, capture `OUT` from the unchanged sibling-directory helper:
+
+   ```bash
+   OUT="$(bash "${CURSOR_PLUGIN_ROOT}/skills/visual-plan/scripts/derive-visual-dir.sh" <plan> --mkdir)"
    ```
+
+   In linear mode, identify the source feature slug from its cache directory or
+   its Linear Project identity; otherwise use artifact-store.md **Slugs**.
+   Step 2: apply the **Linear call gate** before any write or `--ensure`. Step 3: resolve the feature root after the gate:
+
+   ```bash
+   FEATURE_DIR="$(bash "${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=feature-dir --slug=<slug>)"
+   OUT="$FEATURE_DIR/visual"
+   mkdir -p "$OUT"
+   ```
+
+   Follow artifact-store.md **Size and diagrams** for visual files and links;
+   do not upload the visual bundle as a planning Document. Shell state does not
+   persist across tool calls: retain the resolved absolute `OUT`.
 
    Gather the plan's exact text — do not invent source content.
 

@@ -30,7 +30,7 @@ summary, no interactive checkpoint), regardless of `$ARGUMENTS`.
 
 **Flag policy (unambiguous):**
 
-- Supported: the feature name, `--team`, `--dry-run`.
+- Supported: the feature name, `--team`, `--dry-run`, `--store=local|linear`.
 - Redundant — silently ignored because already forced: `--research-only`, `--no-checkpoint`.
 - Every other flag (including `--plan-only`, `--no-worktree`, `--worktree`, `--visual`, `--optimized`, and any unknown `-`/`--` token) → abort with the usage error below. Do not read the canonical skill or write anything.
 
@@ -45,11 +45,13 @@ summary, no interactive checkpoint), regardless of `$ARGUMENTS`.
 
 **Outputs**:
 
-- `${PLANS_DIR}/[feature-name]/research-architecture.md`
-- `${PLANS_DIR}/[feature-name]/research-patterns.md`
-- `${PLANS_DIR}/[feature-name]/research-integration.md`
-- `${PLANS_DIR}/[feature-name]/research-docs.md`
-- `${PLANS_DIR}/[feature-name]/shared.md`
+- `${research_dir}/research-architecture.md`
+- `${research_dir}/research-patterns.md`
+- `${research_dir}/research-integration.md`
+- `${research_dir}/research-docs.md`
+- `${shared_file}`
+
+Canonical `plan-workflow` resolves these paths with the artifact-store `research-<lens>` and `shared` kinds. Local mode keeps today's `docs/plans/<feature>/` paths; linear mode resolves under `.ycc/artifacts/<feature>/`, places research under `research/`, and saves the research and shared documents to Linear.
 
 After creating the shared context files and displaying the summary, **STOP COMPLETELY**.
 
@@ -63,12 +65,13 @@ After creating the shared context files and displaying the summary, **STOP COMPL
 
 - **--team**: Optional. (Claude Code only) Deploy researchers as teammates. Default is standalone parallel sub-agents via the `Agent` tool. Cursor and Codex bundles lack team tools — do not pass `--team` there.
 - **--dry-run**: Show orchestration plan without creating files. Writes nothing.
-- **feature-name**: Required. Directory name under `${PLANS_DIR}` (kebab-case).
+- **feature-name**: Required. Feature slug passed to canonical `plan-workflow` for artifact-store resolution (kebab-case).
+- **--store=local|linear**: Optional artifact-store override, forwarded to canonical `plan-workflow`. Local is the default.
 
 If any unsupported flag is present (see Flag policy above), abort with a usage error and STOP:
 
 ```
-Usage: /shared-context [--team] [feature-name] [--dry-run]
+Usage: /shared-context [--team] [--store=local|linear] [feature-name] [--dry-run]
 This alias always runs plan-workflow --research-only --no-checkpoint.
 Unsupported flag: <flag>
 ```
@@ -86,7 +89,7 @@ If no feature name provided, abort with the same usage plus examples:
 Build the **effective `$ARGUMENTS`** for canonical `plan-workflow`:
 
 ```
-<feature-name> --research-only --no-checkpoint [--team] [--dry-run]
+<feature-name> --research-only --no-checkpoint [--team] [--dry-run] [--store=local|linear]
 ```
 
 (`--team` / `--dry-run` only if the user passed them; user-supplied redundant `--research-only` / `--no-checkpoint` are dropped, not duplicated.)
@@ -102,14 +105,14 @@ Build the **effective `$ARGUMENTS`** for canonical `plan-workflow`:
 
 ## Location
 
-${feature_dir}/shared.md
+${shared_file}
 
 ## Research Files
 
-- ${feature_dir}/research-architecture.md
-- ${feature_dir}/research-patterns.md
-- ${feature_dir}/research-integration.md
-- ${feature_dir}/research-docs.md
+- ${research_dir}/research-architecture.md
+- ${research_dir}/research-patterns.md
+- ${research_dir}/research-integration.md
+- ${research_dir}/research-docs.md
 
 ## Next Step (User Triggered)
 

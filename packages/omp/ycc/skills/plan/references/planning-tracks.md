@@ -38,7 +38,7 @@ For unattended loop-to-completion of a parallel plan, hand off to `/skill:implem
 
 **Option 2 — Save to file and hand off (rigorous)**
 
-Write the plan to `docs/prps/plans/{name}.plan.md` (adapting it to the PRP plan template if needed: add `Patterns to Mirror`, `Files to Change`, `Validation Commands`, etc.), then run `/skill:prp-implement --parallel docs/prps/plans/{name}.plan.md` for the full 5-level validation pipeline.
+Resolve kind `prp-plan` for the feature slug through `skill://ycc-shared/scripts/resolve-artifact-store.sh` using the skill's three steps: print `--shell` and read `ARTIFACT_STORE`, apply the Linear call gate in linear mode, then `--ensure --kind=prp-plan --slug=<slug>`. Forward `${STORE_FLAG}` on every call. Prepare missing document/task identity via Lookup/Load before writing as required by artifact-store.md **Planning skills**, then Save (including task sub-issues). Write the resolved absolute `$OUT`, adapting to the PRP template when needed. Local mode keeps `docs/prps/plans/<slug>.plan.md` under the current checkout's git toplevel and retains move semantics; print `/skill:prp-implement --parallel {resolved absolute OUT path}` only in local mode. Linear-mode plans are not yet consumable by /skill:implement-plan or /skill:prp-implement (YAN-1155); print that caveat instead and recommend `--store=local` for plans to implement now. Never move the linear cache or claim implementation loads from Linear.
 
 Use Option 1 for small features and quick iterations. Use Option 2 when the user wants an implementation report, per-task validation logs, and the plan archived for audit.
 

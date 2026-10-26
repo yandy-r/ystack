@@ -56,7 +56,7 @@ _artifact_branch_hint() {
 resolve_artifact_store() {
   unset ARTIFACT_STORE ARTIFACT_STORE_SOURCE ARTIFACT_ROOT ARTIFACT_DIR \
     ARTIFACT_LINEAR_WORKSPACE ARTIFACT_LINEAR_TEAM ARTIFACT_LINEAR_PROJECT \
-    ARTIFACT_LINEAR_LABEL ARTIFACT_LINEAR_HINT
+    ARTIFACT_LINEAR_LABEL ARTIFACT_LINEAR_HINT ARTIFACT_REPO_ROOT
   local start_dir='' store='' source_name='' flag_set=0 global_config git_root boundary
   local phys_start phys_plans_root
   while [[ $# -gt 0 ]]; do
@@ -89,7 +89,7 @@ resolve_artifact_store() {
       if store=$(_artifact_config_value store "$global_config"); then
         source_name=global
       else
-        store=linear
+        store=local
         source_name=default
       fi
     fi
@@ -107,6 +107,9 @@ resolve_artifact_store() {
   esac
 
   export ARTIFACT_STORE="$store" ARTIFACT_STORE_SOURCE="$source_name"
+  # Current checkout for repo-level kinds (prd, spec, prp-plan, prp-research,
+  # blueprint) in local mode; not part of the --shell output.
+  export ARTIFACT_REPO_ROOT="${git_root:-$phys_start}"
   export ARTIFACT_ROOT="$PLANS_ROOT"
   if [[ "$store" == linear ]]; then
     if [[ -n "$git_root" && "$phys_plans_root" != "$git_root" && "$phys_plans_root" != "$git_root/"* ]]; then
@@ -135,6 +138,103 @@ get_feature_artifact_dir() {
   fi
   [[ -n "${ARTIFACT_DIR:-}" ]] || resolve_artifact_store || return 1
   printf '%s/%s\n' "$ARTIFACT_DIR" "$slug"
+}
+
+get_artifact_path() {
+  local kind="${1:-}" slug="${2:-}" base lens name repo
+  [[ -n "${ARTIFACT_STORE:-}" && -n "${ARTIFACT_DIR:-}" ]] || resolve_artifact_store || return 1
+  base=$(get_feature_artifact_dir "$slug") || return 1
+  # Repo-level kinds stay relative to the current checkout in local mode (not
+  # PLANS_ROOT), matching the cwd-relative docs/prps/... paths used before.
+  repo=${ARTIFACT_REPO_ROOT:-$ARTIFACT_ROOT}
+  case "$kind" in
+    prd|spec|prp-plan)
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/%s.md\n' "$base" "$kind"
+      else
+        case "$kind" in
+          prd) printf '%s/docs/prps/prds/%s.prd.md\n' "$repo" "$slug" ;;
+          spec) printf '%s/docs/prps/specs/%s.spec.md\n' "$repo" "$slug" ;;
+          prp-plan) printf '%s/docs/prps/plans/%s.plan.md\n' "$repo" "$slug" ;;
+        esac
+      fi
+      ;;
+    feature-spec|parallel-plan|shared)
+      printf '%s/%s.md\n' "$base" "$kind"
+      ;;
+    research-dir)
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/research\n' "$base"
+      else
+        printf '%s\n' "$base"
+      fi
+      ;;
+    research-*)
+      lens=${kind#research-}
+      if [[ ! "$lens" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+        _error 'Artifact research lens must contain only lowercase letters, digits, or - and start with a letter or digit'
+        return 1
+      fi
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/research/research-%s.md\n' "$base" "$lens"
+      else
+        printf '%s/research-%s.md\n' "$base" "$lens"
+      fi
+      ;;
+    analysis-*)
+      name=${kind#analysis-}
+      if [[ ! "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+        _error 'Artifact analysis name must contain only lowercase letters, digits, or - and start with a letter or digit'
+        return 1
+      fi
+      printf '%s/analysis-%s.md\n' "$base" "$name"
+      ;;
+    prp-research)
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/.prp-research\n' "$base"
+      else
+        printf '%s/docs/prps/plans/.prp-research/%s\n' "$repo" "$slug"
+      fi
+      ;;
+    deep-research)
+      if [[ "$ARTIFACT_STORE" == local ]]; then
+        _error "local mode keeps the skill's own output dir"
+        return 1
+      fi
+      printf '%s/deep-research\n' "$base"
+      ;;
+    blueprint)
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/blueprint.md\n' "$base"
+      else
+        printf '%s/docs/blueprint.md\n' "$repo"
+      fi
+      ;;
+    feature-dir) printf '%s\n' "$base" ;;
+    *)
+      _error "Unknown artifact kind: ${kind:-<empty>}"
+      return 1
+      ;;
+  esac
+}
+
+# Feature directory for the read-only planning checks (check-prerequisites,
+# check-state). Linear mode uses the strict artifact slug. Local mode keeps the
+# legacy ${PLANS_DIR}/<name> resolution so every name accepted before still
+# works, except empty names and names with a .. path segment, which would
+# escape the plans directory.
+get_plans_feature_dir() {
+  local name="${1:-}"
+  [[ -n "${ARTIFACT_STORE:-}" && -n "${ARTIFACT_DIR:-}" ]] || resolve_artifact_store || return 1
+  if [[ "$ARTIFACT_STORE" == linear ]]; then
+    get_artifact_path feature-dir "$name"
+    return
+  fi
+  if [[ -z "$name" || "$name" == /* || "$name" == .. || "$name" == ../* || "$name" == */.. || "$name" == */../* ]]; then
+    _error "Invalid feature name: ${name:-<empty>}"
+    return 1
+  fi
+  printf '%s/%s\n' "$PLANS_DIR" "$name"
 }
 
 # Check before either write entry point so a non-repository cannot gain a cache.
@@ -190,25 +290,62 @@ ensure_artifact_dir() {
   ensure_artifact_gitignore
 }
 
+# Local --ensure creates only what the resolved artifact needs: the parent
+# directory of a file kind, or the directory itself for a directory kind.
+# Linear mode keeps the cache directory and its .gitignore rule.
+_artifact_ensure_for() {
+  local kind="$1" artifact_path="$2"
+  if [[ "$ARTIFACT_STORE" == linear ]]; then
+    ensure_artifact_dir
+    return
+  fi
+  case "$kind" in
+    research-dir|feature-dir|prp-research|deep-research) mkdir -p -- "$artifact_path" ;;
+    *) mkdir -p -- "$(dirname "$artifact_path")" ;;
+  esac
+}
+
 _artifact_store_cli() {
-  local shell_output=0 key
+  local shell_output=0 ensure=0 kind='' slug='' kind_set=0 slug_set=0 key artifact_path=''
   local -a args=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --help|-h)
-        printf '%s\n' 'Usage: resolve-artifact-store.sh [--store=linear|local] [--debug] [--shell] [start-dir]' \
+        printf '%s\n' 'Usage: resolve-artifact-store.sh [--store=linear|local] [--debug] [--shell] [--kind=<kind> --slug=<slug>] [--ensure] [start-dir]' \
           'Resolve paths and Linear hints without writing files. Default output: ARTIFACT_DIR.' \
+          '--kind and --slug print an artifact path. --ensure creates what that path needs before printing' \
+          '(linear: the cache directory and its .gitignore rule; local: the parent directory, or the directory itself for directory kinds).' \
+          '--ensure without --kind and --slug creates ARTIFACT_DIR.' \
           '--shell prints shell-quoted ARTIFACT_* assignments. PLANS_DEBUG=1 enables debug output.'
         return 0
         ;;
       --debug) export PLANS_DEBUG=1 ;;
       --shell) shell_output=1 ;;
+      --ensure) ensure=1 ;;
+      --kind=*) kind=${1#--kind=}; kind_set=1 ;;
+      --slug=*) slug=${1#--slug=}; slug_set=1 ;;
       *) args+=("$1") ;;
     esac
     shift
   done
+  if [[ "$kind_set" != "$slug_set" ]]; then
+    _error 'Artifact path output requires both --kind and --slug'
+    return 1
+  fi
   resolve_artifact_store ${args[@]+"${args[@]}"} || return 1
-  if [[ "$shell_output" == 1 ]]; then
+  if [[ "$kind_set" == 1 ]]; then
+    artifact_path=$(get_artifact_path "$kind" "$slug") || return 1
+  fi
+  if [[ "$ensure" == 1 ]]; then
+    if [[ "$kind_set" == 1 ]]; then
+      _artifact_ensure_for "$kind" "$artifact_path" || return 1
+    else
+      ensure_artifact_dir || return 1
+    fi
+  fi
+  if [[ "$kind_set" == 1 ]]; then
+    printf '%s\n' "$artifact_path"
+  elif [[ "$shell_output" == 1 ]]; then
     for key in ARTIFACT_STORE ARTIFACT_STORE_SOURCE ARTIFACT_ROOT ARTIFACT_DIR \
       ARTIFACT_LINEAR_WORKSPACE ARTIFACT_LINEAR_TEAM ARTIFACT_LINEAR_PROJECT \
       ARTIFACT_LINEAR_LABEL ARTIFACT_LINEAR_HINT; do
@@ -218,7 +355,6 @@ _artifact_store_cli() {
     printf '%s\n' "$ARTIFACT_DIR"
   fi
 }
-
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   _artifact_store_cli "$@"
 else

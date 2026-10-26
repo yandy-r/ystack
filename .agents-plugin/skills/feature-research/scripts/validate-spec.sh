@@ -5,12 +5,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-RESOLVER="${SCRIPT_DIR}/../../../ycc-shared/scripts/resolve-plans-dir.sh"
+RESOLVER="${SCRIPT_DIR}/../../../ycc-shared/scripts/resolve-artifact-store.sh"
 
-# Source resolver to get PLANS_ROOT for path resolution
+# Source resolver to get PLANS_ROOT/ARTIFACT_ROOT for path resolution and the
+# artifact_body helper for frontmatter-skipping content checks.
 if [[ -f "$RESOLVER" ]]; then
-    # shellcheck source=../../../ycc-shared/scripts/resolve-plans-dir.sh
+    # shellcheck source=../../../ycc-shared/scripts/resolve-artifact-store.sh
     source "$RESOLVER"
+    # shellcheck source=../../../ycc-shared/scripts/artifact-body.sh
+    source "${SCRIPT_DIR}/../../../ycc-shared/scripts/artifact-body.sh"
 fi
 
 # Colors for output
@@ -69,16 +72,43 @@ log_info() {
 }
 
 # Check if file exists
-if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 <path-to-feature-spec.md>"
+SPEC_FILE=""
+store_flag=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --store=*)
+            store_flag="$1"
+            ;;
+        *)
+            if [[ -z "$SPEC_FILE" ]]; then
+                SPEC_FILE="$1"
+            else
+                echo "Usage: $0 <path-to-feature-spec.md> [--store=linear|local]" >&2
+                exit 1
+            fi
+            ;;
+    esac
+    shift
+done
+
+if [[ -n "$store_flag" ]]; then
+    # shellcheck disable=SC2086
+    resolve_artifact_store "$PWD" "$store_flag" || {
+        echo -e "${RED}ERROR:${NC} invalid ${store_flag#--}" >&2
+        exit 1
+    }
+fi
+
+if [[ -z "$SPEC_FILE" ]]; then
+    echo "Usage: $0 <path-to-feature-spec.md> [--store=linear|local]"
     exit 1
 fi
 
-SPEC_FILE="$1"
-
-# Always resolve relative paths against PLANS_ROOT
-if [[ "$SPEC_FILE" != /* && -n "${PLANS_ROOT:-}" ]]; then
-    SPEC_FILE="${PLANS_ROOT}/${SPEC_FILE}"
+# Resolve relative paths against the active artifact root: PLANS_ROOT in local
+# mode, ARTIFACT_ROOT in linear mode.
+if [[ "$SPEC_FILE" != /* && -n "${ARTIFACT_ROOT:-${PLANS_ROOT:-}}" ]]; then
+    SPEC_FILE="${ARTIFACT_ROOT:-$PLANS_ROOT}/${SPEC_FILE}"
 fi
 
 if [[ ! -f "$SPEC_FILE" ]]; then
@@ -86,13 +116,12 @@ if [[ ! -f "$SPEC_FILE" ]]; then
     exit 1
 fi
 
-echo "Validating: $SPEC_FILE"
-echo "=========================================="
-
-# Read file content. Match against it with here-strings, not `echo | grep -q`:
-# under pipefail an early-exiting reader SIGPIPEs the echo writer and a
-# present section reads as missing (YAN-1587).
-CONTENT=$(cat "$SPEC_FILE")
+# Read file content minus any leading frontmatter block (linear-mode identity
+# metadata is not body; see _shared/references/artifact-store.md, Frontmatter).
+# Match against it with here-strings, not `echo | grep -q`: under pipefail an
+# early-exiting reader SIGPIPEs the echo writer and a present section reads as
+# missing (YAN-1587).
+CONTENT=$(artifact_body "$SPEC_FILE")
 
 # Check for title
 if grep -q "^# Feature Spec:" <<<"$CONTENT"; then
@@ -233,12 +262,12 @@ fi
 # Check for links
 echo ""
 echo "Checking links..."
-links=$(grep -oE '\[([^\]]+)\]\(([^\)]+)\)' <<<"$CONTENT" | wc -l | tr -d ' ' || true)
+links=$(grep -oE '\[[^]]+\]\([^)]+\)' <<<"$CONTENT" | wc -l | tr -d ' ' || true)
 if [[ $links -gt 0 ]]; then
     log_success "Found $links links"
 
     # Check for broken internal links to research files
-    research_links=$(echo "$CONTENT" | grep -oE '\./research-[a-z]+\.md' || true)
+    research_links=$(echo "$CONTENT" | grep -oE '\./(research/)?research-[a-z-]+\.md' || true)
     if [[ -n "$research_links" ]]; then
         dir=$(dirname "$SPEC_FILE")
         while IFS= read -r link; do

@@ -2,6 +2,8 @@
 
 This template defines the structure for `feature-spec.md` - the consolidated research document that serves as input for plan-workflow.
 
+Resolve research links for the active store: in linear mode use `./research/research-<lens>.md`; in local mode (default) use `./research-<lens>.md`.
+
 ---
 
 ## Complete Example Format
@@ -306,6 +308,9 @@ For detailed findings, see:
 - [research-security.md](./research-security.md): Security analysis (severity-leveled findings)
 - [research-practices.md](./research-practices.md): Engineering practices (modularity, reuse, KISS)
 - [research-recommendations.md](./research-recommendations.md): Full recommendations
+
+In linear mode use the nested research path for every reference, for example:
+- [research-ux.md](./research/research-ux.md): UX research
 
 ````
 

@@ -17,7 +17,8 @@ These prompts are used to spawn research sub-agents for gathering shared context
 
 Apply this contract to every sub-agent prompt in this file:
 
-- Write only your assigned output file under `{{FEATURE_DIR}}`.
+- Write only your assigned `{{RESEARCH_<LENS>_FILE}}`; the orchestrator resolves it with the artifact-store `research-<lens>` kind.
+- When replacing an existing file in linear mode, preserve its frontmatter and replace only the body. The orchestrator performs the Linear Save; do not call Linear yourself.
 - Do not edit any other files.
 - After writing the file, verify it exists using the Read tool or equivalent.
 - **Share key findings** with relevant sub-agents using re-dispatch the affected sub-agent with the needed guidance.
@@ -75,7 +76,7 @@ Analyze the codebase to understand:
 
 **CRITICAL**: You MUST write your findings to the specified file. This is not optional.
 
-**Output File**: {{FEATURE_DIR}}/research-architecture.md
+**Output File**: {{RESEARCH_ARCHITECTURE_FILE}}
 
 Before completing this task:
 
@@ -167,7 +168,7 @@ Identify and document:
 
 **CRITICAL**: You MUST write your findings to the specified file. This is not optional.
 
-**Output File**: {{FEATURE_DIR}}/research-patterns.md
+**Output File**: {{RESEARCH_PATTERNS_FILE}}
 
 Before completing this task:
 
@@ -263,7 +264,7 @@ Investigate:
 
 **CRITICAL**: You MUST write your findings to the specified file. This is not optional.
 
-**Output File**: {{FEATURE_DIR}}/research-integration.md
+**Output File**: {{RESEARCH_INTEGRATION_FILE}}
 
 Before completing this task:
 
@@ -369,7 +370,7 @@ Search for documentation in:
 
 **CRITICAL**: You MUST write your findings to the specified file. This is not optional.
 
-**Output File**: {{FEATURE_DIR}}/research-docs.md
+**Output File**: {{RESEARCH_DOCS_FILE}}
 
 Before completing this task:
 
@@ -421,7 +422,7 @@ When spawning research sub-agents:
 1. **Read this file** to get the prompt templates
 2. **Substitute variables**:
    - `{{FEATURE_NAME}}` - The feature directory name (e.g., `user-authentication`)
-   - `{{FEATURE_DIR}}` - Full output directory (e.g., `docs/plans/user-authentication`)
+   - `{{RESEARCH_<LENS>_FILE}}` - The absolute path resolved for kind `research-<lens>` (local example: `docs/plans/user-authentication/research-<lens>.md`)
 3. **Create tasks** - Use track the task to create research tasks
 5. **Monitor progress** - Use the todo tracker to check when all tasks complete
 6. **Verify artifacts** - Check all research files exist on disk
@@ -430,7 +431,7 @@ When spawning research sub-agents:
 
 ## Variable Reference
 
-| Variable           | Description                    | Example                          |
-| ------------------ | ------------------------------ | -------------------------------- |
-| `{{FEATURE_NAME}}` | Feature directory name         | `user-authentication`            |
-| `{{FEATURE_DIR}}`  | Full research output directory | `docs/plans/user-authentication` |
+| Variable                   | Description                   | Example                                                                                                                              |
+| -------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `{{FEATURE_NAME}}`         | Feature directory name        | `user-authentication`                                                                                                                |
+| `{{RESEARCH_<LENS>_FILE}}` | Absolute research output path | Local: `docs/plans/user-authentication/research-<lens>.md`; linear: `.ycc/artifacts/user-authentication/research/research-<lens>.md` |

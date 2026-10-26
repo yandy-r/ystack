@@ -34,7 +34,7 @@ Create conversational implementation plan before code. Default output stays in c
 
 ### Step 1 — Parse flags and the user's request
 
-Parse and strip `--parallel`, `--team`, `--enhanced`, `--dry-run`, `--no-worktree`, legacy `--worktree`, `--visual` from `$ARGUMENTS`. Set `PARALLEL_MODE`, `AGENT_TEAM_MODE`, `ENHANCED_MODE`, `DRY_RUN`, `VISUAL_MODE` to booleans. `WORKTREE_MODE=true` by default; `--no-worktree` makes it false; `--worktree` is silent no-op. Remaining text is request.
+Parse and strip `--parallel`, `--team`, `--enhanced`, `--dry-run`, `--no-worktree`, legacy `--worktree`, `--visual`, and `--store=local|linear` from `$ARGUMENTS`. Retain the exact store override as `STORE_FLAG` (empty when absent); reject other values or conflicting overrides. Forward it to every resolver and visual-plan call. Set `PARALLEL_MODE`, `AGENT_TEAM_MODE`, `ENHANCED_MODE`, `DRY_RUN`, `VISUAL_MODE` to booleans. `WORKTREE_MODE=true` by default; `--no-worktree` makes it false; `--worktree` is silent no-op. Only the remaining text is the request used to derive the slug.
 
 | Flag            | Effect                                                                                                                                 |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -102,8 +102,24 @@ Unclear response: ask focused clarification.
 Runs only after Step 4 confirmation, last; never substitutes for earlier phases.
 
 - Dry-run: print `visual generation would run`; no writes/invocation.
-- Otherwise write confirmed plan verbatim to `docs/prps/plans/<slug>.plan.md`; create directory, resolve absolute path. Slug: lowercase, replace non-[a-z0-9-] with hyphen, collapse/trim, cap 20, fallback untitled.
-- Invoke `visual-plan <absolute-plan-path>`; surface its URL, localhost preview or `local files only`; do not derive output directory yourself.
+- Otherwise derive `<slug>`: lowercase, replace non-[a-z0-9-] with hyphen, collapse/trim, cap 20, fallback untitled. Resolve the `prp-plan` artifact as below and write the confirmed plan verbatim to `$OUT`.
+- Invoke `visual-plan ${STORE_FLAG} <absolute-plan-path>`; surface its URL, localhost preview or `local files only`; do not derive output directory yourself.
+
+1. Print the mode and read `ARTIFACT_STORE=` from stdout:
+
+   ```bash
+   bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   ```
+
+2. In linear mode only, apply the **Linear call gate** in `../../shared/references/artifact-store.md` before any write or `--ensure`.
+3. Resolve the destination once writing is permitted:
+
+   ```bash
+   OUT="$(bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=prp-plan --slug=<slug>)"
+   mkdir -p "$(dirname "$OUT")"
+   ```
+
+Shell state does not persist across tool calls; retain the printed mode and absolute path. Local mode keeps `docs/prps/plans/<slug>.plan.md` under the current checkout's git toplevel without identity frontmatter. Before writing in linear mode, follow artifact-store.md **Planning skills**: when document or task identity is missing, Lookup steps 3–6 and Load any hit, preserve identity and use Conflict before replacement, then Save with task sub-issues. Pass `$OUT` and `${STORE_FLAG}` to visual-plan. Linear-mode plans are not yet consumable by `implement-plan` or `prp-implement` (YAN-1155); print this caveat instead of an implementation command and recommend `--store=local` for plans to implement now.
 
 Read `../../shared/references/visual-mode.md` only when visual requested, for force-write-first terminal decorator contract.
 
