@@ -404,14 +404,16 @@ if [[ "$ac_after" -ge 262144 ]] && [[ "$ac_list" == src/a.ts$'\n'* ]]; then
 else
     fail "analyze-changes: fixture too small or src/ not first ($ac_after bytes after first match)"
 fi
-# Control: the pre-fix idiom must really die of SIGPIPE on this exact list, so
-# the fixture proves the regression without reading old code from git.
+# Control: the pre-fix idiom must really lose its writer on this exact list, so
+# the fixture proves the regression without reading old code from git. The
+# writer dies of SIGPIPE (rc > 128), or gets EPIPE ("Broken pipe", rc 1) where
+# the parent ignores SIGPIPE, as some CI runners do.
 ac_old_rc=0
-( set -o pipefail; echo "$ac_list" | grep -qE '^(src/|lib/|app/)' ) || ac_old_rc=$?
-if [[ "$ac_old_rc" -gt 128 ]]; then
-    pass "analyze-changes: control: old echo|grep -q idiom dies of SIGPIPE on the fixture (rc=$ac_old_rc)"
+ac_old_err="$( ( set -o pipefail; echo "$ac_list" | grep -qE '^(src/|lib/|app/)' ) 2>&1 )" || ac_old_rc=$?
+if [[ "$ac_old_rc" -gt 128 ]] || { [[ "$ac_old_rc" -ne 0 ]] && [[ "$ac_old_err" == *'Broken pipe'* ]]; }; then
+    pass "analyze-changes: control: old echo|grep -q idiom loses its writer on the fixture (rc=$ac_old_rc)"
 else
-    fail "analyze-changes: control: old echo|grep -q idiom did not SIGPIPE (rc=$ac_old_rc)"
+    fail "analyze-changes: control: old echo|grep -q idiom did not SIGPIPE/EPIPE (rc=$ac_old_rc)"
 fi
 run_capture ac-large -- bash -c "cd '$AC_LARGE' && bash '$AC_SCRIPT'"
 if [[ "$RC" -eq 0 ]] && [[ "$OUT" == *'Documentation Consideration:'* ]]; then

@@ -93,23 +93,25 @@ run_capture() {
 
 # control_sigpipes <label> <attempts> <fn> — run the OLD idiom <fn> (a shell
 # function that ends in the early-exiting reader) under pipefail up to
-# <attempts> times; pass as soon as one run dies of SIGPIPE (a status above
-# 128, i.e. 141 from the killed writer). Any other failure (e.g. rc 1 from a
-# fixture that lost its needle) does not count: it would not prove the race.
-# If it never SIGPIPEs the fixture does not trigger the race and the
-# regression case would be a smoke test, so the suite fails.
+# <attempts> times; pass as soon as one run loses its writer: killed by
+# SIGPIPE (a status above 128, i.e. 141), or — where the parent ignores
+# SIGPIPE, as some CI runners do — failed with an EPIPE "Broken pipe" write
+# error. Any other failure (e.g. rc 1 from a fixture that lost its needle)
+# does not count: it would not prove the race. If the writer never loses,
+# the fixture does not trigger the race and the regression case would be a
+# smoke test, so the suite fails.
 control_sigpipes() {
-    local label="$1" attempts="$2" fn="$3" i=0 rc
+    local label="$1" attempts="$2" fn="$3" i=0 rc err
     while (( i < attempts )); do
         rc=0
-        ( set -o pipefail; "$fn" ) >/dev/null 2>&1 || rc=$?
-        if (( rc > 128 )); then
-            pass "${label}: old idiom dies of SIGPIPE under pipefail on this fixture (control, rc=${rc})"
+        err="$( ( set -o pipefail; "$fn" ) 2>&1 >/dev/null )" || rc=$?
+        if (( rc > 128 )) || { (( rc != 0 )) && [[ "$err" == *'Broken pipe'* ]]; }; then
+            pass "${label}: old idiom loses its writer under pipefail on this fixture (control, rc=${rc})"
             return 0
         fi
         i=$((i + 1))
     done
-    fail "${label}: fixture does not trigger SIGPIPE (last rc=${rc})"
+    fail "${label}: fixture does not trigger SIGPIPE/EPIPE (last rc=${rc})"
 }
 
 # marker_lines <n> — n filler lines of 74 bytes each (4000 lines = 296,000
