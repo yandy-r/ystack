@@ -73,10 +73,12 @@ Resolve the store and blueprint path before detection. Derive the shared reposit
 
 ```bash
 COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
-if [ -n "$COMMON_DIR" ]; then
-  REPO_NAME="$(basename "$(dirname "$COMMON_DIR")")"
+if [ "$(basename "$COMMON_DIR" 2>/dev/null)" = ".git" ]; then
+  REPO_NAME="$(basename "$(dirname "$COMMON_DIR")")"   # normal checkout or worktree
+elif [ -n "$COMMON_DIR" ]; then
+  REPO_NAME="$(basename "$COMMON_DIR" .git)"            # bare repo or submodule
 else
-  REPO_NAME="$(basename "$(git rev-parse --show-toplevel)")"
+  REPO_NAME="$(basename "$PWD")"                        # not a git repository
 fi
 ```
 
