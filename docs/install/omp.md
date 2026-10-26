@@ -35,13 +35,13 @@ Install only from a source you trust (see
 
 ## Platform Support
 
-| Platform                       | Status                 | Notes                                                                                              |
-| ------------------------------ | ---------------------- | -------------------------------------------------------------------------------------------------- |
-| Linux x86_64                   | Supported, tested      | Every live acceptance row passed (see [Known Limitations](#known-limitations)).                    |
-| Linux arm64, musl              | Expected, not verified | The packages hold no native code; `install.sh` needs only Bash 4, `python3` with PyYAML and `omp`. |
-| macOS                          | Expected, not verified | Needs Bash 4+ ahead of `/bin/bash` on `PATH`. The live harnesses have not run on macOS yet.        |
-| Windows: WSL 2                 | Expected, not verified | Run `install.sh` and the Linux `omp` build inside WSL; it then behaves as Linux.                   |
-| Windows: native, Git Bash/MSYS | Unsupported            | See below.                                                                                         |
+| Platform                       | Status                  | Notes                                                                                                                                                                                                                                                                                                      |
+| ------------------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linux x86_64                   | Supported, tested       | Every live acceptance row passed (see [Known Limitations](#known-limitations)).                                                                                                                                                                                                                            |
+| Linux arm64, musl              | Expected, not verified  | The packages hold no native code; `install.sh` needs only Bash 4, `python3` with PyYAML and `omp`.                                                                                                                                                                                                         |
+| macOS                          | Supported, tested in CI | Harnesses passed on macos-latest arm64 for omp 18.12.2 and 18.12.6 ([run 40278048271](https://github.com/yandy-r/ystack/actions/runs/40278048271), on `main` at `a7c38144`). That job uses `env -i` and a throwaway HOME; bubblewrap is Linux-only. `install.sh` still needs Bash 4+ ahead of `/bin/bash`. |
+| Windows: WSL 2                 | Expected, not verified  | Run `install.sh` and the Linux `omp` build inside WSL; it then behaves as Linux.                                                                                                                                                                                                                           |
+| Windows: native, Git Bash/MSYS | Unsupported             | See below.                                                                                                                                                                                                                                                                                                 |
 
 Native Windows is unsupported for `install.sh --target omp` (decided in
 YAN-1556): `install.sh` and every OMP test harness are Bash scripts, `--rules`
@@ -822,9 +822,10 @@ change. Add `--dry-run` to see each `omp` call before it runs.
 - **Catalog installs are unmanaged.** Packages installed with `omp plugin`
   straight from the catalog have no `install.sh` ownership record, dedupe,
   `--settings` or `--rules`; run those `install.sh` steps separately.
-- **Platforms.** Only Linux x86_64 has live acceptance evidence; macOS, Linux
-  arm64/musl and WSL are not yet run, and native Windows is unsupported (see
-  [Platform Support](#platform-support)).
+- **Platforms.** Linux x86_64 has bubblewrap-sandboxed acceptance evidence.
+  macOS arm64 passed the same harnesses in CI under `env -i` (no bubblewrap).
+  Linux arm64, musl, and WSL 2 are not yet run. Native Windows is unsupported
+  (see [Platform Support](#platform-support)).
 - **No hooks, no status line.** OMP never runs ycc's shell hooks;
   `WorktreeCreate` has no OMP event; there is no command-backed status line.
   herdr reporting is herdr's own integration.

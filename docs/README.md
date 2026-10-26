@@ -15,7 +15,7 @@ Claude-only notes, and path-specific Claude rules live under
 
 | Path                           | Purpose                                                                          |
 | ------------------------------ | -------------------------------------------------------------------------------- |
-| `install/`                     | Runtime-specific install guides for Claude, Cursor, Codex, and opencode.         |
+| `install/`                     | Runtime-specific install guides for Claude, Cursor, Codex, opencode, and OMP.    |
 | `internal/`                    | Architecture notes, native-package records, and spike dossiers.                  |
 | `plans/`                       | Multi-phase implementation plans — see below.                                    |
 | `releases/`                    | One file per tagged release, drafted by `ycc:bundle-release`.                    |
@@ -32,6 +32,7 @@ Runtime-specific install instructions live under [`install/`](install/):
 - [`install/codex.md`](install/codex.md) — Codex plugin, custom agents, and Codex Desktop setup.
 - [`install/cursor.md`](install/cursor.md) — Cursor-native bundle sync and MCP setup.
 - [`install/opencode.md`](install/opencode.md) — opencode-native skills, agents, commands, config, and rules.
+- [`install/omp.md`](install/omp.md) — OMP (oh-my-pi) native packages, `install.sh --target omp`, and platform limits.
 
 ## Plans
 
@@ -55,10 +56,10 @@ template in
 
 Latest entries:
 
+- [`releases/6.1.1.md`](releases/6.1.1.md) pins Node.js 22.23.4 and 24.22.1 and markdown-it 14.3.3. Plugin behavior is unchanged.
+- [`releases/6.1.0.md`](releases/6.1.0.md) adds OMP packages (`omp >= 18.12.2`), `install.sh` item selection, and opencode restricted-agent permission fixes.
 - [`releases/6.0.0.md`](releases/6.0.0.md) covers native packages in the Claude, Codex, and Cursor marketplaces, and `install.sh migrate`.
 - [`releases/5.3.0.md`](releases/5.3.0.md) covers per-runtime worktree roots, `AGENTS.md` from `ycc:init`, and retired command wrappers.
-- [`releases/5.2.1.md`](releases/5.2.1.md) covers selectable MCP servers and the cross-tool agents install target.
-- [`releases/5.2.0.md`](releases/5.2.0.md) covers standalone skills, agents, and commands, plus installer config removal.
 
 Older notes stay in [`releases/`](releases/).
 
