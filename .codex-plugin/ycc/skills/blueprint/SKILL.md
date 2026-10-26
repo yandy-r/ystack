@@ -11,7 +11,7 @@ Bundled paths are relative to this SKILL.md's directory (the installed location 
 > The whole-software charter. Sits at the top of the funnel — upstream of `prp-prd`, `prp-spec`, and every other planning
 > skill. Produces ONE durable source-of-truth spec for an entire piece of software, then bootstraps the project from it.
 
-**Operational context:** Write the whole-project source of truth to docs/blueprint.md through Foundation, Grounding, Scope, Tech Stack, Architecture, and Generate gates; its machine-readable Bootstrap section drives $init and $formatters. This is upstream of per-feature prp-prd and prp-spec.
+**Operational context:** Write the whole-project source of truth to the resolved `blueprint` artifact through Foundation, Grounding, Scope, Tech Stack, Architecture, and Generate gates; its machine-readable Bootstrap section drives $init and $formatters. This is upstream of per-feature prp-prd and prp-spec.
 
 **Input**: `$ARGUMENTS`
 
@@ -36,9 +36,10 @@ You are a principal engineer + product strategist who:
 
 Parse from `$ARGUMENTS`:
 
-- `--update` — re-run over an existing `docs/blueprint.md`; diff-and-merge instead of overwrite.
+- `--update` — re-run over the existing resolved blueprint; diff-and-merge instead of overwrite.
 - `--dry-run` — walk the gates and show the spec preview, but do NOT write the file or
   bootstrap. If set, also pass `--dry-run` through to any orchestrated `$init` call.
+- `--store=local|linear` — parse and strip before interpreting the project idea; retain the exact override as `STORE_FLAG` (empty when absent), reject invalid/conflicting overrides, and forward `${STORE_FLAG}` to every resolver call.
 
 ```
 DETECT → INITIATE → FOUNDATION → GROUNDING → SCOPE → TECH STACK → ARCHITECTURE → GENERATE → HANDOFF
@@ -54,6 +55,35 @@ dual-mode (market + codebase) discovery. Every `[GATE]` means: present the quest
 
 ## Phase 0: DETECT — Project Context
 
+Resolve the store and blueprint path before detection. Derive the shared repository name from the main checkout, not the worktree directory:
+
+```bash
+COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+if [ -n "$COMMON_DIR" ]; then
+  REPO_NAME="$(basename "$(dirname "$COMMON_DIR")")"
+else
+  REPO_NAME="$(basename "$(git rev-parse --show-toplevel)")"
+fi
+```
+
+Set `<slug>` from `REPO_NAME`: lowercase, replace characters outside `[a-z0-9._-]` with `-`, collapse hyphens and trim leading/trailing separators; never use the feature name. If no valid slug remains, ask for one.
+
+1. Print the mode and read `ARTIFACT_STORE=` from stdout:
+
+   ```bash
+   bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   OUT="$(bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=blueprint --slug=<slug>)"
+   ```
+
+2. For a real linear run only, apply the **Linear call gate** from `../../shared/references/artifact-store.md` before any write or pull. Dry runs only resolve paths, never ensure, Load or create files.
+3. Before Lookup/Load in a real linear run, establish the safe cache and gitignore rule:
+
+   ```bash
+   OUT="$(bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=blueprint --slug=<slug>)"
+   ```
+
+Then follow artifact-store.md **Planning skills**: when document identity is missing, Lookup steps 3–6 and Load any hit before checking whether a blueprint exists; preserve identity and use Conflict for replacement before Save. Local mode keeps `docs/blueprint.md` under the current checkout's git toplevel. Retain the printed mode, main-checkout slug and absolute path across tool calls.
+
 Determine whether this is greenfield, an existing repo, or a re-run.
 
 1. Run the shared profiler (read its `key=value` output; do NOT reimplement profiling):
@@ -63,15 +93,15 @@ Determine whether this is greenfield, an existing repo, or a re-run.
    ```
 
    If the script is unavailable (non-Claude target / missing path), fall back gracefully:
-   `test -f docs/blueprint.md` and a quick `ls` to judge emptiness. Do not fail the run.
+   Check the resolved `$OUT` and inspect the repository directory to judge emptiness. Do not fail the run.
 
 2. Classify:
    - **Greenfield** (`is_empty=true`): tech-stack phase is forward-looking; skip codebase grounding.
    - **Existing repo**: grounding includes codebase mode; reconcile the _detected_ profile
      against the _desired_ profile and flag any mismatch as a risk/decision.
-   - **Re-run** (`docs/blueprint.md` exists): if `--update`, do a structured refresh
+   - **Re-run** (resolved blueprint exists locally or in Linear): if `--update`, do a structured refresh
      (diff each section, merge, preserve user edits). Without `--update`, tell the user the
-     file exists and ask whether to refresh (`--update`) or abort. Never silently overwrite.
+     artifact exists and ask whether to refresh (`--update`) or abort. Never silently overwrite.
 
 ---
 
@@ -207,16 +237,19 @@ Ask:
 
 ## Phase 7: GENERATE — Write the Blueprint
 
-**Output path**: `docs/blueprint.md` (fixed — there is exactly one per repo).
+**Output path**: resolved `$OUT` (one blueprint per repo, keyed by the sanitized main-checkout name).
 
-If `--dry-run`, render the spec preview to the user and skip writing. Otherwise:
+If `--dry-run`, render the spec preview to the user and skip writing. Otherwise, in linear mode apply the Linear call gate before `--ensure`:
 
 ```bash
-mkdir -p docs
+OUT="$(bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=blueprint --slug=<slug>)"
+mkdir -p "$(dirname "$OUT")"
 ```
 
 If re-running with `--update`, merge into the existing file section-by-section, preserving
 user edits; otherwise write fresh.
+
+Write `$OUT`; local mode adds no identity frontmatter. Linear mode follows artifact-store.md **Planning skills** to prepare any missing document identity via Lookup/Load before writing, then Save the blueprint, preserving loaded identity and user edits.
 
 ### Blueprint Template
 
@@ -366,7 +399,7 @@ Otherwise ask via `ask the user`:
 ```markdown
 ## Blueprint Created
 
-**File**: `docs/blueprint.md`
+**File**: `{resolved absolute OUT path}`
 
 **Vision**: {one line}
 **Stack**: {profile + key frameworks}
@@ -378,7 +411,7 @@ Otherwise ask via `ask the user`:
 
 ### Next Steps
 
-- Reference `docs/blueprint.md` as the canonical project description in `AGENTS.md`.
+- In local mode, reference the repo-relative `docs/blueprint.md` as the canonical project description in `AGENTS.md`, never the absolute machine path above. In linear mode, reference the Linear Document `<slug> · blueprint` (with its URL), never the gitignored cache path.
 - Per module in the breakdown, run `$prp-spec` (or `$prp-prd` for fuzzy ones)
   to produce a feature spec, then `$prp-plan` → `$prp-implement`.
 ```
@@ -390,7 +423,7 @@ Otherwise ask via `ask the user`:
 `blueprint` is the **charter altitude** — upstream of all feature work:
 
 ```
-IDEA → $blueprint → docs/blueprint.md
+IDEA → $blueprint → resolved blueprint artifact
             └─Bootstrap→ $init [--profile --templates --git --formatters --release-model]
                                  ├─Phase 5.5→ $release-model [--model <m> --yes] → RELEASING.md
                                  └─Phase 6.5→ $formatters [--ci --hooks --<stack>]
@@ -398,8 +431,8 @@ IDEA → $blueprint → docs/blueprint.md
 ```
 
 - `blueprint` answers "what is this whole software and how do we stand it up?" ONCE per project.
-- `prp-prd` / `prp-spec` answer "what is this one feature/increment?" — they live under
-  `docs/prps/` and are run repeatedly, seeded by the blueprint's module breakdown.
+- `prp-prd` / `prp-spec` answer "what is this one feature/increment?" — they use
+  their resolved artifact paths and run repeatedly, seeded by the blueprint's module breakdown.
 - Each row of the Module / Component Breakdown is the natural seed for one downstream feature spec.
 
 ## Success Criteria

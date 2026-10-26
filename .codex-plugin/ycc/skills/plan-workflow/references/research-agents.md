@@ -17,7 +17,8 @@ These prompts are used to spawn research teammates for gathering shared context.
 
 Apply this contract to every teammate prompt in this file:
 
-- Write only your assigned output file under `{{FEATURE_DIR}}`.
+- Write only your assigned `{{RESEARCH_<LENS>_FILE}}`; the orchestrator resolves it with the artifact-store `research-<lens>` kind.
+- When replacing an existing file in linear mode, preserve its frontmatter and replace only the body. The orchestrator performs the Linear Save; do not call Linear yourself.
 - Do not edit any other files.
 - After writing the file, verify it exists using the Read tool or equivalent.
 - **Share key findings** with relevant teammates using send follow-up instructions.
@@ -92,7 +93,7 @@ You are part of a research team. Your teammates are:
 
 **CRITICAL**: You MUST write your findings to the specified file. This is not optional.
 
-**Output File**: {{FEATURE_DIR}}/research-architecture.md
+**Output File**: {{RESEARCH_ARCHITECTURE_FILE}}
 
 Before completing this task:
 
@@ -202,7 +203,7 @@ You are part of a research team. Your teammates are:
 
 **CRITICAL**: You MUST write your findings to the specified file. This is not optional.
 
-**Output File**: {{FEATURE_DIR}}/research-patterns.md
+**Output File**: {{RESEARCH_PATTERNS_FILE}}
 
 Before completing this task:
 
@@ -317,7 +318,7 @@ You are part of a research team. Your teammates are:
 
 **CRITICAL**: You MUST write your findings to the specified file. This is not optional.
 
-**Output File**: {{FEATURE_DIR}}/research-integration.md
+**Output File**: {{RESEARCH_INTEGRATION_FILE}}
 
 Before completing this task:
 
@@ -442,7 +443,7 @@ You are part of a research team. Your teammates are:
 
 **CRITICAL**: You MUST write your findings to the specified file. This is not optional.
 
-**Output File**: {{FEATURE_DIR}}/research-docs.md
+**Output File**: {{RESEARCH_DOCS_FILE}}
 
 Before completing this task:
 
@@ -494,7 +495,7 @@ When spawning research teammates:
 1. **Read this file** to get the prompt templates
 2. **Substitute variables**:
    - `{{FEATURE_NAME}}` - The feature directory name (e.g., `user-authentication`)
-   - `{{FEATURE_DIR}}` - Full output directory (e.g., `docs/plans/user-authentication`)
+   - `{{RESEARCH_<LENS>_FILE}}` - The absolute path resolved for kind `research-<lens>` (local example: `docs/plans/user-authentication/research-<lens>.md`)
 3. **Create tasks** - Use record the task to create research tasks
 4. **Spawn in parallel** - Use a single message with multiple parallel agent runs, each with `name`
 5. **Monitor progress** - Use the task tracker to check when all tasks complete
@@ -504,10 +505,10 @@ When spawning research teammates:
 
 ## Variable Reference
 
-| Variable           | Description                    | Example                          |
-| ------------------ | ------------------------------ | -------------------------------- |
-| `{{FEATURE_NAME}}` | Feature directory name         | `user-authentication`            |
-| `{{FEATURE_DIR}}`  | Full research output directory | `docs/plans/user-authentication` |
+| Variable                   | Description                   | Example                                                                                                                              |
+| -------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `{{FEATURE_NAME}}`         | Feature directory name        | `user-authentication`                                                                                                                |
+| `{{RESEARCH_<LENS>_FILE}}` | Absolute research output path | Local: `docs/plans/user-authentication/research-<lens>.md`; linear: `.ycc/artifacts/user-authentication/research/research-<lens>.md` |
 
 ## Teammate Configuration
 

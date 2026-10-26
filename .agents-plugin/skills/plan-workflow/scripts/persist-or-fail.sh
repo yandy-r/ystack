@@ -20,11 +20,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-RESOLVER="${SCRIPT_DIR}/../../../ycc-shared/scripts/resolve-plans-dir.sh"
+RESOLVER="${SCRIPT_DIR}/../../../ycc-shared/scripts/resolve-artifact-store.sh"
 
-# Source resolver to get PLANS_ROOT for path resolution
+# Source resolver to get PLANS_ROOT/ARTIFACT_ROOT for path resolution
 if [[ -f "$RESOLVER" ]]; then
-    # shellcheck source=../../../ycc-shared/scripts/resolve-plans-dir.sh
+    # shellcheck source=../../../ycc-shared/scripts/resolve-artifact-store.sh
     source "$RESOLVER"
 fi
 
@@ -34,7 +34,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 <feature-dir> [--optimized]"
+    echo "Usage: $0 <feature-dir> [--optimized] [--store=linear|local]"
     echo ""
     echo "Pre-generation gate: ensures all analysis files exist before plan generation."
     echo "  default      Standard 3-file set (analysis-context/code/tasks)"
@@ -46,11 +46,16 @@ fi
 
 feature_dir=""
 optimized="false"
+store_flag=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --optimized)
             optimized="true"
+            shift
+            ;;
+        --store=*)
+            store_flag="$1"
             shift
             ;;
         *)
@@ -70,9 +75,18 @@ if [[ -z "$feature_dir" ]]; then
     exit 1
 fi
 
-# Resolve relative paths against PLANS_ROOT (from resolve-plans-dir.sh)
-if [[ "$feature_dir" != /* && -n "${PLANS_ROOT:-}" ]]; then
-    feature_dir="${PLANS_ROOT}/${feature_dir}"
+if [[ -n "$store_flag" ]]; then
+    # shellcheck disable=SC2086
+    resolve_artifact_store "$PWD" "$store_flag" || {
+        echo -e "${RED}ERROR${NC}: invalid ${store_flag#--}" >&2
+        exit 1
+    }
+fi
+
+# Resolve relative paths against the active artifact root: PLANS_ROOT in local
+# mode, ARTIFACT_ROOT in linear mode.
+if [[ "$feature_dir" != /* && -n "${ARTIFACT_ROOT:-${PLANS_ROOT:-}}" ]]; then
+    feature_dir="${ARTIFACT_ROOT:-$PLANS_ROOT}/${feature_dir}"
 fi
 
 if [[ ! -d "$feature_dir" ]]; then

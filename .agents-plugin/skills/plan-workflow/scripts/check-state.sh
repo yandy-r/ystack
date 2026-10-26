@@ -14,18 +14,17 @@
 
 set -uo pipefail
 
-FEATURE_NAME="${1:-}"
-
-# Source the shared resolver to get PLANS_DIR
+# Source the artifact-store resolver: the feature dir is PLANS_DIR/<feature>
+# in local mode and .ycc/artifacts/<feature> in linear mode.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SHARED_DIR="${SCRIPT_DIR}/../../../ycc-shared/scripts"
 
-if [[ -f "${SHARED_DIR}/resolve-plans-dir.sh" ]]; then
-  # shellcheck source=../../../ycc-shared/scripts/resolve-plans-dir.sh
-  source "${SHARED_DIR}/resolve-plans-dir.sh"
+if [[ -f "${SHARED_DIR}/resolve-artifact-store.sh" ]]; then
+  # shellcheck source=../../../ycc-shared/scripts/resolve-artifact-store.sh
+  source "${SHARED_DIR}/resolve-artifact-store.sh"
 else
   # Fallback if shared resolver not found - compute absolute repo root
-  echo "WARNING: resolve-plans-dir.sh not found, using default path" >&2
+  echo "WARNING: resolve-artifact-store.sh not found, using default path" >&2
 
   # Try to find repo root using git
   if REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null); then
@@ -47,7 +46,33 @@ else
   export PLANS_ROOT="$REPO_ROOT"
 fi
 
-PLAN_DIR="${PLANS_DIR}/${FEATURE_NAME}"
+# Optional explicit store override from the invoking skill.
+STORE_FLAG=""
+FEATURE_NAME=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --store=*)
+      STORE_FLAG="$1"
+      ;;
+    *)
+      if [[ -z "$FEATURE_NAME" ]]; then
+        FEATURE_NAME="$1"
+      else
+        echo "Usage: check-state.sh <feature-name> [--store=linear|local]" >&2
+        exit 1
+      fi
+      ;;
+  esac
+  shift
+done
+
+if [[ -n "$STORE_FLAG" ]]; then
+  # shellcheck disable=SC2086
+  resolve_artifact_store "$PWD" "$STORE_FLAG" || {
+    echo "ERROR: invalid ${STORE_FLAG#--}" >&2
+    exit 1
+  }
+fi
 
 # Colors for output
 YELLOW='\033[0;33m'
@@ -77,6 +102,13 @@ if [[ -z "$FEATURE_NAME" ]]; then
   echo "Checks the current state of planning documents for a feature."
   echo "Reports what files exist and what phases have been completed."
   exit 1
+fi
+
+# The resolver prints its own reason (invalid store config or feature name).
+if [[ -f "${SHARED_DIR}/resolve-artifact-store.sh" ]]; then
+  PLAN_DIR="$(get_plans_feature_dir "$FEATURE_NAME")" || exit 1
+else
+  PLAN_DIR="${PLANS_DIR}/${FEATURE_NAME}"
 fi
 
 echo "Checking state for: ${FEATURE_NAME}"
@@ -119,13 +151,23 @@ if [[ "$DIR_EXISTS" == "true" ]]; then
     missing "parallel-plan.md"
   fi
 
-  # Count research files
+  # Count research files: directly in the feature dir (local layout) and in
+  # its research/ subdir when present (linear layout).
   RESEARCH_COUNT=$(find "$PLAN_DIR" -maxdepth 1 -name "research-*.md" 2>/dev/null | wc -l | tr -d ' ')
+  if [[ -d "${PLAN_DIR}/research" ]]; then
+    SUB_COUNT=$(find "${PLAN_DIR}/research" -maxdepth 1 -name "research-*.md" 2>/dev/null | wc -l | tr -d ' ')
+    RESEARCH_COUNT=$((RESEARCH_COUNT + SUB_COUNT))
+  fi
   if [[ $RESEARCH_COUNT -gt 0 ]]; then
     found "$RESEARCH_COUNT research file(s)"
     find "$PLAN_DIR" -maxdepth 1 -name "research-*.md" -exec basename {} \; | while read -r f; do
       echo "       - $f"
     done
+    if [[ -d "${PLAN_DIR}/research" ]]; then
+      find "${PLAN_DIR}/research" -maxdepth 1 -name "research-*.md" -exec basename {} \; | while read -r f; do
+        echo "       - $f"
+      done
+    fi
   fi
 
   # Count analysis files

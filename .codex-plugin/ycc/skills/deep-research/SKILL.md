@@ -14,18 +14,18 @@ Preserve contradictions and uncertainty; do not replace missing research with gu
 
 ## Phase 0: Define and Set Up
 
-Parse `$ARGUMENTS`: flags first, remaining text is the required research subject.
+Parse `$ARGUMENTS`: flags first. Parse and strip `--store=local|linear`, retain the exact override as `STORE_FLAG` (empty when absent), and reject invalid/conflicting overrides. Forward `${STORE_FLAG}` to every resolver call. Only the remaining text is the required research subject.
 
 Default: standalone parallel sub-agents.
 
 - `--team`: Codex runtime only; not available in bundle invocations; opt into a shared team of 14 agents across three batches. Cursor and Codex lack team tools.
-- `--output-dir "..."`: output directory; default `research/[sanitized-subject]`.
+- `--output-dir "..."`: explicit working directory, overriding either store's default. Local mode defaults to `research/[sanitized-subject]`; linear mode resolves kind `deep-research`.
 - `--dry-run`: display the plan without running checks, creating files, or dispatching.
 
 Missing subject: abort with usage and an example:
 
 ```text
-$deep-research [--team] [--output-dir "..."] [--dry-run] <research-subject>
+$deep-research [--team] [--output-dir "..."] [--dry-run] [--store=local|linear] <research-subject>
 $deep-research --dry-run "AI model deployment strategies"
 ```
 
@@ -33,6 +33,14 @@ Require a focused topic. Sanitize the default directory name: lowercase, replace
 spaces with hyphens, remove characters other than alphanumerics and hyphens.
 For `--team`, require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; otherwise abort with
 `--team requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1. Retry without --team or intentionally enable agent teams.`
+
+Step 1: resolve and **print** the store with the executed helper; read `ARTIFACT_STORE=` from stdout:
+
+```bash
+bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+```
+
+Use the sanitized subject as `<slug>`; if empty, request a focused subject instead of choosing a directory. Without `--output-dir`, local mode keeps `research/<slug>`; linear mode obtains `OUTPUT_DIR` from the helper's `--kind=deep-research --slug=<slug>` (without `--ensure` during dry-run). Explicit `--output-dir` always wins for working files. Retain the absolute output path across tool calls; shell state does not persist. The entire working tree is local-only; in linear mode only the final report is saved as research lens `deep-research`.
 
 ### Dry run
 
@@ -51,13 +59,19 @@ Do not call `record the task`, `Agent`, or `send follow-up instructions` in dry-
 
 ### Infrastructure and objective (not dry run)
 
-Run `scripts/check-prerequisites.sh` when preparing the output directory, before
-creating anything:
+Step 2: before any write in linear mode, apply the **Linear call gate** from `../../shared/references/artifact-store.md`. Run the prerequisite script against the selected `OUTPUT_DIR` before creating it:
 
 ```bash
 scripts/check-prerequisites.sh "$OUTPUT_DIR"
-mkdir -p "$OUTPUT_DIR/persona-findings" "$OUTPUT_DIR/synthesis" "$OUTPUT_DIR/evidence"
 ```
+
+Step 3: in linear mode without explicit `--output-dir`, resolve the working directory with `--ensure` after the gate:
+
+```bash
+OUTPUT_DIR="$(bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=deep-research --slug=<slug>)"
+```
+
+Then create `"$OUTPUT_DIR/persona-findings"`, `"$OUTPUT_DIR/synthesis"`, and `"$OUTPUT_DIR/evidence"` in either mode. Do not redirect an explicit `--output-dir` to the cache.
 
 Write `$OUTPUT_DIR/objective.md` with 3–5 research questions, success criteria,
 evidence standards, perspectives to cover, and 2–3 subject-specific bias risks.
@@ -235,6 +249,15 @@ scripts/validate-research.sh "$OUTPUT_DIR"
 
 Fix missing/empty artifacts, weak citation coverage, and format issues. Report
 actual validation result and any remaining gaps; do not call a failed run complete.
+
+After validation, local mode keeps `FINAL_REPORT="$OUTPUT_DIR/report.md"` with no identity frontmatter or Linear calls. In linear mode, resolve the published report separately:
+
+```bash
+OUT="$(bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=research-deep-research --slug=<slug>)"
+mkdir -p "$(dirname "$OUT")"
+```
+
+Before writing `$OUT`, follow artifact-store.md **Planning skills**: if `linear.document` identity is missing, run Lookup steps 3–6 and Load any hit; preserve its identity and use Conflict before replacement, then Save the validated report (Document `<slug> · research-deep-research`). Set `FINAL_REPORT` to this path. Keep `$OUTPUT_DIR/report.md` and all intermediate findings local-only, including with explicit `--output-dir`. Report the working directory and final saved report path.
 Read `references/completion-summary-template.md` when presenting the formatted
 completion summary. Preserve its per-persona counts and separate Phase 3 counts:
 tensions, patterns, research gaps, and novel hypotheses. Report actual counts,

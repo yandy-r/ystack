@@ -17,8 +17,6 @@
 # See resolve-plans-dir.sh for configuration options.
 
 set -uo pipefail
-
-PLAN_FILE="${1:-}"
 ERRORS=0
 WARNINGS=0
 
@@ -26,9 +24,11 @@ WARNINGS=0
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SHARED_DIR="${SCRIPT_DIR}/../../_shared/scripts"
 
-if [[ -f "${SHARED_DIR}/resolve-plans-dir.sh" ]]; then
-  # shellcheck source=../../_shared/scripts/resolve-plans-dir.sh
-  source "${SHARED_DIR}/resolve-plans-dir.sh"
+if [[ -f "${SHARED_DIR}/resolve-artifact-store.sh" ]]; then
+  # shellcheck source=../../_shared/scripts/resolve-artifact-store.sh
+  source "${SHARED_DIR}/resolve-artifact-store.sh"
+  # shellcheck source=../../_shared/scripts/artifact-body.sh
+  source "${SHARED_DIR}/artifact-body.sh"
 fi
 
 if [[ -f "${SHARED_DIR}/validate-file-paths.sh" ]]; then
@@ -56,16 +56,44 @@ success() {
   echo -e "${GREEN}✓${NC} $1"
 }
 
+PLAN_FILE=""
+STORE_FLAG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --store=*)
+      STORE_FLAG="$1"
+      ;;
+    *)
+      if [[ -z "$PLAN_FILE" ]]; then
+        PLAN_FILE="$1"
+      else
+        echo "Usage: validate-prp-plan.sh <plan-file> [--store=linear|local]" >&2
+        exit 1
+      fi
+      ;;
+  esac
+  shift
+done
+
+if [[ -n "$STORE_FLAG" ]]; then
+  # shellcheck disable=SC2086
+  resolve_artifact_store "$PWD" "$STORE_FLAG" || {
+    echo "ERROR: invalid ${STORE_FLAG#--}" >&2
+    exit 1
+  }
+fi
+
 if [[ -z "$PLAN_FILE" ]]; then
-  echo "Usage: validate-prp-plan.sh <plan-file>"
+  echo "Usage: validate-prp-plan.sh <plan-file> [--store=linear|local]"
   echo ""
   echo "Validates the structure and content of a PRP plan artifact."
   exit 1
 fi
 
-# Resolve relative paths against PLANS_ROOT
-if [[ "$PLAN_FILE" != /* && -n "${PLANS_ROOT:-}" ]]; then
-  PLAN_FILE="${PLANS_ROOT}/${PLAN_FILE}"
+# Resolve relative paths against the active artifact root: PLANS_ROOT in local
+# mode, ARTIFACT_ROOT in linear mode.
+if [[ "$PLAN_FILE" != /* && -n "${ARTIFACT_ROOT:-${PLANS_ROOT:-}}" ]]; then
+  PLAN_FILE="${ARTIFACT_ROOT:-$PLANS_ROOT}/${PLAN_FILE}"
 fi
 
 if [[ ! -f "$PLAN_FILE" ]]; then
@@ -81,18 +109,14 @@ fi
 
 echo "Validating PRP plan: $PLAN_FILE"
 echo ""
-
-# Read file content
-CONTENT=$(cat "$PLAN_FILE")
+# Read file content minus any leading frontmatter block (linear-mode identity
+# metadata is not body; see _shared/references/artifact-store.md, Frontmatter).
+CONTENT=$(artifact_body "$PLAN_FILE")
 
 # --- Title check ---
 echo "Checking document structure..."
-# Avoid pipefail false negatives when grep exits early on a match.
-if awk '
-  NR > 5 { exit found ? 0 : 1 }
-  /^# / { found = 1; exit 0 }
-  END { exit found ? 0 : 1 }
-' "$PLAN_FILE"; then
+# Match against the body only: the H1 must sit in its first five lines.
+if grep -q "^# " <<<"$(head -n 5 <<<"$CONTENT")"; then
   success "Title present"
 else
   error "Missing title (# heading)"

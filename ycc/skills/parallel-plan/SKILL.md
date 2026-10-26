@@ -1,7 +1,7 @@
 ---
 name: parallel-plan
 description: 'Creates parallel-plan.md from existing shared.md through plan-workflow. Use when planning from shared context, organizing dependency batches, or validating parallel implementation tasks.'
-argument-hint: '[--team] [--no-worktree] [--visual] [feature-name] [--dry-run]'
+argument-hint: '[--team] [--no-worktree] [--visual] [--store=local|linear] [feature-name] [--dry-run]'
 allowed-tools:
   - Read
   - Grep
@@ -29,7 +29,7 @@ checkpoint), regardless of `$ARGUMENTS`.
 
 **Flag policy (unambiguous):**
 
-- Supported: the feature name, `--team`, `--dry-run`, `--no-worktree`, `--visual`.
+- Supported: the feature name, `--team`, `--dry-run`, `--no-worktree`, `--visual`, `--store=local|linear`.
 - Silent no-op (legacy): `--worktree`.
 - Redundant — silently ignored because already forced: `--plan-only`, `--no-checkpoint`.
 - Every other flag (including `--research-only`, `--optimized`, and any unknown `-`/`--` token) → abort with the usage error below. Do not read the canonical skill or write anything.
@@ -45,10 +45,12 @@ checkpoint), regardless of `$ARGUMENTS`.
 
 **Outputs**:
 
-- `${PLANS_DIR}/[feature-name]/analysis-context.md`
-- `${PLANS_DIR}/[feature-name]/analysis-code.md`
-- `${PLANS_DIR}/[feature-name]/analysis-tasks.md`
-- `${PLANS_DIR}/[feature-name]/parallel-plan.md`
+- `${feature_dir}/analysis-context.md`
+- `${feature_dir}/analysis-code.md`
+- `${feature_dir}/analysis-tasks.md`
+- `${parallel_plan_file}`
+
+Canonical `plan-workflow` resolves these paths with the artifact-store `analysis-<name>` and `parallel-plan` kinds. Local mode keeps today's `docs/plans/<feature>/` paths; linear mode resolves under `.ycc/artifacts/<feature>/` and saves only the plan to Linear. Analysis remains local-only.
 
 After creating planning artifacts and displaying the summary, **STOP COMPLETELY**.
 
@@ -64,7 +66,7 @@ shared-context (step 1) -> parallel-plan (this skill) -> implement-plan (step 3)
 
 This skill requires `${feature_dir}/shared.md` and ends after producing
 analysis artifacts and `parallel-plan.md`. The user manually runs
-`/implement-plan` when ready.
+`/implement-plan` when ready in local mode. Linear-mode plans are not yet consumable by ycc:implement-plan or ycc:prp-implement (YAN-1155); use `--store=local` for plans you will implement now.
 
 **If shared.md doesn't exist**: canonical `plan-workflow/scripts/check-prerequisites.sh`
 fails fast in plan-only mode. Stop and tell the user to run
@@ -79,12 +81,13 @@ fails fast in plan-only mode. Stop and tell the user to run
 - **--no-worktree**: Optional. Opt out of worktree annotations. The plan will not contain a `## Worktree Setup` section.
 - **--visual**: Optional. Render the finished plan as an Agent-Native visual artifact (MDX) via `ycc:visual-plan`; local-files by default, hosted link requires `--share`.
 - **--dry-run**: Show what would be created without making changes. Writes nothing.
-- **feature-name**: Required. Matches directory name in `${PLANS_DIR}`.
+- **feature-name**: Required. Feature slug passed to canonical `plan-workflow` for artifact-store resolution.
+- **--store=local|linear**: Optional artifact-store override, forwarded to canonical `plan-workflow`. Local is the default.
 
 If any unsupported flag is present (see Flag policy above), abort with a usage error and STOP:
 
 ```
-Usage: /parallel-plan [--team] [--no-worktree] [--visual] [feature-name] [--dry-run]
+Usage: /parallel-plan [--team] [--no-worktree] [--visual] [--store=local|linear] [feature-name] [--dry-run]
 This alias always runs plan-workflow --plan-only --no-checkpoint.
 Unsupported flag: <flag>
 ```
@@ -104,7 +107,7 @@ If no feature name provided, abort with the same usage plus examples:
 Build the **effective `$ARGUMENTS`** for canonical `plan-workflow`:
 
 ```
-<feature-name> --plan-only --no-checkpoint [--team] [--dry-run] [--no-worktree] [--visual]
+<feature-name> --plan-only --no-checkpoint [--team] [--dry-run] [--no-worktree] [--visual] [--store=local|linear]
 ```
 
 (optional flags only if the user passed them; `--worktree` maps to nothing —
@@ -122,7 +125,7 @@ are dropped, not duplicated.)
 
 ## Location
 
-${feature_dir}/parallel-plan.md
+${parallel_plan_file}
 
 ## Analysis Files Generated
 
@@ -134,7 +137,10 @@ ${feature_dir}/parallel-plan.md
 
 **THIS SKILL IS NOW COMPLETE. DO NOT PROCEED.**
 
-/implement-plan [feature-name]
+Local mode only: /implement-plan [feature-name]
+
+In linear mode replace that command with:
+Linear-mode plans are not yet consumable by ycc:implement-plan or ycc:prp-implement (YAN-1155); use --store=local for plans you will implement now.
 ```
 
 **STOP**: Do not execute implement-plan. Do not write any more files. Do not modify any code. This skill is complete.

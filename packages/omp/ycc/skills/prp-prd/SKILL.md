@@ -2,16 +2,19 @@
 name: prp-prd
 description: Develops problem-first PRDs through interactive discovery. Use when writing
   a feature PRD, clarifying product requirements, or testing a product hypothesis.
-argument-hint: '[feature/product idea] (blank = start with questions)'
+argument-hint: '[--store=local|linear] [feature/product idea] (blank = start with
+  questions)'
 ---
 
 # Product Requirements Document Generator
 
 > Adapted from PRPs-agentic-eng by Wirasm. Part of the PRP workflow series.
 
-**Operational context:** Run Foundation, Market Grounding, Vision, Technical Feasibility, Decisions, and Generate gates; write the hypothesis-driven product spec to docs/prps/prds/{name}.prd.md.
+**Operational context:** Run Foundation, Market Grounding, Vision, Technical Feasibility, Decisions, and Generate gates; write the hypothesis-driven product spec to the resolved `prd` artifact path.
 
 **Input**: `$ARGUMENTS`
+
+Before interpreting input, parse and strip `--store=local|linear`; retain the exact override as `STORE_FLAG` (empty when absent). Reject other `--store=` values and conflicting overrides. Pass `${STORE_FLAG}` to every resolver call; only the remaining text is the product idea.
 
 **Questions:** class `clarify` (every interview gate); headless (no question tool or chat turn): print the open questions, write nothing, stop. See `skill://ycc-shared/references/question-policy.md`.
 
@@ -156,13 +159,23 @@ Ask final clarifying questions:
 
 ## Phase 7: GENERATE — Write PRD
 
-**Output path**: `docs/prps/prds/{kebab-case-name}.prd.md`
+Derive `<slug>` from the kebab-case product/feature name. Resolve in three separate steps:
 
-Create directory if needed:
+1. Print the mode and read `ARTIFACT_STORE=` from stdout:
 
-```bash
-mkdir -p docs/prps/prds
-```
+   ```bash
+   bash "skill://ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   ```
+
+2. In linear mode only, apply the **Linear call gate** in `skill://ycc-shared/references/artifact-store.md` before any write or `--ensure`.
+3. Resolve the destination once writing is permitted:
+
+   ```bash
+   OUT="$(bash "skill://ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=prd --slug=<slug>)"
+   mkdir -p "$(dirname "$OUT")"
+   ```
+
+Before writing in linear mode, follow artifact-store.md **Planning skills**: when `linear.document` identity is missing, run Lookup steps 3–6, Load any hit and preserve its identity, then replace through Conflict and Save. Write `$OUT`. Local mode keeps `docs/prps/prds/<slug>.prd.md` under the current checkout's git toplevel without identity frontmatter. Retain the printed mode and absolute path across tool calls.
 
 ### PRD Template
 
@@ -333,7 +346,7 @@ After generating, report:
 ```markdown
 ## PRD Created
 
-**File**: `docs/prps/prds/{name}.prd.md`
+**File**: `{resolved absolute OUT path}`
 
 ### Summary
 
@@ -367,7 +380,7 @@ After generating, report:
 
 ### To Start Implementation
 
-Run: `/skill:prp-plan docs/prps/prds/{name}.prd.md`
+Run: `/skill:prp-plan {resolved absolute OUT path}`
 
 This will automatically select the next pending phase and create an implementation plan.
 ```
@@ -410,7 +423,7 @@ This will automatically select the next pending phase and create an implementati
                           |
                           v
 +---------------------------------------------------------+
-|  GENERATE: Write PRD to docs/prps/prds/                 |
+|  GENERATE: Write PRD to resolved artifact path          |
 +---------------------------------------------------------+
 ```
 

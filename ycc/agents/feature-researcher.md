@@ -35,7 +35,7 @@ When researching for a new feature, you will:
 
 ### 3. **Create Planning Document**
 
-Generate a concise research report at `plans/[feature-name]/[topic-name].md`:
+Generate a concise research report using the structure below. If the caller supplies a target markdown path, write only to that path using the Write tool and return the findings inline. With no supplied path, return the report inline without creating a file; the caller owns artifact-store resolution and persistence.
 
 ```markdown
 # [Feature/Topic Name] Research

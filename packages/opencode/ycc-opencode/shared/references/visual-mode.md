@@ -32,7 +32,7 @@ skill behaves exactly as it does today and writes no visual output.
 
 | Skill               | Writes a plan artifact by default?   | `--visual` target                         |
 | ------------------- | ------------------------------------ | ----------------------------------------- |
-| `prp-plan`      | yes — `docs/prps/plans/*.plan.md`    | the written plan file                     |
+| `prp-plan`      | yes — resolved `prp-plan` artifact   | the written plan file                     |
 | `parallel-plan` | yes — feature-dir `parallel-plan.md` | the written plan file                     |
 | `plan-workflow` | yes — feature-dir `parallel-plan.md` | the written plan file                     |
 | `plan`          | **no** — plan kept in-chat           | a plan file `--visual` is forced to write |
@@ -94,20 +94,24 @@ links are produced in a dry run.
 When `--visual` runs for real (not `--dry-run`), the planning skill invokes:
 
 ```
-visual-plan <absolute-plan-path>
+visual-plan ${STORE_FLAG} <absolute-plan-path>
 ```
 
-passing the **absolute path** of the plan file it wrote and validated.
+passing the **absolute path** of the plan file it wrote and validated, plus the exact `--store=local|linear` override as `STORE_FLAG` when the user supplied one (otherwise empty). Parse and strip the override before deriving descriptions or slugs; never let visual-plan re-resolve a conflicting config because the caller dropped the flag.
 
 Contract for `visual-plan`:
 
 - **Accept ANY plan path.** It must not assume `docs/prps/plans` or any other
   fixed location. The plan path is supplied by the caller and may live anywhere
-  (e.g. `docs/prps/plans/<name>.plan.md`, a feature-dir `parallel-plan.md`, or a
-  forced-write file from `plan`).
-- **Derive `visual/` relative to the given plan path.** The output directory is
-  a `visual/` sibling of the plan file — i.e. `<dirname of plan>/visual/` —
-  computed from the path it was handed, never hardcoded.
+  (e.g. a local-mode `docs/prps/plans/<name>.plan.md`, a feature-dir
+  `parallel-plan.md`, or a forced-write file from `plan`).
+- **Resolve `visual/` by store.** Local mode (default) keeps the sibling
+  `<dirname of plan>/visual/`. Linear mode resolves kind `feature-dir` for the
+  source feature slug and writes its `visual/` child, even if the input plan
+  lives elsewhere. Follow artifact-store.md **Size and diagrams**: visual
+  surfaces are local-only, never uploaded, and never linked by editing the
+  source plan.
+- **Forward the store override to every resolver call.** Print `--shell` and read `ARTIFACT_STORE` first; in linear mode apply the Linear call gate before `--ensure` or any cache write.
 - **Print the resulting link to stdout.** Exactly one of:
   - a hosted shareable URL, or
   - a localhost preview `http://127.0.0.1:PORT/...`, or
@@ -127,11 +131,13 @@ re-derive the path itself.
 therefore nothing on disk to visualize. When `--visual` is passed to
 `plan`:
 
-1. `plan` **MUST force a plan-file write first**, producing an absolute plan
-   path on disk (this write happens even though it would normally be skipped).
+1. `plan` **MUST force a plan-file write first** using kind `prp-plan`
+   through the artifact-store helper, producing an absolute path on disk.
+   Local mode keeps `docs/prps/plans/<slug>.plan.md`; linear mode follows
+   artifact-store.md **Planning skills** to Save the plan and task sub-issues.
 2. That forced write is then validated like any other plan.
 3. Only after a valid file exists does `plan` hand the absolute path to
-   `visual-plan <absolute-plan-path>`.
+   `visual-plan ${STORE_FLAG} <absolute-plan-path>`.
 
 Without the forced write there is no input for `visual-plan`, so the
 force-write rule is mandatory — not optional — for `plan --visual`. Under
@@ -151,5 +157,5 @@ In-body references to skill assets use the plugin-root variable, e.g.:
 - `{{package-root}}/skills/plan-workflow/SKILL.md`
 
 The hand-off is always expressed as the skill invocation
-`visual-plan <absolute-plan-path>`, with `<absolute-plan-path>` resolved by
-the calling skill to a real, absolute path on disk.
+`visual-plan ${STORE_FLAG} <absolute-plan-path>`, with `<absolute-plan-path>` resolved by
+the calling skill to a real, absolute path on disk and `STORE_FLAG` retaining any user override.

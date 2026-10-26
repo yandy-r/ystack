@@ -43,11 +43,16 @@ else
   NC=''
 fi
 
+# Strip leading frontmatter before section extraction (identity metadata is
+# not body; see ../references/artifact-store.md, Frontmatter).
+# shellcheck source=artifact-body.sh
+source "${SCRIPT_DIR}/artifact-body.sh"
+
 # Extract a section from a markdown file (between ## heading and next ##)
 _extract_section() {
   local file="$1"
   local section="$2"
-  sed -n "/^## ${section}/,/^## /p" "$file" | head -n -1
+  artifact_body "$file" | sed -n "/^## ${section}/,/^## /p" | head -n -1
 }
 
 # Extract paths from a markdown table (backtick-quoted first column)

@@ -8,7 +8,7 @@ description: Writes lightweight single-pass PRP feature specs. Use when specifyi
 # PRP Spec
 
 
-**Operational context:** Write docs/prps/specs/{name}.spec.md with problem, requirements, technical approach, integration points, and risks; accept free-form input or ask clarifying questions. --ground adds codebase/market research through prp-researcher. Use prp-prd for problem discovery and feature-research for heavyweight multi-agent research.
+**Operational context:** Write the resolved `spec` artifact with problem, requirements, technical approach, integration points, and risks; accept free-form input or ask clarifying questions. --ground adds codebase/market research through prp-researcher. Use prp-prd for problem discovery and feature-research for heavyweight multi-agent research.
 
 > Part of the PRP workflow series. Parallel entry point alongside `prp-prd` — both feed directly into `prp-plan`.
 
@@ -20,14 +20,14 @@ description: Writes lightweight single-pass PRP feature specs. Use when specifyi
 
 ## Key Distinctions
 
-| This skill (`prp-spec`)       | NOT this (`feature-research`)      | NOT this (`prp-prd`)            |
-| ----------------------------- | ---------------------------------- | ------------------------------- |
-| Single-pass spec generation   | 7-agent parallel research team     | Interactive PRD with hypothesis |
-| `docs/prps/specs/`            | `docs/plans/[name]/`               | `docs/prps/prds/`               |
-| 1 output file                 | 8 output files (7 research + spec) | 1 output file                   |
-| Optional researcher dispatch  | Always deploys full team           | Always dispatches researcher    |
-| Technical approach included   | Full technical specifications      | Problem-first, solution-light   |
-| 1 GATE wait for clarification | Runs without GATEs                 | 6 GATE waits through phases     |
+| This skill (`prp-spec`)       | NOT this (`feature-research`)       | NOT this (`prp-prd`)            |
+| ----------------------------- | ----------------------------------- | ------------------------------- |
+| Single-pass spec generation   | 7-agent parallel research team      | Interactive PRD with hypothesis |
+| `spec` artifact               | `feature-spec` + research artifacts | `prd` artifact                  |
+| 1 output file                 | 8 output files (7 research + spec)  | 1 output file                   |
+| Optional researcher dispatch  | Always deploys full team            | Always dispatches researcher    |
+| Technical approach included   | Full technical specifications       | Problem-first, solution-light   |
+| 1 GATE wait for clarification | Runs without GATEs                  | 6 GATE waits through phases     |
 
 **Pipeline model** — `prp-spec` and `prp-prd` are parallel entry points into `prp-plan`, not sequential steps:
 
@@ -63,7 +63,7 @@ Extract flags from `$ARGUMENTS`:
 | ---------- | -------------------------------------------------------------------------------------------- |
 | `--ground` | Dispatch `prp-researcher` in dual mode for codebase + market grounding before generating |
 
-Strip the flag, set `GROUND_MODE=true|false`. The remaining text is the feature description or file path.
+Strip `--ground`, set `GROUND_MODE=true|false`. Parse and strip `--store=local|linear`, retaining the exact override as `STORE_FLAG` (empty when absent); reject other values or conflicting overrides. Forward `${STORE_FLAG}` to every resolver call. Only the remaining text is the feature description or file path.
 
 ### Input Detection
 
@@ -133,13 +133,23 @@ Instruct the researcher to return the compact discovery table format (codebase) 
 
 ## Phase 3 — GENERATE
 
-**Output path**: `docs/prps/specs/{kebab-case-name}.spec.md`
+Derive `<slug>` from the kebab-case feature name. Resolve in three separate steps:
 
-Create the directory if needed:
+1. Print the mode and read `ARTIFACT_STORE=` from stdout:
 
-```bash
-mkdir -p docs/prps/specs
-```
+   ```bash
+   bash "{{package-root}}/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   ```
+
+2. In linear mode only, apply the **Linear call gate** in `{{package-root}}/shared/references/artifact-store.md` before any write or `--ensure`.
+3. Resolve the destination once writing is permitted:
+
+   ```bash
+   OUT="$(bash "{{package-root}}/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=spec --slug=<slug>)"
+   mkdir -p "$(dirname "$OUT")"
+   ```
+
+Before writing in linear mode, follow artifact-store.md **Planning skills**: when `linear.document` identity is missing, run Lookup steps 3–6, Load any hit and preserve its identity, then replace through Conflict and Save. Write `$OUT`. Local mode keeps `docs/prps/specs/<slug>.spec.md` under the current checkout's git toplevel without identity frontmatter. Retain the printed mode and absolute path across tool calls.
 
 ### Spec Template
 
@@ -225,7 +235,7 @@ Report to the user:
 ```markdown
 ## Spec Created
 
-**File**: `docs/prps/specs/{name}.spec.md`
+**File**: `{resolved absolute OUT path}`
 
 ### Summary
 
@@ -238,7 +248,7 @@ Report to the user:
 ### Next Steps
 
 - Review and refine the spec
-- Run `/ycc:prp-plan docs/prps/specs/{name}.spec.md` to create an implementation plan
+- Run `/ycc:prp-plan {resolved absolute OUT path}` to create an implementation plan
 - If the problem needs deeper discovery, run `/ycc:prp-prd` instead — it feeds into `prp-plan` directly
 ```
 
@@ -247,7 +257,7 @@ Report to the user:
 ## Anti-patterns — Do NOT Do These
 
 
-2. **Do NOT output to `docs/plans/`**: Specs go to `docs/prps/specs/`. The `docs/plans/` tree belongs to the `feature-research` / `plan-workflow` track. Always write to `docs/prps/specs/` regardless of the user's current working directory.
+2. **Do NOT choose a competing output tree**: Always resolve kind `spec` through the artifact helper, regardless of the user's current working directory. It is distinct from the `feature-spec` artifact produced by `feature-research`.
 
 3. **Do NOT write implementation details**: The spec captures WHAT and WHY, not HOW. Implementation steps, file paths, and code snippets belong in the plan produced by `prp-plan`.
 
@@ -263,9 +273,9 @@ Report to the user:
 
 - **Entry point**: Parallel to `/ycc:prp-prd` — use `prp-spec` when the problem is clear, `prp-prd` when it needs interactive discovery. Both feed directly into `prp-plan`.
 - **Input**: Accepts free-form descriptions or starts with clarifying questions. Can be invoked standalone.
-- **Downstream**: Specs feed into `/ycc:prp-plan` for implementation planning. `prp-plan` recognizes `.spec.md` files as input.
+- **Downstream**: Specs feed into `/ycc:prp-plan` for implementation planning. Pass the actual resolved path and identify it as a PRP spec (linear mode names it `spec.md`; local mode uses `.spec.md`).
 - **Grounding**: Optionally dispatches `prp-researcher` in dual mode for codebase + market discovery.
-- **Heavyweight alternative**: For multi-agent research across many domains, use `/ycc:feature-research` instead (outputs to `docs/plans/`).
+- **Heavyweight alternative**: For multi-agent research across many domains, use `/ycc:feature-research` instead (produces `feature-spec` and research artifacts).
 
 ## Success Criteria
 

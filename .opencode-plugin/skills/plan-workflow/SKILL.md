@@ -22,7 +22,7 @@ Read `~/.config/opencode/shared/references/standalone-dispatch.md` for standalon
 
    ```
    Error: --research-only and --plan-only are mutually exclusive
-   Usage: /plan-workflow [--research-only | --plan-only] [--no-checkpoint] [--optimized] [--dry-run] [--no-worktree] [--visual] [feature-name]
+   Usage: /plan-workflow [--research-only | --plan-only] [--no-checkpoint] [--optimized] [--dry-run] [--no-worktree] [--visual] [--store=local|linear] [feature-name]
    ```
 
 2. **Feature name required**: kebab-case (lowercase, hyphens), no other special characters. If missing or invalid, abort with the matching error block from `references/checkpoint-messages.md` ("Error Messages": Missing Feature Name / Invalid Feature Name).
@@ -38,7 +38,7 @@ Read `~/.config/opencode/shared/references/standalone-dispatch.md` for standalon
 
 ## Arguments
 
-Parse flags first, then the feature name (first non-flag argument, required; directory name in `${PLANS_DIR}/`).
+Parse flags first, then the feature name (first non-flag argument, required; artifact feature slug).
 
 - **--research-only**: stop after research (creates shared.md only).
 - **--plan-only**: skip research, use existing shared.md. Skips Phases 1–4, NOT Phase 5 (Analysis).
@@ -46,6 +46,7 @@ Parse flags first, then the feature name (first non-flag argument, required; dir
 - **--optimized**: 7-agent unified deployment (default: 10-agent standard).
 - **--worktree**: legacy no-op (worktree annotations are the default; safe to omit).
 - **--no-worktree**: opt out of worktree annotations in the generated `parallel-plan.md`. No effect with `--research-only` (no plan file). Honored with `--plan-only`.
+- **--store=local|linear**: optional artifact-store override. Forward it to every artifact-store helper call. Local is the default; linear is opt-in.
 - **--visual**: render the finished plan as an Agent-Native visual artifact (MDX) via `visual-plan`; local files by default, hosted link requires `--share`.
 
 If no feature name is provided, abort with the full usage instructions from `references/checkpoint-messages.md` — read when the feature name is missing ("Usage Instructions" section).
@@ -54,7 +55,7 @@ If no feature name is provided, abort with the full usage instructions from `ref
 
 ## Visual mode
 
-See `~/.config/opencode/shared/references/visual-mode.md` for the canonical `--visual` contract. `--visual` is a terminal decorator step, orthogonal to `--optimized` and `--no-worktree`; it runs once at the very end. With `VISUAL_MODE=true` and no `--dry-run`, after the final phase invoke `visual-plan <absolute-plan-path>` where the path is the **actual written plan** at `${feature_dir}/parallel-plan.md` (resolved in Phase 0) — never a hardcoded `docs/prps/plans` path; `visual-plan` derives its `visual/` output directory from it. With `--dry-run`, short-circuit: print `visual generation would run` and do not invoke `visual-plan`. `--research-only` produces no plan file, so `--visual` does not run.
+See `~/.config/opencode/shared/references/visual-mode.md` for the canonical `--visual` contract. It is a terminal decorator, orthogonal to `--optimized` and `--no-worktree`; run it once at the end. With `VISUAL_MODE=true` and no `--dry-run`, invoke `visual-plan ${STORE_FLAG} <absolute-plan-path>` with the actual written `${parallel_plan_file}` and the retained store override. Dry runs print `visual generation would run` without invoking it. `--research-only` produces no plan and skips visualization.
 
 ## Phase 0: Initialize
 
@@ -79,20 +80,36 @@ ARGUMENTS="${ARGUMENTS//--visual/}"
 
 Apply critical gates 1–3. **feature-name** = first non-flag argument.
 
-### Step 2: Resolve Plans Directory
+Parse and strip `--store=local|linear` before selecting the feature name. Set `STORE_FLAG` to the exact override when supplied, otherwise empty; reject invalid/conflicting overrides. Append it to every resolver invocation and visual-plan call below.
 
-```bash
-source ~/.config/opencode/shared/scripts/resolve-plans-dir.sh
-feature_dir="$(get_feature_plan_dir "[feature-name]")"
-```
+### Step 2: Resolve Artifact Paths
 
-Handles monorepo detection, `.plans-config` files, and git root resolution automatically. See "Monorepo Support" below.
+1. Print the mode and read `ARTIFACT_STORE=` from stdout; resolve paths without writes:
+
+   ```bash
+   bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   feature_dir="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=feature-dir --slug="[feature-name]")"
+   research_dir="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=research-dir --slug="[feature-name]")"
+   shared_file="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=shared --slug="[feature-name]")"
+   parallel_plan_file="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=parallel-plan --slug="[feature-name]")"
+   ```
+
+2. For a non-dry linear run only, apply the **Linear call gate** in `~/.config/opencode/shared/references/artifact-store.md` before any write or pull.
+3. Before Lookup/Load in that linear run, ensure the cache and gitignore rule:
+
+   ```bash
+   feature_dir="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=feature-dir --slug="[feature-name]")"
+   ```
+
+Then use Lookup/Load to populate missing cached inputs before state detection. For each document that will be written (research, shared, plan), if document identity is missing (or the plan has no task identity), follow **Planning skills** Lookup steps 3–6 and Load any hit before dispatch or writing; preserve identity and resolve Conflict on replacement. Local mode keeps `PLANS_DIR/<feature>/`; linear mode uses `.ycc/artifacts/<feature>/` with research in `research/`. Dry runs only resolve paths, never ensure or Load. Retain the printed mode and absolute paths across tool calls. See "Monorepo Support" below.
 
 ### Step 3: Run State Detection
 
 ```bash
-~/.config/opencode/skills/plan-workflow/scripts/check-state.sh [feature-name]
+~/.config/opencode/skills/plan-workflow/scripts/check-state.sh "[feature-name]" ${STORE_FLAG}
 ```
+
+Set `STORE_FLAG=--store=local` or `--store=linear` only when that override was supplied; otherwise leave it empty so config/default resolution applies. Forward the same override to `check-prerequisites.sh` and to every path-taking validator below. Validators receive the resolved absolute artifact paths already shown.
 
 Reports whether `${feature_dir}/` exists, `shared.md`, `parallel-plan.md`, and any research files.
 
@@ -112,11 +129,11 @@ Reports whether `${feature_dir}/` exists, `shared.md`, `parallel-plan.md`, and a
 
 ### Step 4A: Dry-Run Preview (when `--dry-run`, before anything else)
 
-Read `references/checkpoint-messages.md` — read when previewing a dry run. Display its "Dry Run Output" section with values substituted (`{{FEATURE_NAME}}`, `{{FEATURE_DIR}}`, dispatch mode, execution mode), then **STOP** (gate 4). If `--plan-only` is also set and `check-state.sh` shows no `shared.md`, state in the preview that a real run would fail fast at Step 4B (missing prerequisite) and **STOP**.
+Read `references/checkpoint-messages.md` — read when previewing a dry run. Display its "Dry Run Output" section with values substituted (`{{FEATURE_NAME}}`, `{{FEATURE_DIR}}`, `{{RESEARCH_DIR}}`, dispatch mode, execution mode), then **STOP** (gate 4). If `--plan-only` is also set and `check-state.sh` shows no `shared.md`, state in the preview that a real run would fail fast at Step 4B unless a linear Lookup populates the cache from an existing shared document, and **STOP**.
 
 ### Step 4B: Plan-Only Prerequisite Gate (when `--plan-only`, before any write)
 
-Run `scripts/check-prerequisites.sh "[feature-name]"` per gate 5. Then, for `--optimized --plan-only`, verify the five unified files exist before any write or dispatch (gate 6): `analysis-architecture.md`, `analysis-patterns.md`, `analysis-integration.md`, `analysis-docs.md`, `analysis-tasks.md`.
+Run `scripts/check-prerequisites.sh "[feature-name]" ${STORE_FLAG}` per gate 5. Then, for `--optimized --plan-only`, verify the five unified files exist before any write or dispatch (gate 6): `analysis-architecture.md`, `analysis-patterns.md`, `analysis-integration.md`, `analysis-docs.md`, `analysis-tasks.md`.
 
 ### Step 4C: Overwrite Choice (when shared.md or parallel-plan.md exists)
 
@@ -125,9 +142,17 @@ Run `scripts/check-prerequisites.sh "[feature-name]"` per gate 5. Then, for `--o
 - **Headless (no question tool or chat turn), checkpoint enabled**: do not overwrite. Print the existing paths and `rerun with --no-checkpoint` to regenerate, then **STOP** without writes or dispatch.
 - **Research-only reuse**: report the existing `shared.md` path, state that no files were changed, print `/parallel-plan <feature>` as the next step, and **STOP** without dispatching agents.
 
-### Step 5: Create Directory
+### Step 5: Create Directories
 
-Only when `--dry-run` is not set: `mkdir -p "${feature_dir}"` if missing.
+Only when `--dry-run` is not set: in linear mode apply the Linear call gate from artifact-store.md before `--ensure`, then run:
+
+```bash
+feature_dir="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=feature-dir --slug="[feature-name]")"
+research_dir="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=research-dir --slug="[feature-name]")"
+mkdir -p "$feature_dir" "$research_dir"
+```
+
+Local `--ensure` creates only the resolved feature directory; the `mkdir` also prepares research. In linear mode `research_dir` is `${feature_dir}/research`; in local mode it equals `feature_dir`.
 
 ## Phase 1: Research Stage (unless --plan-only)
 
@@ -136,7 +161,7 @@ Only when `--dry-run` is not set: `mkdir -p "${feature_dir}"` if missing.
 - Standard mode: read `~/.config/opencode/skills/plan-workflow/references/research-agents.md` — read when spawning Phase 1 research agents in standard mode.
 - Optimized mode: read `~/.config/opencode/skills/plan-workflow/references/research-agents-optimized.md` — read when `--optimized` replaces the 4 researchers with 5 unified analysts.
 
-Substitute `{{FEATURE_NAME}}` (feature directory name) and `{{FEATURE_DIR}}` (`${feature_dir}`, resolved in Step 2).
+Substitute `{{FEATURE_NAME}}` (feature directory name), `{{FEATURE_DIR}}` (`${feature_dir}`), and every `{{RESEARCH_<LENS>_FILE}}` or `{{ANALYSIS_<NAME>_FILE}}` with its absolute path from the executed resolver (`research-<lens>` or `analysis-<name>` kind), using the same store override as Step 2 and no `--ensure` (Step 5 already created their parent). Analysis artifacts remain local-only in linear mode.
 
 ### Step 10: Spawn Research Agents (standard mode)
 
@@ -160,13 +185,15 @@ If a child report is empty or contentless, record its `sessionID`, inspect the d
 
 ```bash
 # Standard mode (4-file research-*.md set):
-~/.config/opencode/skills/plan-workflow/scripts/validate-research-artifacts.sh "${feature_dir}"
+~/.config/opencode/skills/plan-workflow/scripts/validate-research-artifacts.sh "${feature_dir}" ${STORE_FLAG}
 
 # Optimized mode (5-file unified analysis-*.md set):
-~/.config/opencode/skills/plan-workflow/scripts/validate-research-artifacts.sh "${feature_dir}" --optimized
+~/.config/opencode/skills/plan-workflow/scripts/validate-research-artifacts.sh "${feature_dir}" --optimized ${STORE_FLAG}
 ```
 
 Append `--optimized` whenever the flag was passed (gate 8). On failure, apply the fix loop (gate 9). Do not proceed to shared.md synthesis until validation passes.
+
+In linear mode, after validation and fixes, follow artifact-store.md section **Planning skills** to Save each standard `research-<lens>` document. Optimized `analysis-*` files stay local-only and are never pushed.
 
 ## Phase 3: Consolidate Research
 
@@ -174,20 +201,22 @@ Append `--optimized` whenever the flag was passed (gate 8). On failure, apply th
 
 After validation passes, read the input set for the active mode:
 
-- **Standard (4 files)**: `${feature_dir}/research-architecture.md`, `research-patterns.md`, `research-integration.md`, `research-docs.md`.
+- **Standard (4 files)**: `${research_dir}/research-architecture.md`, `research-patterns.md`, `research-integration.md`, `research-docs.md`.
 - **Optimized (5 unified files; no `research-*.md` exist)**: `${feature_dir}/analysis-architecture.md`, `analysis-patterns.md`, `analysis-integration.md`, `analysis-docs.md`, `analysis-tasks.md`.
 
 ### Step 14: Generate shared.md
 
-Read `~/.config/opencode/skills/plan-workflow/references/shared-structure.md` — read when writing `shared.md`. Create `${feature_dir}/shared.md` following the template exactly.
+Read `~/.config/opencode/skills/plan-workflow/references/shared-structure.md` — read when writing `shared.md`. Create `${shared_file}` following the template exactly.
 
 ### Step 15: Validate shared.md
 
 ```bash
-~/.config/opencode/skills/plan-workflow/scripts/validate-shared.sh "${feature_dir}/shared.md"
+~/.config/opencode/skills/plan-workflow/scripts/validate-shared.sh "${shared_file}" ${STORE_FLAG}
 ```
 
 Fix any errors before proceeding.
+
+In linear mode, follow artifact-store.md section **Planning skills** to Save the validated `shared` document before continuing. When replacing an existing shared file, preserve its identity frontmatter and replace only the body as required by Save. Local mode writes the body without frontmatter and makes no Linear calls.
 
 ### Step 15A: Research-Only Stop (if `--research-only`)
 
@@ -207,7 +236,7 @@ Once `shared.md` exists and `validate-shared.sh` passed: skip Phases 4–9.5 ent
 Use **ask the user**. Question: "Research complete for [feature-name]. Review the shared context before planning?" Options:
 
 1. **Continue to planning** — proceed to Phase 5.
-2. **Review shared.md first** — display `${feature_dir}/shared.md`, then re-prompt with the same question.
+2. **Review shared.md first** — display `${shared_file}`, then re-prompt with the same question.
 3. **Stop here** — display the research-phase completion summary and end the workflow. **STOP** — do not proceed to planning.
 
 
@@ -220,7 +249,7 @@ This phase must run in standard mode, including under `--plan-only` (which skips
 
 ### Step 18: Read Analysis Prompts
 
-Read `~/.config/opencode/skills/plan-workflow/references/planning-agents.md` — read when spawning Phase 5 analysis agents (standard mode). Same variables: `{{FEATURE_NAME}}`, `{{FEATURE_DIR}}`.
+Read `~/.config/opencode/skills/plan-workflow/references/planning-agents.md` — read when spawning Phase 5 analysis agents (standard mode). Substitute `{{FEATURE_NAME}}`, `{{FEATURE_DIR}}`, `{{RESEARCH_DIR}}` (`${research_dir}`), and the three `{{ANALYSIS_<NAME>_FILE}}` paths resolved without `--ensure` using kinds `analysis-context`, `analysis-code`, and `analysis-tasks` with the same store override.
 
 ### Step 20: Spawn Analysis Agents
 
@@ -244,10 +273,10 @@ If a child report is empty or contentless, record its `sessionID`, inspect the d
 
 ```bash
 # Standard mode (3-file set: analysis-context, analysis-code, analysis-tasks):
-~/.config/opencode/skills/plan-workflow/scripts/validate-analysis-artifacts.sh "${feature_dir}"
+~/.config/opencode/skills/plan-workflow/scripts/validate-analysis-artifacts.sh "${feature_dir}" ${STORE_FLAG}
 
 # Optimized mode (5-file unified set):
-~/.config/opencode/skills/plan-workflow/scripts/validate-analysis-artifacts.sh "${feature_dir}" --optimized
+~/.config/opencode/skills/plan-workflow/scripts/validate-analysis-artifacts.sh "${feature_dir}" --optimized ${STORE_FLAG}
 ```
 
 Pass → Step 22. Fail → fix loop (gate 9), re-validate.
@@ -256,10 +285,10 @@ Pass → Step 22. Fail → fix loop (gate 9), re-validate.
 
 ```bash
 # Standard mode:
-~/.config/opencode/skills/plan-workflow/scripts/persist-or-fail.sh "${feature_dir}"
+~/.config/opencode/skills/plan-workflow/scripts/persist-or-fail.sh "${feature_dir}" ${STORE_FLAG}
 
 # Optimized mode:
-~/.config/opencode/skills/plan-workflow/scripts/persist-or-fail.sh "${feature_dir}" --optimized
+~/.config/opencode/skills/plan-workflow/scripts/persist-or-fail.sh "${feature_dir}" --optimized ${STORE_FLAG}
 ```
 
 Exit 0 → Phase 7. Exit 1 → prints `MISSING_FILES` and `ACTION_REQUIRED`; re-dispatch the failing agent, re-run until exit 0 (gate 7). In optimized mode the `MISSING_FILES` set is the 5 unified files.
@@ -284,7 +313,7 @@ Read `~/.config/opencode/skills/plan-workflow/references/plan-structure.md` — 
 
 ### Step 26: Generate parallel-plan.md
 
-Create `${feature_dir}/parallel-plan.md` following the template exactly. Required sections: Title & Overview (3-4 information-dense sentences); Critically Relevant Files and Documentation; Implementation Plan with Phases and Tasks; Advice section.
+Create `${parallel_plan_file}` following the template exactly. Required sections: Title & Overview (3-4 information-dense sentences); Critically Relevant Files and Documentation; Implementation Plan with Phases and Tasks; Advice section.
 
 
 ### Step 27: Plan Structure Check (deferred)
@@ -328,10 +357,12 @@ Fix issues: correct invalid file paths, resolve circular dependencies, add missi
 After all fixes, run once on the final artifact (before visual/completion):
 
 ```bash
-~/.config/opencode/skills/plan-workflow/scripts/validate-workflow-plan.sh "${feature_dir}/parallel-plan.md"
+~/.config/opencode/skills/plan-workflow/scripts/validate-workflow-plan.sh "${parallel_plan_file}" ${STORE_FLAG}
 ```
 
 Fix any structural errors it reports (missing `### Phase` is an error); do not proceed until it exits 0.
+
+In linear mode, follow artifact-store.md section **Planning skills** to Save the validated `parallel-plan` document and create/update task sub-issues with `blocks` relations mirroring dependency batches. Analysis files are not saved to Linear.
 
 ## Phase 9.5: Visual Mode (if --visual)
 
@@ -344,7 +375,7 @@ Runs only after the plan is written (Phase 8) and validated (Phases 8–9). It n
 - Otherwise invoke `visual-plan` on the **actual written plan path** (feature-dir plan resolved in Phase 0, not a hardcoded `docs/prps/plans` path):
 
 ```
-visual-plan "${feature_dir}/parallel-plan.md"
+visual-plan ${STORE_FLAG} "${parallel_plan_file}"
 ```
 
 `visual-plan` derives its `visual/` output directory from the supplied plan path and prints the resulting link (hosted URL, localhost preview, or `local files only`). Surface that link in the Phase 10 summary; do not re-derive the path yourself; do not edit the plan file.
@@ -353,7 +384,7 @@ visual-plan "${feature_dir}/parallel-plan.md"
 
 ### Step 34: Display Completion Summary
 
-Skipped when `RESEARCH_ONLY=true` (workflow ended at Step 15A) or the user stopped at the checkpoint. Otherwise use the "Full Workflow Complete Summary" block in `references/checkpoint-messages.md` — read when emitting the final summary. List only files this run actually created (`--plan-only`: omit Research Phase files; `--research-only` never reaches here).
+Skipped when `RESEARCH_ONLY=true` or the user stopped at the checkpoint. Otherwise use the "Full Workflow Complete Summary" in `references/checkpoint-messages.md`. List only files actually created (`--plan-only`: omit Research Phase files). In linear mode replace its implementation command with: "Linear-mode plans are not yet consumable by implement-plan or prp-implement (YAN-1155); use --store=local for plans you will implement now."
 
 ## Optimized Mode
 
@@ -378,7 +409,9 @@ With `--optimized`, deploy 5 unified agents instead of separate research (4) + a
 
 ## Output Contract
 
-All files are written to `${feature_dir}/` (resolved via `resolve-plans-dir.sh`).
+Files use the paths resolved in Phase 0: research files under `${research_dir}/`, shared at `${shared_file}`, analysis and plan under `${feature_dir}/`, with the final plan at `${parallel_plan_file}`. Local mode (default) preserves the filenames below and their existing paths; linear mode resolves under `.ycc/artifacts/<feature>/`.
+
+Before printing dry-run or completion templates, substitute `{{RESEARCH_DIR}}` with `${research_dir}` and `{{FEATURE_DIR}}` with `${feature_dir}`.
 
 | File                       | Producer                | Required Before             |
 | -------------------------- | ----------------------- | --------------------------- |
@@ -402,7 +435,7 @@ Contract rules:
 
 ## Monorepo Support
 
-Plans default to the git repository root `docs/plans/`, regardless of the subdirectory the skill runs from; `resolve-plans-dir.sh` handles detection. A `.plans-config` file customizes it — repo root (`plans_dir: docs/plans`) for centralized plans, or package-level (`plans_dir: docs/plans` + `scope: local`) for local plans.
+In local mode (default), plans resolve through `resolve-artifact-store.sh` to the same git repository root `docs/plans/` as before, regardless of the subdirectory the skill runs from. A `.plans-config` file customizes it — repo root (`plans_dir: docs/plans`) for centralized plans, or package-level (`plans_dir: docs/plans` + `scope: local`) for local plans. In linear mode the same root resolution selects the `.ycc/artifacts/` cache; `store: linear` opts in.
 
 ## Notes
 

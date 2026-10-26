@@ -17,12 +17,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-RESOLVER="${SCRIPT_DIR}/../../_shared/scripts/resolve-plans-dir.sh"
+RESOLVER="${SCRIPT_DIR}/../../_shared/scripts/resolve-artifact-store.sh"
 
-# Source resolver to get PLANS_ROOT for path resolution
+# Source resolver to get PLANS_ROOT/ARTIFACT_ROOT for path resolution and the
+# artifact_body helper for frontmatter-skipping heading checks.
 if [[ -f "$RESOLVER" ]]; then
-    # shellcheck source=../../_shared/scripts/resolve-plans-dir.sh
+    # shellcheck source=../../_shared/scripts/resolve-artifact-store.sh
     source "$RESOLVER"
+    # shellcheck source=../../_shared/scripts/artifact-body.sh
+    source "${SCRIPT_DIR}/../../_shared/scripts/artifact-body.sh"
 fi
 
 RED='\033[0;31m'
@@ -55,7 +58,9 @@ require_any_heading() {
     local found=false
     local heading
     for heading in "$@"; do
-        if grep -q "^${heading}" "$file"; then
+        # Match against the body only: identity frontmatter is not content
+        # (see _shared/references/artifact-store.md, Frontmatter).
+        if grep -q "^${heading}" < <(artifact_body "$file"); then
             found=true
             break
         fi
@@ -69,17 +74,22 @@ require_any_heading() {
 }
 
 if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 <feature-dir> [--optimized]"
+    echo "Usage: $0 <feature-dir> [--optimized] [--store=linear|local]"
     exit 1
 fi
 
 feature_dir=""
 optimized="false"
+store_flag=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --optimized)
             optimized="true"
+            shift
+            ;;
+        --store=*)
+            store_flag="$1"
             shift
             ;;
         *)
@@ -94,14 +104,23 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ -n "$store_flag" ]]; then
+    # shellcheck disable=SC2086
+    resolve_artifact_store "$PWD" "$store_flag" || {
+        echo -e "${RED}ERROR:${NC} invalid ${store_flag#--}" >&2
+        exit 1
+    }
+fi
+
 if [[ -z "$feature_dir" ]]; then
     echo -e "${RED}ERROR:${NC} feature-dir required" >&2
     exit 1
 fi
 
-# Always resolve relative paths against PLANS_ROOT (from resolve-plans-dir.sh)
-if [[ "$feature_dir" != /* && -n "${PLANS_ROOT:-}" ]]; then
-    feature_dir="${PLANS_ROOT}/${feature_dir}"
+# Resolve relative paths against the active artifact root: PLANS_ROOT in local
+# mode, ARTIFACT_ROOT in linear mode.
+if [[ "$feature_dir" != /* && -n "${ARTIFACT_ROOT:-${PLANS_ROOT:-}}" ]]; then
+    feature_dir="${ARTIFACT_ROOT:-$PLANS_ROOT}/${feature_dir}"
 fi
 
 if [[ ! -d "$feature_dir" ]]; then
@@ -139,6 +158,12 @@ echo "=========================================="
 for file in "${files[@]}"; do
     path="${feature_dir}/${file}"
 
+    # Research files live directly in the feature dir (local layout) or in its
+    # research/ subdir (linear layout). An existing research/ directory wins.
+    if [[ "$file" == research-* && -d "${feature_dir}/research" ]]; then
+        path="${feature_dir}/research/${file}"
+    fi
+
     if [[ ! -f "$path" ]]; then
         log_error "${file}: file not found"
         continue
@@ -154,8 +179,8 @@ for file in "${files[@]}"; do
         log_warning "${file}: content is short (${size_bytes} bytes)"
     fi
 
-    # Check for title heading
-    if grep -q "^# " "$path"; then
+    # Check for title heading in the body (frontmatter skipped)
+    if grep -q "^# " < <(artifact_body "$path"); then
         log_success "${file}: has title heading"
     else
         log_warning "${file}: missing title heading"

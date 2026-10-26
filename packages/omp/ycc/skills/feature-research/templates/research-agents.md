@@ -6,7 +6,8 @@ These prompts deploy research teammates for comprehensive feature research inclu
 
 Apply this contract to every teammate prompt in this file:
 
-- Write only your assigned output file under `{{FEATURE_DIR}}`.
+- Write only your assigned `{{RESEARCH_<LENS>_FILE}}`; the orchestrator resolves it with the artifact-store `research-<lens>` kind.
+- When replacing an existing file in linear mode, preserve its frontmatter and replace only the body. The orchestrator performs the Linear Save; do not call Linear yourself.
 - Do not edit any other files.
 - **Do NOT invoke any skills or slash commands** (e.g., `/deep-research`, `/feature-research`, or any other skill). Perform all research directly using your own tools: `web_search`, `read` (URL), Read, Grep, Glob. You are a focused research agent — do your work yourself, do not delegate to other workflows.
 - **Share key findings** with relevant teammates using SendMessage.
@@ -72,7 +73,7 @@ You are part of a research team. Your teammates are:
 
 ## Output Format
 
-Write your findings to: {{FEATURE_DIR}}/research-external.md
+Write your findings to: {{RESEARCH_EXTERNAL_FILE}}
 
 Structure with: Executive Summary, Primary APIs (with docs URLs, auth, endpoints, rate limits, pricing), Libraries and SDKs, Integration Patterns, Constraints and Gotchas, Code Examples, Open Questions.
 
@@ -139,7 +140,7 @@ You are part of a research team. Your teammates are:
 
 ## Output Format
 
-Write your findings to: {{FEATURE_DIR}}/research-business.md
+Write your findings to: {{RESEARCH_BUSINESS_FILE}}
 
 Structure with: Executive Summary, User Stories, Business Rules (core rules + edge cases), Workflows (primary + error recovery), Domain Model (entities + state transitions), Existing Codebase Integration, Success Criteria, Open Questions.
 
@@ -207,7 +208,7 @@ You are part of a research team. Your teammates are:
 
 ## Output Format
 
-Write your findings to: {{FEATURE_DIR}}/research-technical.md
+Write your findings to: {{RESEARCH_TECHNICAL_FILE}}
 
 Structure with: Executive Summary, Architecture Design (component diagram, new components, integration points), Data Models (tables with columns/types/constraints, indexes, migrations), API Design (endpoints with request/response/errors), System Constraints (performance, security, scalability), Codebase Changes (files to create/modify, dependencies), Technical Decisions (options + recommendation + rationale), Open Questions.
 
@@ -276,7 +277,7 @@ You are part of a research team. Your teammates are:
 
 ## Output Format
 
-Write your findings to: {{FEATURE_DIR}}/research-ux.md
+Write your findings to: {{RESEARCH_UX_FILE}}
 
 Structure with: Executive Summary, User Workflows (primary + alternative flows), UI/UX Best Practices (industry standards, accessibility, responsive), Error Handling (error states table, validation patterns), Performance UX (loading states, optimistic updates, offline), Competitive Analysis, Recommendations (must have, should have, nice to have), Open Questions.
 
@@ -386,7 +387,7 @@ You are part of a research team. Your teammates are:
 
 ## Output Format
 
-Write your findings to: {{FEATURE_DIR}}/research-security.md
+Write your findings to: {{RESEARCH_SECURITY_FILE}}
 
 Structure with:
 
@@ -532,7 +533,7 @@ You are part of a research team. Your teammates are:
 
 ## Output Format
 
-Write your findings to: {{FEATURE_DIR}}/research-practices.md
+Write your findings to: {{RESEARCH_PRACTICES_FILE}}
 
 Structure with:
 
@@ -674,7 +675,7 @@ You are part of a research team. Your teammates are:
 
 **CRITICAL**: You MUST write your findings to the specified file. This is not optional.
 
-**Output File**: {{FEATURE_DIR}}/research-recommendations.md
+**Output File**: {{RESEARCH_RECOMMENDATIONS_FILE}}
 
 Structure with: Executive Summary, Implementation Recommendations (approach, technology choices, phasing, quick wins), Improvement Ideas (related features, enhancements, integrations), Risk Assessment (technical risks table, integration challenges, performance, security), Alternative Approaches (options with pros/cons/effort, recommendation), Task Breakdown Preview (phases with task groups, estimated complexity), Key Decisions Needed, Open Questions.
 
@@ -690,7 +691,7 @@ When spawning research teammates:
 1. **Read this file** to get the prompt templates
 2. **Substitute variables**:
    - `{{FEATURE_NAME}}` - The feature directory name (e.g., `plex-integration`)
-   - `{{FEATURE_DIR}}` - Full output directory (e.g., `docs/plans/plex-integration`)
+   - `{{RESEARCH_<LENS>_FILE}}` - Absolute output path resolved for kind `research-<lens>` (local example: `docs/plans/plex-integration/research-<lens>.md`)
    - `{{FEATURE_DESCRIPTION}}` - Description provided by user (or feature name if none)
 3. **Register tasks** - Use `todo` for all 7 research tasks
 4. **Create tasks** - Use `todo` to create 7 research tasks
@@ -703,11 +704,11 @@ When spawning research teammates:
 
 ## Variable Reference
 
-| Variable                  | Description                    | Example                                                              |
-| ------------------------- | ------------------------------ | -------------------------------------------------------------------- |
-| `{{FEATURE_NAME}}`        | Feature directory name         | `plex-integration`                                                   |
-| `{{FEATURE_DIR}}`         | Full research output directory | `docs/plans/plex-integration`                                        |
-| `{{FEATURE_DESCRIPTION}}` | User-provided description      | `Advanced Plex media library integration with filters and playlists` |
+| Variable                   | Description                   | Example                                                                                                                        |
+| -------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `{{FEATURE_NAME}}`         | Feature directory name        | `plex-integration`                                                                                                             |
+| `{{RESEARCH_<LENS>_FILE}}` | Absolute research output path | Local: `docs/plans/plex-integration/research-<lens>.md`; linear: `.ycc/artifacts/plex-integration/research/research-<lens>.md` |
+| `{{FEATURE_DESCRIPTION}}`  | User-provided description     | `Advanced Plex media library integration with filters and playlists`                                                           |
 
 ## Teammate Configuration
 
