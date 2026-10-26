@@ -16,16 +16,18 @@ every target's installer behavior.
 | OMP      | [`omp.md`](omp.md)           | OMP (oh-my-pi) native packages via `omp plugin` and the repository catalog |
 
 Since v6.0.0 `ycc` is also published as native packages in the Claude, Codex,
-and Cursor marketplaces. The v6 guides cover the package IDs, the marketplace
+and Cursor marketplaces. v6.1.0 adds the OMP catalog (`ycc`, `ycc-mcp`, and
+`ycc-rules`). The v6 guides cover the package IDs, the marketplace
 commands, and what stays on `install.sh`:
 
-| Runtime  | Native package guide               | Native install                                                                                                            |
-| -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Claude   | [`v6/claude.md`](v6/claude.md)     | `claude plugin marketplace add yandy-r/ystack`, then `claude plugin install ycc-all@ycc` (or `ycc`/`ycc-mcp`/`ycc-hooks`) |
-| Codex    | [`v6/codex.md`](v6/codex.md)       | `codex plugin marketplace add https://github.com/yandy-r/ystack.git`, then `codex plugin add ycc@ycc` and `ycc-mcp@ycc`   |
-| Cursor   | [`v6/cursor.md`](v6/cursor.md)     | `agent plugin marketplace add https://github.com/yandy-r/ystack`, then `/plugins`                                         |
-| opencode | [`v6/opencode.md`](v6/opencode.md) | Experimental, opt-in npm package; the file copy stays primary                                                             |
-| agents   | [`v6/agents.md`](v6/agents.md)     | None — file copy only                                                                                                     |
+| Runtime  | Native package guide               | Native install                                                                                                                  |
+| -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Claude   | [`v6/claude.md`](v6/claude.md)     | `claude plugin marketplace add yandy-r/ystack`, then `claude plugin install ycc-all@ycc` (or `ycc`/`ycc-mcp`/`ycc-hooks`)       |
+| Codex    | [`v6/codex.md`](v6/codex.md)       | `codex plugin marketplace add https://github.com/yandy-r/ystack.git`, then `codex plugin add ycc@ycc` and `ycc-mcp@ycc`         |
+| Cursor   | [`v6/cursor.md`](v6/cursor.md)     | `agent plugin marketplace add https://github.com/yandy-r/ystack`, then `/plugins`                                               |
+| opencode | [`v6/opencode.md`](v6/opencode.md) | Experimental, opt-in npm package; the file copy stays primary                                                                   |
+| agents   | [`v6/agents.md`](v6/agents.md)     | None — file copy only                                                                                                           |
+| OMP      | [`omp.md`](omp.md)                 | `omp plugin marketplace add https://github.com/yandy-r/ystack.git`, then `omp plugin install ycc@ycc ycc-mcp@ycc ycc-rules@ycc` |
 
 Overview of all runtimes: [`v6/README.md`](v6/README.md). To move an existing
 `install.sh` setup onto the native packages, see

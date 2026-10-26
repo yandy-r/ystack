@@ -1,9 +1,9 @@
 # ycc v6 Native Package Install Guides
 
 Starting with v6.0.0, `ycc` ships as native packages in the Claude, Codex, and
-Cursor marketplaces. These pages are the per-runtime guides for installing
-those packages and for moving an existing `install.sh` file-copy install onto
-them. The repository is `yandy-r/ystack` (renamed from `claude-plugins`, then
+Cursor marketplaces. v6.1.0 adds the OMP (oh-my-pi) catalog. These pages are
+the per-runtime guides for installing those packages and for moving an existing
+`install.sh` file-copy install onto them. The repository is `yandy-r/ystack` (renamed from `claude-plugins`, then
 `agentic-code-plugins`; old GitHub names redirect). The `install.sh`
 commands in [`docs/install/`](../README.md) keep working as the fallback and
 remain the only route for pieces plugins cannot carry (rules, instructions,
@@ -16,6 +16,7 @@ settings, custom agents, statusline).
 | Cursor   | [cursor.md](cursor.md)     | `agent plugin marketplace add`, then `/plugins`               |
 | opencode | [opencode.md](opencode.md) | experimental, opt-in npm package; file copy stays primary     |
 | agents   | [agents.md](agents.md)     | none — file copy only                                         |
+| OMP      | [omp.md](../omp.md)        | `omp plugin install ycc@ycc ycc-mcp@ycc ycc-rules@ycc`        |
 
 ## Quick install
 
@@ -32,6 +33,10 @@ codex plugin add ycc-mcp@ycc
 # Cursor
 agent plugin marketplace add https://github.com/yandy-r/ystack
 # then pick the packages in /plugins (also available in the Cursor IDE's Marketplace)
+
+# OMP (oh-my-pi >= 18.12.2)
+omp plugin marketplace add https://github.com/yandy-r/ystack.git
+omp plugin install ycc@ycc ycc-mcp@ycc ycc-rules@ycc
 ```
 
 ## Native vs fallback by runtime
@@ -48,6 +53,7 @@ installer-only artifacts — it is not an installable package ID.
 | Cursor   | `ycc@ycc` (skills, agents, commands, shared), `ycc-rules@ycc`, `ycc-mcp@ycc`, `ycc-hooks@ycc` (`sessionStart` only)                                           | Optional settings and MCP merges; `WorktreeCreate` is not implemented for Cursor (the fallback `cli-config.json` registers no hooks)            | —                                                                                                                                  |
 | opencode | `@yandy-r/ycc-opencode` (generated npm V2 plugin registering skills, agents, namespaced commands, shared helpers, MCP, instructions; experimental and opt-in) | `install.sh --target opencode`: file copy of skills, agents, commands, shared, `opencode.json` settings, `AGENTS.md` instructions — **primary** | — (the npm package is opt-in; registry publication is separate from generation and the publish workflow)                           |
 | agents   | none — file copy only                                                                                                                                         | `install.sh --target agents`: skills + `ycc-shared` into `~/.agents/`                                                                           | The `npx skills` path cannot replace the file copy (spike: shared helpers not delivered; bare-repo discovery finds the wrong tree) |
+| OMP      | `ycc@ycc` (skills, agents, commands, shared), `ycc-mcp@ycc`, `ycc-rules@ycc`, from `.omp-plugin/marketplace.json` (`omp >= 18.12.2`)                          | Opt-in `--settings` and `--rules` (`AGENTS.md`). `--mode local` (default) exports this checkout; `--mode repo` registers the GitHub catalog     | `ycc-hooks` and `ycc-all` excluded: herdr ships OMP reporting, and OMP does not read plugin dependencies                           |
 
 ### Duplicates and what migration removes
 
@@ -136,7 +142,8 @@ Claude Code 2.1.300+; Cursor manifests declare the tested floor 3.24.12;
 the generated opencode npm manifest declares `engines.opencode: >=2.0.30`).
 
 - Package model: `docs/internal/adr/0001-package-model-and-versioning.md`
-- Spikes: `docs/internal/spikes/{claude-namespace,claude-hooks,codex-marketplace,cursor-plugin,opencode-config-hook,npx-skills,codex-public-fork-install}.md`
+- Spikes: `docs/internal/spikes/{claude-namespace,claude-hooks,codex-marketplace,cursor-plugin,opencode-config-hook,npx-skills,codex-public-fork-install,omp-runtime-contract}.md`
+- OMP decision and live evidence: `docs/internal/adr/0002-omp-runtime-contract.md`, `docs/internal/omp-acceptance.md`
 - Native package layouts: `docs/internal/{claude-native-packages,cursor-native-packages}.md`
 - opencode npm implementation: `scripts/generate_opencode_package.py`,
   `packages/opencode/ycc-opencode/{package.json,index.js,registration.json}`,

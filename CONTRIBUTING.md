@@ -155,7 +155,7 @@ edited and foreign catalog entries remain preserved.
 - Cursor generated packages: `packages/cursor/{ycc,ycc-rules,ycc-mcp,ycc-hooks}/` (all listed in the root `.cursor-plugin/marketplace.json`)
 - Cursor file-copy settings input: `packages/cursor/installer-fallback/config/cli-config.json`, generated from `ycc/settings/cursor/cli-config.json`
 - opencode generated bundle: `.opencode-plugin/` (skills, agents, commands, AGENTS.md, opencode.json)
-- OMP generated packages: `packages/omp/ycc/` with `{skills,agents,commands}/`, `packages/omp/ycc-mcp/` with `.mcp.json` (a byte copy of `mcp-configs/mcp.json`) and `packages/omp/ycc-rules/` with flat `rules/ycc-<family>-<stem>.md` (from `ycc/rules/` via `scripts/generate_omp_rules.py`), each with `.omp-plugin/plugin.json`, `.claude-plugin/plugin.json` and `package.json`; the root `.omp-plugin/marketplace.json` appears only once a package is listed. `install.sh install --target omp` (`scripts/omp_install.py`) exports the packages to a local `ycc` marketplace and installs them through `omp plugin`; opt-in `--settings` and `--rules` merge `ycc/settings/omp/config.yml` and link `AGENTS.md` at user scope ([`docs/install/omp.md`](docs/install/omp.md))
+- OMP generated packages: `packages/omp/ycc/` with `{skills,agents,commands}/`, `packages/omp/ycc-mcp/` with `.mcp.json` (a byte copy of `mcp-configs/mcp.json`) and `packages/omp/ycc-rules/` with flat `rules/ycc-<family>-<stem>.md` (from `ycc/rules/` via `scripts/generate_omp_rules.py`), each with `.omp-plugin/plugin.json`, `.claude-plugin/plugin.json` and `package.json`; the root `.omp-plugin/marketplace.json` lists `ycc`, `ycc-mcp`, and `ycc-rules`. `install.sh install --target omp` (`scripts/omp_install.py`) exports the packages to a local `ycc` marketplace (`--mode local`, the default) or registers the repository catalog (`--mode repo`) and installs them through `omp plugin`; opt-in `--settings` and `--rules` merge `ycc/settings/omp/config.yml` and link `AGENTS.md` at user scope ([`docs/install/omp.md`](docs/install/omp.md))
 - ycc ships no OMP hooks (`ycc-hooks` is excluded on OMP; herdr ships its own OMP integration); the only OMP code is the ycc agent scope guard (`scripts/omp_templates/scope-guard.ts`, tested by `scripts/test_omp_scope_guard.py`). `validate_omp_native.py` rejects any other OMP code surface and checks the hook verdict table.
 - Skills go in `ycc/skills/<skill-name>/SKILL.md`
 - Scripts must be executable (`chmod +x`) and use `set -euo pipefail`
@@ -273,8 +273,8 @@ need to target a single surface:
 ./scripts/generate-omp-agents.sh && ./scripts/validate-omp-agents.sh
 ./scripts/generate-omp-commands.sh && ./scripts/validate-omp-commands.sh
 ./scripts/generate-omp-packages.sh && ./scripts/validate-omp-packages.sh  # manifests + catalog; run last
-bash scripts/test-omp-native-packages.sh  # opt-in live install from a pinned fixture (not CI)
-bash scripts/test-omp-herdr-hooks.sh     # opt-in herdr proof: herdr's OMP integration, no ycc reporter (not CI)
+bash scripts/test-omp-native-packages.sh  # live install; also runs in .github/workflows/omp-live.yml (Linux and macOS)
+bash scripts/test-omp-herdr-hooks.sh     # local herdr proof; not in CI (needs a herdr binary)
 ```
 
 ## Plugin evals
