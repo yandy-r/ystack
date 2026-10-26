@@ -104,10 +104,15 @@ forge_host_is_gitlab() {
 # forge_host_in_tea <host> — true if the host matches a configured `tea` login
 # (Gitea/Forgejo). Reads `tea login list` so no network call is made.
 forge_host_in_tea() {
-  local host="$1"
+  local host="$1" logins
+  [[ -n "$host" ]] || return 1
   command -v tea >/dev/null 2>&1 || return 1
   # `tea login list` prints a table containing the URL and SSH host columns.
-  tea login list 2>/dev/null | grep -qiF "$host"
+  # Capture it and match with a here-string, not `tea login list | grep -q`:
+  # under pipefail the early-exiting grep SIGPIPEs tea and a configured login
+  # reads as absent (YAN-1607).
+  logins="$(tea login list 2>/dev/null || true)"
+  grep -qiF -- "$host" <<<"$logins"
 }
 
 # ---------------------------------------------------------------------------
@@ -221,7 +226,11 @@ forge_auth_ok() {
     github) command -v gh   >/dev/null 2>&1 && gh   auth status >/dev/null 2>&1 ;;
     forgejo|gitea)
       # `tea` has no `auth status`; a configured login list is the local signal.
-      command -v tea  >/dev/null 2>&1 && tea login list 2>/dev/null | grep -q '://'
+      # Captured, not piped into grep -q (SIGPIPE under pipefail; YAN-1607).
+      command -v tea  >/dev/null 2>&1 || return 1
+      local logins
+      logins="$(tea login list 2>/dev/null || true)"
+      grep -q '://' <<<"$logins"
       ;;
     gitlab) command -v glab >/dev/null 2>&1 && glab auth status >/dev/null 2>&1 ;;
     *) return 1 ;;
