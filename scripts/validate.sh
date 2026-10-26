@@ -17,7 +17,8 @@
 #          cursor-native, codex-native, json, config, packages, release, mods, practices, scope, types
 #   - inventory  validates ycc skill frontmatter, the shared inventory, the formatter bundle and
 #                plan-workflow regressions, per-runtime worktree roots (scripts/test-worktree-roots.sh) and
-#                the clean skill report generator (scripts/test-clean-report.sh) and the
+#                the clean skill report generator (scripts/test-clean-report.sh), the
+#                grep -c fallback regression suite (scripts/test-grep-count-helpers.sh) and the
 #                pipefail grep regression suite (scripts/test-pipefail-grep-helpers.sh)
 #   - omp        checks generated OMP skill, agent and command drift (bytes and modes), content policy and golden
 #                tests, plus native package manifests, catalog listing, lockstep versions and closure, and the

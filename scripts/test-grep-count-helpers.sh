@@ -288,7 +288,7 @@ fi
 
 # --- 5. git-workflow analyze-changes.sh ----------------------------------------
 
-AC_SCRIPT="${AC_SCRIPT:-${REPO_ROOT}/ycc/skills/git-workflow/scripts/analyze-changes.sh}"
+AC_SCRIPT="${REPO_ROOT}/ycc/skills/git-workflow/scripts/analyze-changes.sh"
 
 make_git_repo() {
     local dir="$1"
@@ -378,17 +378,20 @@ assert_count_line "analyze-changes: mixed config count" "$OUT" '  Config files: 
 # src/ sorts first, so `grep -q` matches on the first line while the rest of the
 # list is still unwritten. The old `echo "$ALL" | grep -qE` idiom only dies of
 # SIGPIPE if >= pipe capacity (64 KiB) plus grep's first read buffer is still
-# pending, so keep >= 256 KiB after the first match. Long names (240-char
-# padding) keep the file count small. Just two directories avoid unrelated
+# pending, so keep >= 256 KiB after the first match. Nested 200-char directory
+# names (~620-byte paths) keep the file count — and the per-file forks in
+# analyze-changes — small. Just two top-level directories avoid unrelated
 # head-truncation pipelines in the script.
 AC_LARGE="${SCRATCH}/ac-large"
 make_git_repo "$AC_LARGE"
-mkdir -p "$AC_LARGE/src" "$AC_LARGE/zzz"
+mkdir -p "$AC_LARGE/src"
 printf 'source\n' >"$AC_LARGE/src/a.ts"
-printf -v ac_padding '%0240d' 0
-for ((ac_i=0; ac_i<1200; ac_i++)); do
-    printf -v ac_name '%04d-%s.ts' "$ac_i" "$ac_padding"
-    printf 'source\n' >"$AC_LARGE/zzz/$ac_name"
+printf -v ac_padding '%0200d' 0
+ac_deep="$AC_LARGE/zzz/${ac_padding}/${ac_padding}/${ac_padding}"
+mkdir -p "$ac_deep"
+for ((ac_i=0; ac_i<500; ac_i++)); do
+    printf -v ac_name '%04d.ts' "$ac_i"
+    printf 'source\n' >"$ac_deep/$ac_name"
 done
 ac_list=$(git -C "$AC_LARGE" ls-files --others --exclude-standard | sort -u)
 # Parameter expansion, not head/wc pipes: a pipe from printf would itself be
@@ -405,10 +408,10 @@ fi
 # the fixture proves the regression without reading old code from git.
 ac_old_rc=0
 ( set -o pipefail; echo "$ac_list" | grep -qE '^(src/|lib/|app/)' ) || ac_old_rc=$?
-if [[ "$ac_old_rc" -ne 0 ]]; then
-    pass "analyze-changes: control: old echo|grep -q idiom fails on the fixture (rc=$ac_old_rc)"
+if [[ "$ac_old_rc" -gt 128 ]]; then
+    pass "analyze-changes: control: old echo|grep -q idiom dies of SIGPIPE on the fixture (rc=$ac_old_rc)"
 else
-    fail "analyze-changes: control: old echo|grep -q idiom unexpectedly succeeded"
+    fail "analyze-changes: control: old echo|grep -q idiom did not SIGPIPE (rc=$ac_old_rc)"
 fi
 run_capture ac-large -- bash -c "cd '$AC_LARGE' && bash '$AC_SCRIPT'"
 if [[ "$RC" -eq 0 ]] && [[ "$OUT" == *'Documentation Consideration:'* ]]; then

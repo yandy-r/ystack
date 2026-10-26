@@ -25,11 +25,15 @@ if [[ -d "docs" ]]; then
     if command -v tree &> /dev/null; then
         tree -L 3 docs 2>/dev/null || {
             doc_listing="$(find docs -type f -name "*.md" || true)"
-            head -n 50 <<<"$doc_listing"
+            if [[ -n "$doc_listing" ]]; then
+                head -n 50 <<<"$doc_listing"
+            fi
         }
     else
         doc_listing="$(find docs -type f -name "*.md" 2>/dev/null || true)"
-        head -n 50 <<<"$doc_listing"
+        if [[ -n "$doc_listing" ]]; then
+            head -n 50 <<<"$doc_listing"
+        fi
     fi
     echo "\`\`\`"
     echo ""
@@ -136,7 +140,9 @@ all_js_ts_files=$(find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js
 js_ts_files=$(head -n 100 <<<"$all_js_ts_files")
 if [[ -n "$js_ts_files" ]]; then
     total_js_files=$(echo "$js_ts_files" | wc -l | tr -d ' ')
-    jsdoc_count=$(echo "$js_ts_files" | xargs grep -l "@param\|@returns\|@description" 2>/dev/null | wc -l | tr -d ' ')
+    # xargs exits 123 when a grep batch matches nothing; tolerate it so a
+    # zero-match scan reports 0 instead of aborting under errexit+pipefail.
+    jsdoc_count=$({ xargs grep -l "@param\|@returns\|@description" <<<"$js_ts_files" 2>/dev/null || true; } | wc -l | tr -d ' ')
     echo "### JavaScript/TypeScript"
     echo "- Files scanned: ${total_js_files}"
     echo "- Files with JSDoc: ${jsdoc_count}"
@@ -152,7 +158,7 @@ all_py_files=$(find . -type f -name "*.py" -not -path "./node_modules/*" -not -p
 py_files=$(head -n 100 <<<"$all_py_files")
 if [[ -n "$py_files" ]]; then
     total_py_files=$(echo "$py_files" | wc -l | tr -d ' ')
-    docstring_count=$(echo "$py_files" | xargs grep -l '"""' 2>/dev/null | wc -l | tr -d ' ')
+    docstring_count=$({ xargs grep -l '"""' <<<"$py_files" 2>/dev/null || true; } | wc -l | tr -d ' ')
     echo "### Python"
     echo "- Files scanned: ${total_py_files}"
     echo "- Files with docstrings: ${docstring_count}"
@@ -168,7 +174,7 @@ all_go_files=$(find . -type f -name "*.go" -not -path "./node_modules/*" -not -p
 go_files=$(head -n 100 <<<"$all_go_files")
 if [[ -n "$go_files" ]]; then
     total_go_files=$(echo "$go_files" | wc -l | tr -d ' ')
-    godoc_count=$(echo "$go_files" | xargs grep -l "^// [A-Z]" 2>/dev/null | wc -l | tr -d ' ')
+    godoc_count=$({ xargs grep -l "^// [A-Z]" <<<"$go_files" 2>/dev/null || true; } | wc -l | tr -d ' ')
     echo "### Go"
     echo "- Files scanned: ${total_go_files}"
     echo "- Files with doc comments: ${godoc_count}"

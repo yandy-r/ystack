@@ -93,19 +93,23 @@ run_capture() {
 
 # control_sigpipes <label> <attempts> <fn> — run the OLD idiom <fn> (a shell
 # function that ends in the early-exiting reader) under pipefail up to
-# <attempts> times; pass as soon as one run fails (SIGPIPE'd writer -> 141).
-# If it never fails the fixture does not trigger the race and the regression
-# case would be a smoke test, so the suite fails.
+# <attempts> times; pass as soon as one run dies of SIGPIPE (a status above
+# 128, i.e. 141 from the killed writer). Any other failure (e.g. rc 1 from a
+# fixture that lost its needle) does not count: it would not prove the race.
+# If it never SIGPIPEs the fixture does not trigger the race and the
+# regression case would be a smoke test, so the suite fails.
 control_sigpipes() {
-    local label="$1" attempts="$2" fn="$3" i=0
+    local label="$1" attempts="$2" fn="$3" i=0 rc
     while (( i < attempts )); do
-        if ! ( set -o pipefail; "$fn" ) >/dev/null 2>&1; then
-            pass "${label}: old idiom fails under pipefail on this fixture (control)"
+        rc=0
+        ( set -o pipefail; "$fn" ) >/dev/null 2>&1 || rc=$?
+        if (( rc > 128 )); then
+            pass "${label}: old idiom dies of SIGPIPE under pipefail on this fixture (control, rc=${rc})"
             return 0
         fi
         i=$((i + 1))
     done
-    fail "${label}: fixture does not trigger SIGPIPE (old idiom still matches)"
+    fail "${label}: fixture does not trigger SIGPIPE (last rc=${rc})"
 }
 
 # marker_lines <n> — n filler lines of 74 bytes each (4000 lines = 296,000
@@ -151,10 +155,11 @@ else
 fi
 
 # --- 2. clean validate-safety.sh ----------------------------------------------
-# The protected node_modules/README rows lead; ~300 KB of 200-byte-path filler
+# The protected node_modules/README rows lead; ~310 KB of ~3.9 KB-path filler
 # rows follow, so FLAGGED_FILES carries >256 KiB after the match and the old
 # `echo "$FLAGGED_FILES" | grep -q …` SIGPIPEs on both protected-entry scans.
-# (Long paths keep the row count, and the helper's per-row path loop, small.)
+# (Very long paths keep the row count tiny: the helper runs a `cd … && pwd`
+# subshell per row, so ~80 rows instead of ~1500 cuts that fork cost ~19x.)
 
 VSY_NEW="${REPO_ROOT}/ycc/skills/clean/scripts/validate-safety.sh"
 VSY_DIR="${SCRATCH}/vsy"
@@ -166,8 +171,8 @@ mkdir -p "${VSY_DIR}/report"
     printf '| node_modules/pkg/index.js | vendor | 1 KB |\n'
     printf '| README.md | doc | 1 KB |\n'
     awk 'BEGIN {
-        pad = sprintf("%190s", ""); gsub(/ /, "x", pad)
-        for (i = 0; i < 1500; i++)
+        pad = sprintf("%3900s", ""); gsub(/ /, "x", pad)
+        for (i = 0; i < 80; i++)
             printf "| tmp/%s-%05d.log | stale | 1 KB |\n", pad, i
     }'
 } >"${VSY_DIR}/report/cleanup-report.md"
@@ -330,7 +335,7 @@ classify_case() {
     CIC_CONTENT="$(cat "$log_file")"
     CIC_NEEDLE="$needle"
     control_sigpipes "ci-classify[${tag}]" 5 old_ci
-    out="$(classify_run "$CIC_NEW" "$log_file")"
+    out="$(classify_run "$CIC_NEW" "$log_file")" || out="<helper failed, rc=$?>"
     if [[ "$out" == "$label" ]]; then
         pass "ci-classify[${tag}]: ${bytes}B log classifies as ${label}"
     else
@@ -425,12 +430,12 @@ AD_LONG1="$(printf '%0200d' 0 | tr 0 d)"
 AD_LONG2="$(printf '%0200d' 0 | tr 0 e)"
 mkdir -p "${AD_DIR}/docs/${AD_LONG1}/${AD_LONG2}" "${AD_DIR}/src/${AD_LONG1}/${AD_LONG2}"
 awk -v d="${AD_DIR}/docs/${AD_LONG1}/${AD_LONG2}" 'BEGIN { for (i = 0; i < 700; i++) printf "%s/f-%04d.md\n", d, i }' | xargs touch
-# The JS files carry a JSDoc tag: the helper's `xargs grep -l … | wc -l`
-# count aborts under pipefail when no scanned file matches (xargs exits 123),
-# which is a separate behavior from the head-limit race under test.
+# The JS files deliberately carry NO JSDoc tag: every `xargs grep -l` batch in
+# the helper then matches nothing (xargs exits 123), and the audit must still
+# finish with a zero count instead of aborting under errexit+pipefail.
 # shellcheck disable=SC2016  # the loop body is expanded by the inner sh
 awk -v d="${AD_DIR}/src/${AD_LONG1}/${AD_LONG2}" 'BEGIN { for (i = 0; i < 700; i++) printf "%s/f-%04d.js\n", d, i }' \
-    | xargs -n 100 sh -c 'for f; do printf "// @param x\n" >"$f"; done' _
+    | xargs -n 100 sh -c 'for f; do printf "// plain comment\n" >"$f"; done' _
 AD_BIN="${SCRATCH}/ad-bin"
 mkdir -p "$AD_BIN"
 printf '#!/usr/bin/env bash\nexit 1\n' >"${AD_BIN}/tree"
@@ -445,6 +450,7 @@ run_capture ad-new -- bash -c "cd '$AD_DIR' && PATH='$AD_BIN':\$PATH '$AD_NEW'"
 if [[ "$RC" -eq 0 ]] \
     && [[ "$OUT" == *'**Total markdown files in docs/**: 700'* ]] \
     && [[ "$OUT" == *'- Files scanned: 100'* ]] \
+    && [[ "$OUT" == *'- Files with JSDoc: 0'* ]] \
     && [[ "$OUT" == *'*Audit complete*'* ]]; then
     pass "audit-documentation: >limit files complete the audit and honor the 50/100 caps"
 else
