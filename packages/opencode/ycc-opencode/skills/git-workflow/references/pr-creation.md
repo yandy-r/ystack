@@ -97,7 +97,7 @@ refactor(database): migrate to new query builder pattern
 
 Contract (collection, verification, keywords, skip message): `{{package-root}}/shared/references/artifact-store.md` § PR linking. Applies in both store modes.
 
-2. Add the `linear.issue` from the leading frontmatter of the cached plan implemented on this branch (`.ycc/artifacts/<slug>/{parallel-plan,prp-plan}.md`, slug matching the branch) as a `closes` candidate.
+2. Add the `linear.issue` from the leading frontmatter of the cached plan implemented on this branch as a `closes` candidate: use the cache path known in the session, else `.ycc/artifacts/<slug>/{parallel-plan,prp-plan}.md` where `<slug>` is the branch name without a leading `feat/`. Check the current checkout, then the main checkout (parent of `git rev-parse --path-format=absolute --git-common-dir`), per the contract's step 1.
 3. Verify, then emit `Closes` for `closes` keys and `Refs` for `refs`-only keys, plus `Closes #<n>` for linked GitHub issues, under `## Related Issues`; never duplicate a line already present in the body or repository template (Step 31). Use the contract's skip message when no team or MCP can verify.
 
 `create-pr.sh --create` applies the same team filter without MCP verification and keeps the bare `Closes #` placeholder when nothing qualifies.

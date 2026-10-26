@@ -36,7 +36,7 @@ Extract flags from `$ARGUMENTS` before treating the remainder as a plan path:
 | `--no-worktree`         | Force worktree mode off regardless of annotations; use the prepared current checkout.                                                                                  |
 | `--store=local\|linear` | Artifact store override; strip it, retain as `STORE_FLAG` (empty when absent), and forward it to every resolver call. See artifact-store.md **Implementation skills**. |
 
-Set `PARALLEL_FLAG=true|false`, ``, `WORKTREE_MODE=true|false`, `DRY_RUN=true|false`. The remaining text is the plan input: a plan path, a cached linear plan path, or a Linear reference. `~/.config/opencode/shared/references/artifact-store.md` **Implementation skills > Inputs** defines issue keys, references, linear plan paths and which of them select linear mode (an existing local plan path wins).
+Set `PARALLEL_FLAG=true|false`, ``, `WORKTREE_MODE=true|false`, `DRY_RUN=true|false`. The remaining text is the plan input: a plan path, a cached linear plan path, or a Linear reference. `~/.config/opencode/shared/references/artifact-store.md` **Implementation skills > Inputs** defines issue keys, references, linear plan paths and which of them select linear mode (an existing local plan path wins). If the input is a Linear reference or linear plan path and `STORE_FLAG` is empty, set `STORE_FLAG=--store=linear` before the first resolver call and forward it to every later call, per that contract.
 
 Validation (abort with these exact messages):
 
@@ -61,7 +61,7 @@ Error: Plan file not found or invalid.
 Run /prp-plan <feature-description> to create a plan first.
 ```
 
-Linear mode: follow artifact-store.md **Implementation skills > Resolve and hydrate** for kind `prp-plan` before branch preparation (`resolve-artifact-store.sh ${STORE_FLAG} --shell`, reading `ARTIFACT_STORE=`; Linear call gate; Lookup; Load); set `PLAN_PATH` to the absolute cache path and read its `tasks` map (rebuilt in memory when missing). A missing plan follows Lookup step 7 (ask, listing what was tried) — never report "not found" without querying Linear. Parse the hydrated file as above.
+Linear mode: follow artifact-store.md **Implementation skills > Resolve and hydrate** for kind `prp-plan` before branch preparation (`resolve-artifact-store.sh ${STORE_FLAG} --shell`, reading `ARTIFACT_STORE=`; Linear call gate; Lookup; Load); set `PLAN_PATH` to the absolute cache path and read its `tasks` map (rebuilt in memory when missing). If `DRY_RUN=true`, do not use `--ensure`, write the cache, or run Load's push/Conflict steps: reuse an existing cache file read-only, or fetch the body into a `mktemp` file outside the repository and use that as `PLAN_PATH`. A missing plan follows Lookup step 7 (ask, listing what was tried) — never report "not found" without querying Linear. Parse the selected file as above.
 Read `references/detection.md` (Parallel-Capable Detection and Execution Mode Decision) now. A `## Batches` section makes the plan parallel-capable: parse its ordering and task `BATCH:` fields. Select sequential or parallel standalone execution; record `EXECUTION_MODE=sequential|parallel`.
 
 
@@ -76,11 +76,13 @@ grep -c "^## Worktree Setup" "$PLAN_PATH"; [ $? -le 1 ]
 grep -c "^\- \*\*Worktree\*\*:" "$PLAN_PATH"; [ $? -le 1 ]
 ```
 
-With a parent annotation, use its path before whitespace/comment and slug segment after `<repo>-`. Otherwise derive `WT_FEATURE_SLUG` from plan basename: strip `.plan.md`, lowercase, replace `[^a-z0-9-]` with `-`, collapse runs, truncate to 40 chars. In linear mode derive it from the cache slug (the plan's parent directory name) instead; the cache basename is always `prp-plan.md`. `WORKTREE_ACTIVE` follows common mode selection; sequential tasks use the parent execution tree too.
+Local mode: with a parent annotation, use its path before whitespace/comment and slug segment after `<repo>-`. Otherwise derive `WT_FEATURE_SLUG` from plan basename: strip `.plan.md`, lowercase, replace `[^a-z0-9-]` with `-`, collapse runs, truncate to 40 chars. In linear mode derive `WT_FEATURE_SLUG` from the cache slug, never from the cache basename (`prp-plan.md`), using artifact-store.md **Resolve and hydrate** step 4: lowercase, replace `[^a-z0-9-]` with `-`, collapse runs, trim `-`, truncate to 40 characters, and fall back to `untitled` if empty. Keep the raw cache slug for every resolver `--slug=` call. `WORKTREE_ACTIVE` follows common mode selection; sequential tasks use the parent execution tree too.
 
 **CHECKPOINT**: Plan loaded. All sections identified. Tasks extracted. Parallel capability detected. Execution mode chosen.
 
 ## Phase 2 — PREPARE
+
+In linear mode with `DRY_RUN=true`, skip this entire phase: no branch preparation, worktree setup, artifact relocation, or remote sync. Continue to Phase 3's dry-run roster output with the read-only or temporary `PLAN_PATH` from Phase 1.
 
 Follow standalone-dispatch.md §8.2 for Git-state inspection, required branch preparation, and one-time parent worktree setup. Local mode keeps the one-way plan relocation; linear mode skips `move-plan-to-worktree.sh` — the plan is not moved into the worktree and worktree tasks read the absolute cache `$PLAN_PATH`. In linear mode the cache is gitignored and the only expected dirty path is a `.gitignore` whose sole change adds the `.ycc/artifacts/` rule, which branch preparation accepts. Input plan is the stripped `$ARGUMENTS`; optional companion artifacts ride as extra move arguments (local only). Retain `$PLAN_PATH` as the canonical path for validation, prompts, report, and archive/completion. All subsequent git operations and writes run in `$WT_PARENT_PATH` when active; `--no-worktree` uses the prepared current checkout.
 

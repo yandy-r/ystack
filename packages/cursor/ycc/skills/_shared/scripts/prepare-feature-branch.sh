@@ -163,25 +163,19 @@ fi
 # Allow plan-artifact paths; reject anything else.
 
 is_artifact_gitignore() {
-  local root
+  local path="$1" root file head='' work rule='^/?\.ycc/artifacts/?$'
   root=$(git rev-parse --show-toplevel)
-  [[ -f "$root/.gitignore" && ! -L "$root/.gitignore" ]] || return 1
-  if git cat-file -e HEAD:.gitignore 2>/dev/null; then
-    # Compare the complete working file with HEAD, including staged changes.
-    git -C "$root" diff --no-ext-diff --no-textconv --unified=0 HEAD -- .gitignore | awk '
-      /^diff --git / || /^index / || /^--- / || /^\+\+\+ / || /^@@ / { next }
-      /^\+\/?\.ycc\/artifacts\/?$/ { added++; next }
-      /^\\ No newline at end of file$/ { next }
-      { bad = 1 }
-      END { exit (bad || !added) }
-    '
-  else
-    awk '
-      /^\/?\.ycc\/artifacts\/?$/ { added++; next }
-      { bad = 1 }
-      END { exit (bad || !added) }
-    ' "$root/.gitignore"
+  file="$root/$path"
+  [[ -f "$file" && ! -L "$file" ]] || return 1
+  grep -qE "$rule" "$file" || return 1
+  if git -C "$root" cat-file -e "HEAD:$path" 2>/dev/null; then
+    head=$(git -C "$root" show "HEAD:$path") || return 1
+    if grep -qE "$rule" <<<"$head"; then return 1; fi
   fi
+  # Compare all non-rule content, including staged changes; command
+  # substitution ignores trailing newlines added before the cache rule.
+  work=$(grep -vE "$rule" "$file" || true)
+  [[ "$work" == "$head" ]]
 }
 
 is_plan_artifact() {
@@ -192,7 +186,7 @@ is_plan_artifact() {
     docs/prps/plans/"${FEATURE_SLUG}"*) return 0 ;;
     docs/prps/specs/"${FEATURE_SLUG}"*) return 0 ;;
     docs/prps/prds/"${FEATURE_SLUG}"*) return 0 ;;
-    .gitignore) is_artifact_gitignore; return $? ;;
+    .gitignore|*/.gitignore) is_artifact_gitignore "$path"; return $? ;;
     *) return 1 ;;
   esac
 }

@@ -123,7 +123,7 @@ bash "../../shared/scripts/collect-linear-keys.sh" --base "origin/<base>"
 ```
 
 - Rows are `<KEY>\t<source>\t<closes|refs>`; do not pass `--team` (it defaults to the configured team).
-- Also add the `linear.issue` from the cached plan's frontmatter (`.ycc/artifacts/<slug>/{parallel-plan,prp-plan}.md`, slug matching the branch) as a `closes` candidate.
+- Also add the `linear.issue` from the cached plan's frontmatter as a `closes` candidate: use the cache path known in the session, else `.ycc/artifacts/<slug>/{parallel-plan,prp-plan}.md` where `<slug>` is the branch name without a leading `feat/`. Check the current checkout, then the main checkout (parent of `git rev-parse --path-format=absolute --git-common-dir`), per the contract's step 1.
 - Emit `Closes <KEY>` for `closes` keys and `Refs <KEY>` for `refs`-only keys, plus `Closes #<n>` for linked GitHub issues, without duplicating lines already in the body or template.
 
 ---

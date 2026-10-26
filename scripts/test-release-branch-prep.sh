@@ -31,6 +31,7 @@ while IFS= read -r git_var; do
   unset "$git_var"
 done < <(git rev-parse --local-env-vars)
 unset git_var
+unset ARTIFACT_LINEAR_TEAM
 
 SANDBOX_ROOT="$(mktemp -d)"
 trap 'rm -rf "${SANDBOX_ROOT}"' EXIT
@@ -231,13 +232,39 @@ test_prep_artifact_gitignore() {
       if [[ "$staged" == yes ]]; then git -C "$repo" add .gitignore; fi
       run_prep "$repo" demo
       assert_exit "$PREP_RC" 0 "prep: accepts $staged staged cache-only rule $rule"
-      assert_contains "$(cat "${repo}/.gitignore")" "$rule" 'prep: carries cache ignore onto feature branch'
+      assert_eq "$(current_branch "$repo")" 'feat/demo' 'prep: carries cache ignore onto feature branch'
+      assert_eq "$PREP_OUT" 'feat/demo' 'prep: prints feature branch with cache ignore'
     done
     repo="$(mkrepo)"
     printf '%s\n' "$rule" >"${repo}/.gitignore"
     run_prep "$repo" demo
     assert_exit "$PREP_RC" 0 "prep: accepts untracked cache-only rule $rule"
   done
+
+  repo="$(mkrepo)"
+  printf 'existing/' >"${repo}/.gitignore"
+  git -C "$repo" add .gitignore
+  git -C "$repo" commit -q -m 'chore: ignore existing files without final newline'
+  (cd "$repo" && bash "${SHARED}/resolve-artifact-store.sh" --store=linear --ensure --kind=parallel-plan --slug=demo) >/dev/null
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 0 'prep: accepts ensured cache rule after missing final newline'
+  assert_eq "$(current_branch "$repo")" 'feat/demo' 'prep: switches branch after missing final newline'
+  assert_eq "$PREP_OUT" 'feat/demo' 'prep: prints branch after missing final newline'
+
+  repo="$(mkrepo)"
+  mkdir -p "${repo}/packages/x"
+  printf '%s\n' '.ycc/artifacts/' >"${repo}/packages/x/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 0 'prep: accepts package-dir cache-only gitignore'
+  assert_eq "$(current_branch "$repo")" 'feat/demo' 'prep: switches branch with package-dir cache ignore'
+  assert_eq "$PREP_OUT" 'feat/demo' 'prep: prints branch with package-dir cache ignore'
+
+  repo="$(mkrepo)"
+  mkdir -p "${repo}/packages/x"
+  printf '%s\n' '.ycc/artifacts/' 'unrelated/' >"${repo}/packages/x/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects package-dir cache rule plus unrelated addition'
+  assert_contains "$PREP_ERR" 'packages/x/.gitignore' 'prep: identifies unrelated package-dir gitignore'
 
   repo="$(mkrepo)"
   commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
@@ -686,7 +713,7 @@ gh_related_issues() {
 }
 
 test_create_pr_related_issues() {
-  local repo expected helper_root CREATE_PR="$CREATE_PR"
+  local repo expected helper_root CLAUDE_PLUGIN_ROOT CREATE_PR="$CREATE_PR"
   local warning='Skipping Linear issue links: no ARTIFACT_LINEAR_TEAM configured and no Linear MCP to verify keys.'
   stub_gh
   repo="$(mkrepo)"
@@ -725,7 +752,8 @@ test_create_pr_related_issues() {
 
   # A copied script tree lets missing/failing optional helpers be tested without
   # changing the source checkout or relying on a configurable production hook.
-  helper_root="${SANDBOX_ROOT}/optional-helper"
+  export CLAUDE_PLUGIN_ROOT="${SANDBOX_ROOT}/optional-helper"
+  helper_root="${CLAUDE_PLUGIN_ROOT}/skills"
   mkdir -p "${helper_root}/git-workflow/scripts" "${helper_root}/_shared"
   cp "$CREATE_PR" "${helper_root}/git-workflow/scripts/create-pr.sh"
   cp -R "$SHARED" "${helper_root}/_shared/scripts"

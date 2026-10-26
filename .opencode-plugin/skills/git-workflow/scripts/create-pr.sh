@@ -61,9 +61,11 @@ fi
 # Detect the forge provider and select the matching CLI (gh / tea / glab).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 FORGE_LIB="${SCRIPT_DIR}/../../../shared/scripts/lib/forge.sh"
+[[ -f "$FORGE_LIB" ]] || FORGE_LIB="~/.config/opencode/shared/scripts/lib/forge.sh"
 # shellcheck source=/dev/null
 source "$FORGE_LIB"
 PR_GUARD="${SCRIPT_DIR}/../../../shared/scripts/pr-guard.sh"
+[[ -f "$PR_GUARD" ]] || PR_GUARD="~/.config/opencode/shared/scripts/pr-guard.sh"
 
 PROVIDER="$(forge_detect_provider origin)"
 FORGE_CLI="$(forge_cli "$PROVIDER")"
@@ -342,7 +344,9 @@ fi
 # See _shared/references/artifact-store.md "PR linking". Missing or failing
 # helpers never prevent PR creation; session-aware plan links are added by callers.
 LINEAR_KEYS_SCRIPT="${SCRIPT_DIR}/../../../shared/scripts/collect-linear-keys.sh"
+[[ -f "$LINEAR_KEYS_SCRIPT" ]] || LINEAR_KEYS_SCRIPT="~/.config/opencode/shared/scripts/collect-linear-keys.sh"
 RESOLVE_STORE_SCRIPT="${SCRIPT_DIR}/../../../shared/scripts/resolve-artifact-store.sh"
+[[ -f "$RESOLVE_STORE_SCRIPT" ]] || RESOLVE_STORE_SCRIPT="~/.config/opencode/shared/scripts/resolve-artifact-store.sh"
 
 LINEAR_TEAM="${ARTIFACT_LINEAR_TEAM:-}"
 if [ -z "$LINEAR_TEAM" ] && [ -f "$RESOLVE_STORE_SCRIPT" ]; then

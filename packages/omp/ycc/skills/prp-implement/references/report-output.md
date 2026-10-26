@@ -17,6 +17,8 @@ Local mode:
 mkdir -p docs/prps/reports
 ```
 
+Write report to `docs/prps/reports/{plan-name}-report.md`:
+
 Linear mode: resolve the report path instead with `resolve-artifact-store.sh ${STORE_FLAG} --ensure --kind=prp-report --slug=<slug>` and write it there; Save and completion follow `references/linear-sync.md`. Content below is the same in both modes.
 
 ```markdown

@@ -17,7 +17,7 @@ Parallelism is the baseline of this skill — every batch's tasks dispatch concu
 
 - `--worktree` and `--no-worktree` together → abort (exact message in Arguments).
 - `--team` without `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` → abort (exact message in Arguments).
-- `--dry-run` → print the plan only; never dispatch agents or manage team state. STOP HERE. In linear mode it also makes no Linear or local writes (no `--ensure`, no cache write); see `references/linear-sync.md`.
+- `--dry-run` → print the plan only; never dispatch agents or manage team state. Skip branch preparation and worktree setup, including Phase 2.5. STOP HERE. In linear mode it also makes no Linear or local writes (no `--ensure`, no cache write); see `references/linear-sync.md`.
 - Always run the branch-prep helper before any dispatch — narrative-only branch instructions are how agents end up committing to `main`.
 - Never pass `isolated: true` per agent — all agents in all batches share the one feature worktree (or the prepared checkout under `--no-worktree`).
 - Standalone task failure: record it and continue only independent tasks. Team failure: no auto-retry or skipping; ask the user before advancing.
@@ -74,7 +74,7 @@ Read `skill://ycc-shared/references/agent-team-dispatch.md` §8.2 only when `--t
 
 ### Step 1: Validate Prerequisites
 
-First read `skill://ycc-shared/references/artifact-store.md` **Implementation skills**, **Sync**, **Lookup**, and **Helper API**. Apply **Inputs** before resolution (it decides whether the input selects `--store=linear`, including the local-plan-wins and `--store=local` conflict rules). Resolve and print the store (default `local`), retaining the printed mode and absolute paths across tool calls:
+First read `skill://ycc-shared/references/artifact-store.md` **Implementation skills**, **Sync**, **Lookup**, and **Helper API**. Apply **Inputs** before resolution (including the local-plan-wins and `--store=local` conflict rules): when a Linear reference or linear plan path selects linear mode and `STORE_FLAG` is empty, set `STORE_FLAG=--store=linear` before the first resolver call and forward it to every later call, consistent with `references/plan-inputs.md`. Resolve and print the store (default `local`), retaining the printed mode and absolute paths across tool calls:
 
 ```bash
 bash "skill://ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
@@ -112,7 +112,7 @@ Parse task specifications from the body, not identity frontmatter.
 
 ### How Worktree Mode Is Decided
 
-Use standalone-dispatch.md §8.1 for precedence and variables in both modes. Skill input: `WT_FEATURE_SLUG` is the parsed annotation slug if present, otherwise the resolved feature slug (the feature-name argument in local mode; no extra sanitization/cap). Always derive `WT_REPO_NAME` and `FEATURE_BRANCH`; `--no-worktree` sets `WORKTREE_ACTIVE=false` even when parser headers exist.
+Use standalone-dispatch.md §8.1 for precedence and variables in both modes. Local skill input: `WT_FEATURE_SLUG` is the parsed annotation slug if present, otherwise the resolved feature slug (the feature-name argument in local mode; no extra sanitization/cap). In linear mode, derive `WT_FEATURE_SLUG` from the cache slug per artifact-store.md **Resolve and hydrate** step 4: lowercase, replace `[^a-z0-9-]` with `-`, collapse runs, trim `-`, truncate to 40 characters, and fall back to `untitled` if empty. Keep the raw cache slug for every resolver `--slug=` call. Always derive `WT_REPO_NAME` and `FEATURE_BRANCH`; `--no-worktree` sets `WORKTREE_ACTIVE=false` even when parser headers exist.
 
 ### Step 4: Build Dependency Graph
 

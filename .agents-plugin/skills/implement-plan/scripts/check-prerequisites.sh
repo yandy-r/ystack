@@ -36,7 +36,7 @@ done
 if [[ -n "$STORE_FLAG" ]]; then resolve_artifact_store "$PWD" "$STORE_FLAG" || exit 1; fi
 if [[ -z "$FEATURE_NAME" && -z "$PLAN_FILE" ]]; then
   echo "ERROR: Feature name required"
-  echo "Usage: check-prerequisites.sh <feature-name>"
+  echo 'Usage: check-prerequisites.sh <feature-name> [--store=linear|local] [--plan=<path>]' >&2
   exit 1
 fi
 if [[ -n "$PLAN_FILE" ]]; then
