@@ -76,8 +76,9 @@ Never call the host API to check auth — use the local status commands:
 # github
 command -v gh   >/dev/null && gh   auth status >/dev/null 2>&1   # → authed
 
-# forgejo / gitea  (tea has no `auth status`; a configured login is the signal)
-command -v tea  >/dev/null && tea login list 2>/dev/null | grep -q '://'
+# forgejo / gitea  (tea has no `auth status`; a configured login is the signal).
+# Capture, then match: `tea login list | grep -q` SIGPIPEs tea under pipefail.
+command -v tea  >/dev/null && ( logins="$(tea login list 2>/dev/null || true)"; grep -q '://' <<<"$logins" )
 
 # gitlab
 command -v glab >/dev/null && glab auth status >/dev/null 2>&1

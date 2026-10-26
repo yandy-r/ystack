@@ -31,6 +31,8 @@
 #   - git-workflow create-pr.sh                    (breaking-change scan;
 #     scratch git repo + fake gh on PATH, analyze mode, no network)
 #   - write-docs audit-documentation.sh            (find | head -N limits)
+#   - _shared lib/forge.sh                         (forge_host_in_tea and
+#     forge_auth_ok gitea `tea login list` probes; fake tea on PATH)
 #
 # Smoke only (these helpers pass on the pre-fix code too; the cases pin the
 # converted behavior but are NOT regression tests):
@@ -457,6 +459,80 @@ if [[ "$RC" -eq 0 ]] \
     pass "audit-documentation: >limit files complete the audit and honor the 50/100 caps"
 else
     fail "audit-documentation: audit aborted or miscounted (rc=$RC, err=$ERR, out=$(printf '%s' "$OUT" | tail -c 400))"
+fi
+
+# --- 11. _shared lib/forge.sh tea login probes (sourced) ----------------------
+# `tea login list | grep -q` was the probe in forge_host_in_tea and
+# forge_auth_ok gitea: the matching login row leads, so grep quits while tea is
+# still writing, tea dies with SIGPIPE and pipefail reports no login (YAN-1607).
+# A fake tea prints the login table followed by >256 KiB of filler that holds
+# neither the host nor '://'.
+
+FORGE_LIB="${REPO_ROOT}/ycc/skills/_shared/scripts/lib/forge.sh"
+TEA_BIN="${SCRATCH}/tea-bin"
+TEA_TABLE="${SCRATCH}/tea-login-list.txt"
+mkdir -p "$TEA_BIN"
+{
+    printf '| NAME | URL | SSHHOST | USER | DEFAULT |\n'
+    printf '| forge | https://forge.example.test | forge.example.test | dev | true |\n'
+    marker_lines 4000
+} >"$TEA_TABLE"
+TEA_BYTES=$(wc -c <"$TEA_TABLE")
+cat >"${TEA_BIN}/tea" <<TEASTUB
+#!/usr/bin/env bash
+[[ "\$1 \$2" == "login list" ]] || exit 2
+# awk, not cat: some cat builds (uutils) swallow EPIPE and exit 0, which
+# would hide the race the controls must prove.
+exec awk 1 "${TEA_TABLE}"
+TEASTUB
+chmod +x "${TEA_BIN}/tea"
+
+# stderr stays attached: where the parent ignores SIGPIPE, control_sigpipes
+# needs awk's "Broken pipe" error to recognize the lost writer.
+old_tea_host() { "${TEA_BIN}/tea" login list | grep -qiF 'forge.example.test'; }
+old_tea_auth() { "${TEA_BIN}/tea" login list | grep -q '://'; }
+control_sigpipes "forge (forge_host_in_tea)" 5 old_tea_host
+control_sigpipes "forge (forge_auth_ok gitea)" 5 old_tea_auth
+
+# A tea with no logins: prints only the table header, then fails.
+TEA_EMPTY_BIN="${SCRATCH}/tea-empty-bin"
+mkdir -p "$TEA_EMPTY_BIN"
+printf '#!/usr/bin/env bash\nprintf "| NAME | URL |\\n"\nexit 1\n' >"${TEA_EMPTY_BIN}/tea"
+chmod +x "${TEA_EMPTY_BIN}/tea"
+
+# forge_tea_probe <bin-dir> <fn> <arg> — call a forge.sh probe the way
+# consumers do: sourced into a `set -euo pipefail` shell with <bin-dir>'s
+# fake tea first on PATH.
+forge_tea_probe() {
+    PATH="${1}:${PATH}" bash -c 'set -euo pipefail
+        source "$1"
+        "$2" "$3"' _ "$FORGE_LIB" "$2" "$3"
+}
+
+if forge_tea_probe "$TEA_BIN" forge_host_in_tea FORGE.example.test; then
+    pass "forge: forge_host_in_tea finds the leading login row in ${TEA_BYTES}B of tea output"
+else
+    fail "forge: forge_host_in_tea missed a configured login (rc=$?)"
+fi
+if forge_tea_probe "$TEA_BIN" forge_auth_ok gitea; then
+    pass "forge: forge_auth_ok gitea finds the leading login row in ${TEA_BYTES}B of tea output"
+else
+    fail "forge: forge_auth_ok gitea missed a configured login (rc=$?)"
+fi
+if ! forge_tea_probe "$TEA_BIN" forge_host_in_tea other.example.test; then
+    pass "forge: forge_host_in_tea rejects a host with no configured login"
+else
+    fail "forge: forge_host_in_tea matched a host with no configured login"
+fi
+if ! forge_tea_probe "$TEA_EMPTY_BIN" forge_auth_ok gitea; then
+    pass "forge: forge_auth_ok gitea rejects a tea with no logins"
+else
+    fail "forge: forge_auth_ok gitea accepted a tea with no logins"
+fi
+if ! forge_tea_probe "$TEA_EMPTY_BIN" forge_host_in_tea ""; then
+    pass "forge: forge_host_in_tea rejects an empty host"
+else
+    fail "forge: forge_host_in_tea matched an empty host"
 fi
 
 # --- Summary ------------------------------------------------------------------

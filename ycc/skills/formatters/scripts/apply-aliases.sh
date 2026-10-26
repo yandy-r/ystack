@@ -113,8 +113,10 @@ apply_package_json() {
         format format:modified format:staged format:unstaged
     )
     local conflicts=()
+    # Here-string, not `printf | grep -q`: under pipefail the early-exiting
+    # grep can SIGPIPE the writer and a present key reads as absent (YAN-1607).
     for key in "${template_keys[@]}"; do
-        if printf '%s\n' "$existing" | grep -Fxq "$key"; then
+        if grep -Fxq -- "$key" <<<"$existing"; then
             conflicts+=("$key")
         fi
     done
