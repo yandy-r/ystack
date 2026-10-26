@@ -69,7 +69,7 @@ A review keeps its PR comment unchanged. With no reviewed issue, attach its Docu
 - `tasks` maps the literal task heading id (`1.1`, `Task 1`) to its Linear issue id. Warn that renumbering headings remaps ids and can associate issues with different tasks.
 - The plan owns only each task issue's title, description, and `blocks` relations. Relations mirror dependency batches.
 - Re-save updates mapped issues, creates only new task ids, and rebuilds a missing map from existing sub-issues by literal heading id before creating anything.
-- Before updating a task issue, fetch its `updatedAt`. If it differs from the `updatedAt` recorded at the last plan/task sync (the value fetched for this save when none is recorded), skip that issue and report it instead of overwriting it. The plan Document's `syncedAt` does not replace this per-issue check.
+- Before updating a task issue, fetch its `updatedAt` and compare it with the timestamp stored under `tasks`. A mismatch, or no stored timestamp for an existing mapped issue, means Linear changed independently: skip the update and report it, or run Conflict. Never overwrite without resolving that state. After each successful update, re-stamp that task's `updatedAt`.
 - Never change issue state except to cancel an **open** issue whose task was removed. Never cancel a Done or already-cancelled issue, and never delete an issue.
 
 ## Layout
@@ -134,18 +134,18 @@ Linear mode stores a gitignored cache:
 
 In linear mode, merge identity keys into existing frontmatter as top-level keys; do not replace other keys or nest them under a namespace. Local mode writes no identity frontmatter.
 
-| Field                 | Meaning                                                                                                |
-| --------------------- | ------------------------------------------------------------------------------------------------------ |
-| `linear.workspace`    | Linear workspace slug                                                                                  |
-| `linear.team`         | Team key, for example `YAN`                                                                            |
-| `linear.project`      | Feature Project id or slug                                                                             |
-| `linear.document`     | Document id, empty when there is no Document                                                           |
-| `linear.issue`        | Parent tracking issue, reviewed issue when present, otherwise empty                                    |
-| `linear.statusUpdate` | Report status-update id, empty for other kinds                                                         |
-| `tasks`               | Literal plan task id → Linear issue id; only on `parallel-plan.md` and `prp-plan.md`                   |
-| `syncedAt`            | Linear `updatedAt` observed at the last sync, stored verbatim in its ISO-8601 form                     |
-| `contentHash`         | Lowercase hex SHA-256 from the procedure below at the last successful push or pull                     |
-| `pending`             | `true` when a reachable Linear configuration is temporarily unreachable; otherwise omit or set `false` |
+| Field                 | Meaning                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `linear.workspace`    | Linear workspace slug                                                                                                   |
+| `linear.team`         | Team key, for example `YAN`                                                                                             |
+| `linear.project`      | Feature Project id or slug                                                                                              |
+| `linear.document`     | Document id, empty when there is no Document                                                                            |
+| `linear.issue`        | Parent tracking issue, reviewed issue when present, otherwise empty                                                     |
+| `linear.statusUpdate` | Report status-update id, empty for other kinds                                                                          |
+| `tasks`               | Literal plan task id → `{issue, updatedAt}` from the last successful sync; only on `parallel-plan.md` and `prp-plan.md` |
+| `syncedAt`            | Linear `updatedAt` observed at the last sync, stored verbatim in its ISO-8601 form                                      |
+| `contentHash`         | Lowercase hex SHA-256 from the procedure below at the last successful push or pull                                      |
+| `pending`             | `true` when a reachable Linear configuration is temporarily unreachable; otherwise omit or set `false`                  |
 
 Compare `updatedAt` with `syncedAt` using **differs from**, not chronological ordering or timestamp normalization.
 
@@ -160,8 +160,12 @@ linear:
   issue: YAN-1152
   statusUpdate:
 tasks:
-  '1.1': YAN-1153
-  'Task 2': YAN-1154
+  '1.1':
+    issue: YAN-1153
+    updatedAt: '2026-10-26T00:00:00.000Z'
+  'Task 2':
+    issue: YAN-1154
+    updatedAt: '2026-10-26T00:00:00.000Z'
 syncedAt: '2026-10-26T00:00:00.000Z'
 contentHash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
 pending: false

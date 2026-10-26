@@ -189,6 +189,12 @@ for variant in missing no-newline exact slash rooted rooted-slash wider; do
   esac
   assert_ok "ignore ${variant}: no cache created" test ! -e "${ignore_repo}/.ycc/artifacts"
 done
+negation_repo="${SCRATCH}/ignore-negation"; make_repo "$negation_repo"
+printf '.ycc/artifacts/*\n!.ycc/artifacts/feat/\n' >"${negation_repo}/.gitignore"
+run "$negation_repo" ensure_artifact_gitignore
+assert_eq 'negated exception gets repo coverage line' $'.ycc/artifacts/*\n!.ycc/artifacts/feat/\n.ycc/artifacts/' "$(cat "${negation_repo}/.gitignore")"
+assert_ok 'nested probe ignored after append' git -C "$negation_repo" check-ignore -q -- .ycc/artifacts/feat/cache
+
 sub_repo="${SCRATCH}/subdir-ignore"; make_repo "$sub_repo"
 sub_root="${sub_repo}/packages/app"; mkdir -p "$sub_root"
 printf 'scope: local\nstore: linear\n' >"${sub_root}/.plans-config"
@@ -226,14 +232,22 @@ for link_kind in gitignore ycc artifacts; do
 done
 global_ignore_repo="${SCRATCH}/global-ignore"; make_repo "$global_ignore_repo"
 printf '.ycc/\n' >"${SCRATCH}/global-excludes"
-git config --global core.excludesFile "${SCRATCH}/global-excludes"
-run "$global_ignore_repo" ensure_artifact_gitignore
-assert_eq 'global excludes does not replace repo ignore' '.ycc/artifacts/' "$(cat "${global_ignore_repo}/.gitignore")"
-git config --global --unset core.excludesFile
+git config --file "${GIT_CONFIG_GLOBAL}.excludes" core.excludesFile "${SCRATCH}/global-excludes"
+if (CDPATH='' cd -- "$global_ignore_repo" >/dev/null && GIT_CONFIG_GLOBAL="${GIT_CONFIG_GLOBAL}.excludes" "$BASH_BIN" -c 'source "$1" || exit 1; ensure_artifact_gitignore' _ "$HELPER"); then
+  fail 'global excludes unexpectedly accepted as repository ignore'
+else
+  pass 'global excludes rejected as repository ignore'
+fi
+assert_ok 'global excludes does not leave partial ignore' test ! -e "${global_ignore_repo}/.gitignore"
+rm "${GIT_CONFIG_GLOBAL}.excludes"
 info_ignore_repo="${SCRATCH}/info-ignore"; make_repo "$info_ignore_repo"
 printf '.ycc/\n' >"${info_ignore_repo}/.git/info/exclude"
-run "$info_ignore_repo" ensure_artifact_gitignore
-assert_eq 'Git info excludes does not replace repo ignore' '.ycc/artifacts/' "$(cat "${info_ignore_repo}/.gitignore")"
+if run "$info_ignore_repo" ensure_artifact_gitignore; then
+  fail 'Git info excludes unexpectedly accepted as repository ignore'
+else
+  pass 'Git info excludes rejected as repository ignore'
+fi
+assert_ok 'Git info excludes does not leave partial ignore' test ! -e "${info_ignore_repo}/.gitignore"
 local_repo="${SCRATCH}/ignore-local"; make_repo "$local_repo"
 printf 'scope: local\nstore: local\n' >"${local_repo}/.plans-config"
 run "$local_repo" ensure_artifact_gitignore

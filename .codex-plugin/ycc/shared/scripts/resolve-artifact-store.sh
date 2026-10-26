@@ -157,18 +157,21 @@ ensure_artifact_gitignore() {
   [[ -n "${ARTIFACT_STORE:-}" ]] || resolve_artifact_store || return 1
   [[ "$ARTIFACT_STORE" == linear ]] || return 0
   _artifact_require_git_root || return 1
-  local file="${ARTIFACT_ROOT}/.gitignore" last_byte ignore_source ignore_pattern git_root
+  local file="${ARTIFACT_ROOT}/.gitignore" last_byte ignore_source ignore_pattern git_root count
   git_root=$(git -C "$ARTIFACT_ROOT" rev-parse --show-toplevel) || return 1
-  # Only a committed-style ignore within this repo is portable to teammates.
-  # NUL output avoids splitting paths with whitespace or colons.
-  # Fields: source, line number (discarded into _), pattern, path.
-  if { IFS= read -r -d '' ignore_source && IFS= read -r -d '' _ && IFS= read -r -d '' ignore_pattern; } < <(printf '.ycc/artifacts/probe\0' | git -C "$ARTIFACT_ROOT" check-ignore -v -z --no-index --stdin 2>/dev/null); then
+  # Only committed-style ignores within this repo are portable. A non-negated
+  # repo rule must cover direct, nested, and representative feature-cache probes
+  # so partial exceptions cannot leave later cache files visible.
+  # Fields are NUL-terminated: source, line number (discarded into _), pattern,
+  # and path.
+  count=0
+  while IFS= read -r -d '' ignore_source && IFS= read -r -d '' _ && IFS= read -r -d '' ignore_pattern && IFS= read -r -d '' _; do
+    count=$((count + 1))
     [[ "$ignore_source" == /* ]] || ignore_source="${git_root}/${ignore_source}"
     ignore_source="$(CDPATH='' cd -- "$(dirname "$ignore_source")" >/dev/null 2>&1 && pwd -P)/${ignore_source##*/}"
-    if [[ "$ignore_source" == "$git_root/"* && "${ignore_source##*/}" == .gitignore && "$ignore_pattern" != '!'* ]]; then
-      return 0
-    fi
-  fi
+    [[ "$ignore_source" == "$git_root/"* && "${ignore_source##*/}" == .gitignore && "$ignore_pattern" != '!'* ]] || return 1
+  done < <(printf '.ycc/artifacts/probe\0.ycc/artifacts/probe-dir/probe\0.ycc/artifacts/feat/cache\0' | git -C "$ARTIFACT_ROOT" check-ignore -v -z --no-index --stdin 2>/dev/null)
+  [[ "$count" == 3 ]] && return 0
   if [[ -f "$file" ]] && grep -qxE '/?\.ycc/artifacts/?' "$file"; then
     return 0
   fi
