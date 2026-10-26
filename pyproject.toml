@@ -44,6 +44,7 @@ files = [
   "scripts/test_validate_omp_hooks.py",
   "scripts/omp_herdr_smoke.py",
   "scripts/omp_scripted_smoke.py",
+  "scripts/test_omp_scripted_smoke.py",
   "scripts/claude_agents_split.py",
   "scripts/claude_agents_split_smoke.py",
   "scripts/test_claude_agents_split.py",

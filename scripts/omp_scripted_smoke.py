@@ -16,7 +16,9 @@ end of a script, and requests with no marker, answer the text `DONE`.
   check-script OUT PACKAGE KEY...  every step of each KEY got the result its script expects
   check-agents OUT PACKAGE       every ycc agent ran to completion on the model its
                                  frontmatter role selects (@slow, @task, else the main model)
-  check-skills OUT PACKAGE       every ycc skill read through skill:// from the installed cache
+  check-skills OUT PACKAGE       /ycc:clean expanded to skill://clean, then every ycc skill read
+                                 through skill:// from the installed cache in one batch, with no
+                                 compaction request in between
   check-ttsr SESSION_DIR         one ycc-python-trigger and one ycc-golang-trigger
                                  ttsr_injection entry for the whole session
   check-rpc OUT [--approve yes|no] the rpc session asked one `Allow tool: bash` select, the
@@ -53,6 +55,11 @@ PERMISSION_FILE = "permission-probe"
 NAME_LINE = re.compile(r"^name:\s*(\S+)\s*$", re.MULTILINE)
 MODEL_LINE = re.compile(r"^model:\s*['\"]?([^'\"\n]+)['\"]?\s*$", re.MULTILINE)
 SESSION_TIMEOUT = 240
+# Declared for every scripted model so a whole-package read batch never trips compaction.
+CONTEXT_WINDOW = 2_000_000
+# Output cap omp sends with each request; the scripted provider ignores it.
+MAX_TOKENS = 8192
+EXPANSION = re.compile(r"Read `skill://([a-z0-9-]+)`")
 
 
 class SmokeError(Exception):
@@ -208,6 +215,8 @@ def answer(scripts: dict[str, list[Step]], body: dict[str, Any], recorder: Recor
             rule for m in tail if m.get("role") != "tool" for rule in RULE.findall(text_of(m.get("content")))
         ],
         "tools": sorted(tool_names(body)),
+        # Skills a slash command expanded into (`Read \`skill://<name>\``), e.g. /ycc:clean.
+        "expanded": sorted(set(EXPANSION.findall(users))),
     }
     with recorder.lock:
         recorder.requests.append(entry)
@@ -253,7 +262,21 @@ def models_yml(port: int) -> str:
 
     def block(url: str, ids: tuple[str, ...]) -> dict[str, Any]:
         api = "openai-completions"
-        models = [{"id": i, "name": i, "api": api, "reasoning": False, "input": ["text"]} for i in ids]
+        # Without an explicit window omp assumes 128k tokens. S5 returns every SKILL.md in one
+        # turn (~570 KB), which overflows that and starts a compaction that races the tool batch
+        # and replaces late results with "No result provided" (YAN-1606).
+        models = [
+            {
+                "id": i,
+                "name": i,
+                "api": api,
+                "reasoning": False,
+                "input": ["text"],
+                "contextWindow": CONTEXT_WINDOW,
+                "maxTokens": MAX_TOKENS,
+            }
+            for i in ids
+        ]
         return {"baseUrl": url, "apiKey": "none", "api": api, "auth": "none", "models": models}
 
     providers = {
@@ -404,10 +427,15 @@ def check_agents(out: Path, package: Path) -> str:
 def check_skills(out: Path, package: Path) -> str:
     data = load(out)
     names = skills(package)
-    reply = [r for r in requests_for(data, "SCRIPT-skills") if r.get("step") == 1]
-    if not reply:
-        raise SmokeError("the skill reads never returned")
-    results: list[str] = reply[0]["results"]
+    # Exactly the two scripted turns. Any extra request (unmarked or not) means omp compacted
+    # the session mid-batch, which can drop late results as "No result provided" (YAN-1606).
+    requests = data["requests"]
+    seq = [(r.get("key") or "<unmarked>", r.get("step")) for r in requests]
+    if seq != [("SCRIPT-skills", 0), ("SCRIPT-skills", 1)]:
+        raise SmokeError(f"expected SCRIPT-skills steps 0 and 1 only, got {seq} (omp compacted the session?)")
+    if requests[0].get("expanded") != ["clean"]:
+        raise SmokeError(f"/ycc:clean did not expand to skill://clean: {requests[0].get('expanded')}")
+    results: list[str] = requests[1]["results"]
     if len(results) != len(names):
         raise SmokeError(f"{len(results)} skill results for {len(names)} skills")
     bad = []
@@ -420,7 +448,7 @@ def check_skills(out: Path, package: Path) -> str:
             bad.append((name, "body lacks its frontmatter name"))
     if bad:
         raise SmokeError(f"skills not read from the installed ycc cache: {bad}")
-    return f"skills: all {len(names)} ycc skills read through skill:// from the installed ycc@ycc cache"
+    return f"skills: /ycc:clean expanded; all {len(names)} ycc skills read through skill:// from the ycc@ycc cache"
 
 
 def check_ttsr(session_dir: Path) -> str:

@@ -259,11 +259,6 @@ log 'PASS S4 agents: every ycc agent runs as a subagent on its role model'
 # --- S5. Skills and commands ----------------------------------------------------------------
 session s5-skills "$work" -- -p --no-session '/ycc:clean SCRIPT-skills'
 check s5-proof check-skills "$root/logs/s5-skills.json" "$package"
-"$python" - "$root/logs/s5-skills.json" <<'PY' || die 'S5: /ycc:clean did not expand to skill://clean'
-import json, sys
-first = json.load(open(sys.argv[1]))["requests"][0]
-sys.exit(0 if first["key"] == "SCRIPT-skills" else 1)
-PY
 log 'PASS S5 skills: /ycc:clean expands; every ycc skill reads from the installed cache'
 
 # --- S6. Modes and permission prompts -------------------------------------------------------

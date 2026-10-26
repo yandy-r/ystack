@@ -301,6 +301,8 @@ run_target() {
             python3 "${REPO_ROOT}/scripts/test_validate_omp_hooks.py" || fail "test_validate_omp_hooks.py"
             echo "== test: omp agent scope guard =="
             python3 "${REPO_ROOT}/scripts/test_omp_scope_guard.py" || fail "test_omp_scope_guard.py"
+            echo "== test: omp scripted-session S5 proof =="
+            python3 "${REPO_ROOT}/scripts/test_omp_scripted_smoke.py" || fail "test_omp_scripted_smoke.py"
             ;;
         opencode)
             echo "== validate: opencode skills =="
