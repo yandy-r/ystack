@@ -16,6 +16,8 @@
 #     missing-file case)
 #   - the prp-implement SKILL.md / references/detection.md snippet lines are
 #     extracted from the docs and print exactly one integer per line
+#   - analyze-changes handles mixed categories under errexit and detects source
+#     changes when the changed-file list exceeds the pipe buffer (YAN-1587/1588)
 set -euo pipefail
 
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
@@ -298,9 +300,6 @@ make_git_repo() {
 # Zero-match case: dirs "." (top-level file) and "pkg" both appear in
 # "Changed Directories"; for dir "." the fixed-string prefix "./" matches zero
 # lines in ALL_CHANGED_FILES (paths are relative, never start with "./").
-# Uses only source extensions (.ts) because categorize_file() returns non-zero
-# for doc/config files and the script's set -e would abort before reaching the
-# count line (pre-existing quirk, outside this fix's scope).
 AC_ZERO="${SCRATCH}/ac-zero"
 make_git_repo "$AC_ZERO"
 mkdir -p "$AC_ZERO/pkg"
@@ -356,6 +355,72 @@ else
     fail "analyze-changes: bracketed dir (rc=$RC, out=$OUT)"
 fi
 assert_not_contains "analyze-changes: no bracket regex noise" "Unmatched" "${OUT}${ERR}"
+
+# Non-source category statuses must not trigger errexit at either call site.
+AC_MIXED="${SCRATCH}/ac-mixed"
+make_git_repo "$AC_MIXED"
+mkdir -p "$AC_MIXED/src" "$AC_MIXED/tests" "$AC_MIXED/docs"
+printf 'source\n' >"$AC_MIXED/src/a.ts"
+printf 'test\n' >"$AC_MIXED/tests/a.test.ts"
+printf '# Docs\n' >"$AC_MIXED/docs/x.md"
+printf '{}\n' >"$AC_MIXED/config.json"
+run_capture ac-mixed -- bash -c "cd '$AC_MIXED' && bash '$AC_SCRIPT'"
+if [[ "$RC" -eq 0 ]] && [[ "$OUT" == *'=== Recommendations ==='* ]]; then
+    pass "analyze-changes: mixed categories complete without errexit"
+else
+    fail "analyze-changes: mixed categories (rc=$RC, err=$ERR)"
+fi
+assert_count_line "analyze-changes: mixed source count" "$OUT" '  Source files: *' "1"
+assert_count_line "analyze-changes: mixed test count" "$OUT" '  Test files: *' "1"
+assert_count_line "analyze-changes: mixed doc count" "$OUT" '  Doc files: *' "1"
+assert_count_line "analyze-changes: mixed config count" "$OUT" '  Config files: *' "1"
+
+# src/ sorts first, so `grep -q` matches on the first line while the rest of the
+# list is still unwritten. The old `echo "$ALL" | grep -qE` idiom only dies of
+# SIGPIPE if >= pipe capacity (64 KiB) plus grep's first read buffer is still
+# pending, so keep >= 256 KiB after the first match. Nested 200-char directory
+# names (~620-byte paths) keep the file count — and the per-file forks in
+# analyze-changes — small. Just two top-level directories avoid unrelated
+# head-truncation pipelines in the script.
+AC_LARGE="${SCRATCH}/ac-large"
+make_git_repo "$AC_LARGE"
+mkdir -p "$AC_LARGE/src"
+printf 'source\n' >"$AC_LARGE/src/a.ts"
+printf -v ac_padding '%0200d' 0
+ac_deep="$AC_LARGE/zzz/${ac_padding}/${ac_padding}/${ac_padding}"
+mkdir -p "$ac_deep"
+for ((ac_i=0; ac_i<500; ac_i++)); do
+    printf -v ac_name '%04d.ts' "$ac_i"
+    printf 'source\n' >"$ac_deep/$ac_name"
+done
+ac_list=$(git -C "$AC_LARGE" ls-files --others --exclude-standard | sort -u)
+# Parameter expansion, not head/wc pipes: a pipe from printf would itself be
+# SIGPIPE-prone under pipefail for a list this large. Names are ASCII, so
+# character counts equal byte counts.
+ac_first="${ac_list%%$'\n'*}"
+ac_after=$((${#ac_list} - ${#ac_first}))
+if [[ "$ac_after" -ge 262144 ]] && [[ "$ac_list" == src/a.ts$'\n'* ]]; then
+    pass "analyze-changes: >= 256 KiB follows the first src/ match ($ac_after bytes)"
+else
+    fail "analyze-changes: fixture too small or src/ not first ($ac_after bytes after first match)"
+fi
+# Control: the pre-fix idiom must really lose its writer on this exact list, so
+# the fixture proves the regression without reading old code from git. The
+# writer dies of SIGPIPE (rc > 128), or gets EPIPE ("Broken pipe", rc 1) where
+# the parent ignores SIGPIPE, as some CI runners do.
+ac_old_rc=0
+ac_old_err="$( ( set -o pipefail; echo "$ac_list" | grep -qE '^(src/|lib/|app/)' ) 2>&1 )" || ac_old_rc=$?
+if [[ "$ac_old_rc" -gt 128 ]] || { [[ "$ac_old_rc" -ne 0 ]] && [[ "$ac_old_err" == *'Broken pipe'* ]]; }; then
+    pass "analyze-changes: control: old echo|grep -q idiom loses its writer on the fixture (rc=$ac_old_rc)"
+else
+    fail "analyze-changes: control: old echo|grep -q idiom did not SIGPIPE/EPIPE (rc=$ac_old_rc)"
+fi
+run_capture ac-large -- bash -c "cd '$AC_LARGE' && bash '$AC_SCRIPT'"
+if [[ "$RC" -eq 0 ]] && [[ "$OUT" == *'Documentation Consideration:'* ]]; then
+    pass "analyze-changes: large change set detects early src/ path"
+else
+    fail "analyze-changes: large change set misses src/ path (rc=$RC, err=$ERR)"
+fi
 
 # --- 6. git-workflow validate-commit.sh ----------------------------------------
 

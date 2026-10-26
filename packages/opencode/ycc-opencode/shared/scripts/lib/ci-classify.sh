@@ -30,42 +30,45 @@ _YCC_CI_CLASSIFY_SOURCED=1
 classify_failure() {
   local log_content="$1"
 
-  # Fixable categories (pattern-matched in priority order)
-  if printf '%s\n' "$log_content" | grep -qiE '(eslint|pylint|ruff|flake8|rubocop|golangci|lint(ing)?[: ]|linter (error|fail)|SC[0-9]{4})'; then
+  # Match the log blob with here-strings, not `printf | grep -q`: CI logs are
+  # regularly larger than the 64 KiB pipe buffer, so under pipefail the
+  # early-exiting grep SIGPIPEs the writer and a present category signature
+  # reads as absent (YAN-1587).
+  if grep -qiE '(eslint|pylint|ruff|flake8|rubocop|golangci|lint(ing)?[: ]|linter (error|fail)|SC[0-9]{4})' <<<"$log_content"; then
     printf 'lint'
     return
   fi
-  if printf '%s\n' "$log_content" | grep -qiE '(prettier|black|gofmt|rustfmt|format(ting)?[: ]|autoformat|code style)'; then
+  if grep -qiE '(prettier|black|gofmt|rustfmt|format(ting)?[: ]|autoformat|code style)' <<<"$log_content"; then
     printf 'format'
     return
   fi
-  if printf '%s\n' "$log_content" | grep -qiE '(tsc|mypy|pyright|type.check|type error|TypeScript error|type-check|typecheck)'; then
+  if grep -qiE '(tsc|mypy|pyright|type.check|type error|TypeScript error|type-check|typecheck)' <<<"$log_content"; then
     printf 'type-check'
     return
   fi
-  if printf '%s\n' "$log_content" | grep -qiE '(jest|pytest|cargo test|go test|rspec|mocha|vitest|unit.test|test (fail|error)|FAIL.*\.test\.)'; then
+  if grep -qiE '(jest|pytest|cargo test|go test|rspec|mocha|vitest|unit.test|test (fail|error)|FAIL.*\.test\.)' <<<"$log_content"; then
     printf 'unit-test'
     return
   fi
-  if printf '%s\n' "$log_content" | grep -qiE '(npm (run )?build|cargo build|go build|webpack|vite build|next build|build (fail|error)|compilation failed)'; then
+  if grep -qiE '(npm (run )?build|cargo build|go build|webpack|vite build|next build|build (fail|error)|compilation failed)' <<<"$log_content"; then
     printf 'build'
     return
   fi
 
   # Non-fixable categories
-  if printf '%s\n' "$log_content" | grep -qiE '(integration.test|e2e|end.to.end|cypress|playwright)'; then
+  if grep -qiE '(integration.test|e2e|end.to.end|cypress|playwright)' <<<"$log_content"; then
     printf 'integration-test'
     return
   fi
-  if printf '%s\n' "$log_content" | grep -qiE '(terraform|ansible|kubernetes|k8s|helm|infra(structure)?|deploy(ment)?|provisioning)'; then
+  if grep -qiE '(terraform|ansible|kubernetes|k8s|helm|infra(structure)?|deploy(ment)?|provisioning)' <<<"$log_content"; then
     printf 'infra'
     return
   fi
-  if printf '%s\n' "$log_content" | grep -qiE '(secret (not found|missing|undefined)|API.?key (not|missing)|token (not found|missing|expired)|credentials missing|env.*not set)'; then
+  if grep -qiE '(secret (not found|missing|undefined)|API.?key (not|missing)|token (not found|missing|expired)|credentials missing|env.*not set)' <<<"$log_content"; then
     printf 'secret-missing'
     return
   fi
-  if printf '%s\n' "$log_content" | grep -qiE '(flake|intermittent|timeout|rate.limit|network error|connection refused|socket hang|ECONNRESET|ETIMEDOUT)'; then
+  if grep -qiE '(flake|intermittent|timeout|rate.limit|network error|connection refused|socket hang|ECONNRESET|ETIMEDOUT)' <<<"$log_content"; then
     printf 'flake-suspected'
     return
   fi

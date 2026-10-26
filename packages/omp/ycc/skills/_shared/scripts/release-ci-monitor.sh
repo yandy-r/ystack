@@ -371,7 +371,7 @@ run_conclusion() {
 extract_step_name() {
   local log_content="$1"
   local step
-  step="$(printf '%s\n' "$log_content" | grep -m1 '^\S' | awk '{print $2}' | head -n1 || printf '')"
+  step="$(grep -m1 '^\S' <<<"$log_content" | awk '{print $2}' | head -n1 || printf '')"
   if [[ -z "$step" ]]; then
     step="unknown-step"
   fi
@@ -429,7 +429,7 @@ main() {
   for pair in "max-pushes:$max_pushes" "max-same-failure:$max_same_failure" "timeout-min:$timeout_min"; do
     local flag_n="${pair%%:*}"
     local val_n="${pair#*:}"
-    if ! printf '%s' "$val_n" | grep -qE '^[0-9]+$'; then
+    if ! grep -qE '^[0-9]+$' <<<"$val_n"; then
       printf 'release-ci-monitor.sh: --%s must be a non-negative integer, got: %s\n' "$flag_n" "$val_n" >&2
       exit 1
     fi

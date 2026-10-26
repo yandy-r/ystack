@@ -129,7 +129,7 @@ for pair in "pr:$PR" "fixed:$FIXED" "failed:$FAILED" "skipped:$SKIPPED" "deferre
             "ci-iterations:$CI_ITERATIONS" "ci-pushes:$CI_PUSHES"; do
   label="${pair%%:*}"
   value="${pair#*:}"
-  if ! printf '%s' "$value" | grep -qE '^[0-9]+$'; then
+  if ! grep -qE '^[0-9]+$' <<<"$value"; then
     printf 'post-summary.sh: --%s must be a non-negative integer, got: %s\n' "$label" "$value" >&2
     exit 1
   fi

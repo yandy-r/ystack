@@ -231,8 +231,13 @@ has_pr_checks() {
   fi
 
   # Strategy 2: plain `gh pr checks` text output (one row per check). Works on
-  # all supported gh versions and survives shape changes in --json.
-  if gh pr checks "$pr" 2>/dev/null | grep -qE '^[^[:space:]]'; then
+  # all supported gh versions and survives shape changes in --json. Capture the
+  # output and match with a here-string, not `gh ... | grep -q`: under pipefail
+  # the early-exiting grep SIGPIPEs gh on long check lists (YAN-1587). gh exits
+  # non-zero for failing/pending checks, which still counts as "has checks".
+  local rows
+  rows="$(gh pr checks "$pr" 2>/dev/null || true)"
+  if grep -qE '^[^[:space:]]' <<<"$rows"; then
     return 0
   fi
 
@@ -270,7 +275,7 @@ extract_step_name() {
   # gh run view --log-failed output has lines like:
   # <job-name>  <step-name>  <timestamp>  <log-line>
   local step
-  step="$(printf '%s\n' "$log_content" | grep -m1 '^\S' | awk '{print $2}' | head -n1 || printf '')"
+  step="$(grep -m1 '^\S' <<<"$log_content" | awk '{print $2}' | head -n1 || printf '')"
   if [[ -z "$step" ]]; then
     step="unknown-step"
   fi
@@ -365,7 +370,7 @@ main() {
   for pair in "max-pushes:$max_pushes" "max-same-failure:$max_same_failure" "timeout-min:$timeout_min" "pr:$pr"; do
     local flag_n="${pair%%:*}"
     local val_n="${pair#*:}"
-    if ! printf '%s' "$val_n" | grep -qE '^[0-9]+$'; then
+    if ! grep -qE '^[0-9]+$' <<<"$val_n"; then
       printf 'ci-monitor.sh: --%s must be a non-negative integer, got: %s\n' "$flag_n" "$val_n" >&2
       exit 1
     fi

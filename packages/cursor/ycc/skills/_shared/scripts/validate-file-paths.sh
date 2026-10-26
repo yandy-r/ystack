@@ -59,7 +59,7 @@ _extract_table_paths() {
   echo "$section_content" | grep "^|" | grep -v "^|[[:space:]]*-" | while IFS= read -r line; do
     # Find the first backtick-quoted path in ANY column
     local path
-    path=$(echo "$line" | grep -oE '`[^`]+/[^`]+`' | head -1 | sed 's/`//g')
+    path=$(grep -oE '`[^`]+/[^`]+`' <<<"$line" | head -1 | sed 's/`//g')
 
     # If no backtick path with slash found, try first column without backticks
     if [[ -z "$path" ]]; then
@@ -75,8 +75,10 @@ _extract_table_paths() {
     [[ -z "$path" ]] && continue
 
     if [[ "$skip_create" == "true" ]]; then
-      # Check if any column says CREATE (case-insensitive)
-      if echo "$line" | grep -qi "CREATE"; then
+      # Match with a here-string, not `echo | grep -q`: under pipefail an
+      # early-exiting reader SIGPIPEs the echo writer and a present CREATE
+      # reads as missing (YAN-1587).
+      if grep -qi "CREATE" <<<"$line"; then
         echo "SKIP:$path"
         continue
       fi

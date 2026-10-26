@@ -18,10 +18,22 @@ if [[ -d "docs" ]]; then
     echo "✅ \`docs/\` directory exists"
     echo ""
     echo "\`\`\`"
+    # Capture the full find output and trim with head on a here-string, not
+    # `find | head`: under pipefail an early-exiting head SIGPIPEs find once
+    # there are more files than the limit and errexit aborts the audit
+    # (YAN-1587).
     if command -v tree &> /dev/null; then
-        tree -L 3 docs 2>/dev/null || find docs -type f -name "*.md" | head -50
+        tree -L 3 docs 2>/dev/null || {
+            doc_listing="$(find docs -type f -name "*.md" || true)"
+            if [[ -n "$doc_listing" ]]; then
+                head -n 50 <<<"$doc_listing"
+            fi
+        }
     else
-        find docs -type f -name "*.md" 2>/dev/null | head -50
+        doc_listing="$(find docs -type f -name "*.md" 2>/dev/null || true)"
+        if [[ -n "$doc_listing" ]]; then
+            head -n 50 <<<"$doc_listing"
+        fi
     fi
     echo "\`\`\`"
     echo ""
@@ -121,10 +133,16 @@ echo "## Inline Documentation Density"
 echo ""
 
 # Check for JSDoc comments in JS/TS files
-js_ts_files=$(find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" \) -not -path "./node_modules/*" -not -path "./.git/*" 2>/dev/null | head -100)
+# Capture all of find's output, then trim with head on a here-string: a
+# `find | head -100` pipeline SIGPIPEs find past 100 files and pipefail +
+# errexit aborts the audit (YAN-1587).
+all_js_ts_files=$(find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" \) -not -path "./node_modules/*" -not -path "./.git/*" 2>/dev/null || true)
+js_ts_files=$(head -n 100 <<<"$all_js_ts_files")
 if [[ -n "$js_ts_files" ]]; then
     total_js_files=$(echo "$js_ts_files" | wc -l | tr -d ' ')
-    jsdoc_count=$(echo "$js_ts_files" | xargs grep -l "@param\|@returns\|@description" 2>/dev/null | wc -l | tr -d ' ')
+    # xargs exits 123 when a grep batch matches nothing; tolerate it so a
+    # zero-match scan reports 0 instead of aborting under errexit+pipefail.
+    jsdoc_count=$({ xargs grep -l "@param\|@returns\|@description" <<<"$js_ts_files" 2>/dev/null || true; } | wc -l | tr -d ' ')
     echo "### JavaScript/TypeScript"
     echo "- Files scanned: ${total_js_files}"
     echo "- Files with JSDoc: ${jsdoc_count}"
@@ -136,10 +154,11 @@ if [[ -n "$js_ts_files" ]]; then
 fi
 
 # Check for docstrings in Python files
-py_files=$(find . -type f -name "*.py" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./.venv/*" 2>/dev/null | head -100)
+all_py_files=$(find . -type f -name "*.py" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./.venv/*" 2>/dev/null || true)
+py_files=$(head -n 100 <<<"$all_py_files")
 if [[ -n "$py_files" ]]; then
     total_py_files=$(echo "$py_files" | wc -l | tr -d ' ')
-    docstring_count=$(echo "$py_files" | xargs grep -l '"""' 2>/dev/null | wc -l | tr -d ' ')
+    docstring_count=$({ xargs grep -l '"""' <<<"$py_files" 2>/dev/null || true; } | wc -l | tr -d ' ')
     echo "### Python"
     echo "- Files scanned: ${total_py_files}"
     echo "- Files with docstrings: ${docstring_count}"
@@ -151,10 +170,11 @@ if [[ -n "$py_files" ]]; then
 fi
 
 # Check for Go doc comments
-go_files=$(find . -type f -name "*.go" -not -path "./node_modules/*" -not -path "./.git/*" 2>/dev/null | head -100)
+all_go_files=$(find . -type f -name "*.go" -not -path "./node_modules/*" -not -path "./.git/*" 2>/dev/null || true)
+go_files=$(head -n 100 <<<"$all_go_files")
 if [[ -n "$go_files" ]]; then
     total_go_files=$(echo "$go_files" | wc -l | tr -d ' ')
-    godoc_count=$(echo "$go_files" | xargs grep -l "^// [A-Z]" 2>/dev/null | wc -l | tr -d ' ')
+    godoc_count=$({ xargs grep -l "^// [A-Z]" <<<"$go_files" 2>/dev/null || true; } | wc -l | tr -d ' ')
     echo "### Go"
     echo "- Files scanned: ${total_go_files}"
     echo "- Files with doc comments: ${godoc_count}"

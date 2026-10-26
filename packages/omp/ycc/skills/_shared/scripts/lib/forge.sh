@@ -129,7 +129,7 @@ forge_probe_gitea_family() {
     *version*)
       local server
       server="$(curl -fsSLI --max-time 5 "https://${host}/api/v1/version" 2>/dev/null | tr -d '\r')"
-      if printf '%s' "$server" | grep -qi 'forgejo'; then
+      if grep -qi 'forgejo' <<<"$server"; then
         printf 'forgejo'
       else
         printf 'gitea'

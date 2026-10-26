@@ -197,7 +197,7 @@ PYEOF
   fi
   local first_line
   first_line="$(head -1 "$CONFIG_FILE")"
-  if echo "$first_line" | grep -q "Advisory only"; then
+  if grep -q "Advisory only" <<<"$first_line"; then
     add_check "advisory-comment" "PASS" "file leads with advisory comment"
   else
     add_check "advisory-comment" "FAIL" "file must lead with '# Advisory only ...' comment; got: ${first_line}"

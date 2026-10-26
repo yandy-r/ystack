@@ -220,7 +220,7 @@ else
     # Try to extract type and scope from first commit
     FIRST_COMMIT=$(git log --format=%s -n1 HEAD)
 
-    if echo "$FIRST_COMMIT" | grep -qE '^[a-z]+(\([a-z0-9-]+\))?:'; then
+    if grep -qE '^[a-z]+(\([a-z0-9-]+\))?:' <<<"$FIRST_COMMIT"; then
         TYPE=$(echo "$FIRST_COMMIT" | grep -oE '^[a-z]+')
         SCOPE=$(echo "$FIRST_COMMIT" | grep -oE '\([a-z0-9-]+\)' | tr -d '()' || echo "")
 
@@ -256,9 +256,13 @@ else
 fi
 echo ""
 
-# Check for breaking changes in commits
+# Check for breaking changes in commits. Capture git log output first and
+# match with a here-string, not `git log | grep -q`: under pipefail the
+# early-exiting grep SIGPIPEs git once the log exceeds the pipe buffer and a
+# present BREAKING CHANGE reads as absent (YAN-1587).
+COMMIT_MESSAGES=$(git log --format=%B "$MERGE_BASE..HEAD")
 echo -e "${GREEN}Breaking Changes:${NC}"
-if git log --format=%B "$MERGE_BASE..HEAD" | grep -qE 'BREAKING CHANGE:|^[a-z]+(\([a-z0-9-]+\))?!:'; then
+if grep -qE 'BREAKING CHANGE:|^[a-z]+(\([a-z0-9-]+\))?!:' <<<"$COMMIT_MESSAGES"; then
     echo "  ⚠ Breaking changes detected in commits"
     { git log --format=%s "$MERGE_BASE..HEAD" | grep -E '^[a-z]+(\([a-z0-9-]+\))?!:' || true; } | while IFS= read -r line; do
         echo "    - $line"

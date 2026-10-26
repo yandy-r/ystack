@@ -219,8 +219,12 @@ if [[ "${PROVIDER}" == "github" ]]; then
     fi
 else
     # tea has no per-tag "view"; list releases as JSON and match the tag_name.
-    if tea release list --output json 2>/dev/null \
-        | grep -qE "\"tag_name\"[[:space:]]*:[[:space:]]*\"${TAG}\""; then
+    # Capture the list first and match with a here-string, not
+    # `tea ... | grep -q`: under pipefail the early-exiting grep SIGPIPEs tea
+    # on a large release list and an existing release reads as absent
+    # (YAN-1587).
+    TEA_RELEASES="$(tea release list --output json 2>/dev/null || true)"
+    if grep -qE "\"tag_name\"[[:space:]]*:[[:space:]]*\"${TAG}\"" <<<"${TEA_RELEASES}"; then
         RELEASE_EXISTS=1
     fi
 fi
