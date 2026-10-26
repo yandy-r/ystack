@@ -499,6 +499,12 @@ TEA_EMPTY_BIN="${SCRATCH}/tea-empty-bin"
 mkdir -p "$TEA_EMPTY_BIN"
 printf '#!/usr/bin/env bash\nprintf "| NAME | URL |\\n"\nexit 1\n' >"${TEA_EMPTY_BIN}/tea"
 chmod +x "${TEA_EMPTY_BIN}/tea"
+# A tea that lists a login but exits non-zero: the probes keep the output.
+TEA_FAILING_BIN="${SCRATCH}/tea-failing-bin"
+mkdir -p "$TEA_FAILING_BIN"
+printf '#!/usr/bin/env bash\nprintf "| forge | https://forge.example.test | forge.example.test |\\n"\nexit 1\n' \
+    >"${TEA_FAILING_BIN}/tea"
+chmod +x "${TEA_FAILING_BIN}/tea"
 
 # forge_tea_probe <bin-dir> <fn> <arg> — call a forge.sh probe the way
 # consumers do: sourced into a `set -euo pipefail` shell with <bin-dir>'s
@@ -533,6 +539,12 @@ if ! forge_tea_probe "$TEA_EMPTY_BIN" forge_host_in_tea ""; then
     pass "forge: forge_host_in_tea rejects an empty host"
 else
     fail "forge: forge_host_in_tea matched an empty host"
+fi
+if forge_tea_probe "$TEA_FAILING_BIN" forge_host_in_tea forge.example.test \
+    && forge_tea_probe "$TEA_FAILING_BIN" forge_auth_ok gitea; then
+    pass "forge: probes keep a listed login when tea exits non-zero"
+else
+    fail "forge: probes dropped a listed login when tea exited non-zero"
 fi
 
 # --- Summary ------------------------------------------------------------------
