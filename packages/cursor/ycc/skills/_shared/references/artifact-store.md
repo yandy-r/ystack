@@ -132,7 +132,7 @@ Linear mode stores a gitignored cache:
 
 ## Frontmatter
 
-In linear mode, merge identity keys into existing frontmatter; do not replace other keys or add a `ycc:` namespace. Local mode writes no identity frontmatter.
+In linear mode, merge identity keys into existing frontmatter as top-level keys; do not replace other keys or nest them under a namespace. Local mode writes no identity frontmatter.
 
 | Field                 | Meaning                                                                                                |
 | --------------------- | ------------------------------------------------------------------------------------------------------ |
