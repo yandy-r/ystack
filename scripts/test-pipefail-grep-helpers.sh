@@ -240,7 +240,7 @@ VC_MSG="$(cat "${SCRATCH}/vc-msg.txt")"
 VC_BYTES=${#VC_MSG}
 
 old_vc_grep() { echo "$VC_MSG" | grep -qE 'BREAKING CHANGE:'; }
-old_vc_head() { local s; s=$(echo "$VC_MSG" | head -n1); }
+old_vc_head() { local s; s=$(echo "$VC_MSG" | head -n1) || return; [[ -n "$s" ]]; }
 control_sigpipes "validate-commit (footer grep)" 400 old_vc_grep
 control_sigpipes "validate-commit (subject head -n1)" 400 old_vc_head
 
