@@ -249,7 +249,7 @@ print_human_section() {
       else
         echo "- ${name}: FAIL"
         if [[ -n "${COMBINED[$i]}" ]]; then
-          while IFS= read -r line; do printf '  %s\n' "$line"; done < <(printf '%s\n' "${COMBINED[$i]}" | head -3)
+          while IFS= read -r line; do printf '  %s\n' "$line"; done < <(head -n 3 <<<"${COMBINED[$i]}")
           echo "  ---"
           while IFS= read -r line; do printf '  %s\n' "$line"; done <<< "${COMBINED[$i]}"
         fi

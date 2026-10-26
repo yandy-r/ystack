@@ -89,11 +89,13 @@ fi
 echo "Validating: $SPEC_FILE"
 echo "=========================================="
 
-# Read file content
+# Read file content. Match against it with here-strings, not `echo | grep -q`:
+# under pipefail an early-exiting reader SIGPIPEs the echo writer and a
+# present section reads as missing (YAN-1587).
 CONTENT=$(cat "$SPEC_FILE")
 
 # Check for title
-if echo "$CONTENT" | grep -q "^# Feature Spec:"; then
+if grep -q "^# Feature Spec:" <<<"$CONTENT"; then
     log_success "Title present"
 else
     log_error "Missing title (should start with '# Feature Spec: [Name]')"
@@ -103,7 +105,7 @@ fi
 echo ""
 echo "Checking required sections..."
 for section in "${REQUIRED_SECTIONS[@]}"; do
-    if echo "$CONTENT" | grep -q "^${section}"; then
+    if grep -q "^${section}" <<<"$CONTENT"; then
         log_success "Found: $section"
     else
         log_error "Missing required section: $section"
@@ -114,7 +116,7 @@ done
 echo ""
 echo "Checking recommended sections..."
 for section in "${RECOMMENDED_SECTIONS[@]}"; do
-    if echo "$CONTENT" | grep -q "^${section}"; then
+    if grep -q "^${section}" <<<"$CONTENT"; then
         log_success "Found: $section"
     else
         log_warning "Missing recommended section: $section"
@@ -132,7 +134,7 @@ for check in "${SUBSECTION_CHECKS[@]}"; do
     found=false
     IFS='|' read -ra SUBS <<< "$subsections"
     for sub in "${SUBS[@]}"; do
-        if echo "$CONTENT" | grep -q "^${sub}"; then
+        if grep -q "^${sub}" <<<"$CONTENT"; then
             found=true
             break
         fi
@@ -197,7 +199,7 @@ placeholders=(
 )
 
 for placeholder in "${placeholders[@]}"; do
-    if echo "$CONTENT" | grep -qi "$placeholder"; then
+    if grep -qi "$placeholder" <<<"$CONTENT"; then
         log_warning "Found potential placeholder text: $placeholder"
     fi
 done
@@ -231,7 +233,7 @@ fi
 # Check for links
 echo ""
 echo "Checking links..."
-links=$(echo "$CONTENT" | grep -oE '\[([^\]]+)\]\(([^\)]+)\)' | wc -l | tr -d ' ')
+links=$(grep -oE '\[([^\]]+)\]\(([^\)]+)\)' <<<"$CONTENT" | wc -l | tr -d ' ' || true)
 if [[ $links -gt 0 ]]; then
     log_success "Found $links links"
 

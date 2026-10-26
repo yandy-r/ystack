@@ -273,7 +273,7 @@ PYEOF
 }
 
 # Check for PARSE_ERROR prefix in stdout (belt-and-suspenders)
-if echo "$PARSE_RESULT" | grep -q "^PARSE_ERROR:"; then
+if grep -q "^PARSE_ERROR:" <<<"$PARSE_RESULT"; then
   echo "$PARSE_RESULT" | grep "^PARSE_ERROR:" | sed 's/^PARSE_ERROR://' >&2
   exit 2
 fi

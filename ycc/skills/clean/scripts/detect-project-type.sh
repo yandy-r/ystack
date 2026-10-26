@@ -193,7 +193,7 @@ detect_go() {
     fi
 
     # Check for .go files
-    if find "$TARGET_DIR" -maxdepth 2 -name "*.go" -type f | grep -q .; then
+    if find "$TARGET_DIR" -maxdepth 2 -name "*.go" -type f -print -quit | grep -q .; then
         score=$((score + 3))
         echo "  ✓ .go files found"
     fi
@@ -221,7 +221,7 @@ detect_rust() {
         echo "  ✓ Cargo.lock found"
     fi
 
-    if dir_exists "src" && find "$TARGET_DIR/src" -name "*.rs" -type f | grep -q .; then
+    if dir_exists "src" && find "$TARGET_DIR/src" -name "*.rs" -type f -print -quit | grep -q .; then
         score=$((score + 3))
         echo "  ✓ Rust source files found"
     fi

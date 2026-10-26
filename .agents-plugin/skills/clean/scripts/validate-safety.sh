@@ -138,10 +138,13 @@ echo "=========================================="
 
 # Extract file paths from report (simplified - looks for markdown file path patterns)
 FLAGGED_FILES=$(grep -E '^\|.*\|.*\|.*\|' "$REPORT_PATH" | grep -v '^|---' | grep -v '^| File Path' | cut -d'|' -f2 | tr -d ' ' | grep -v '^$' || true)
+# FLAGGED_FILES is matched with here-strings, not `echo | grep -q`: under
+# pipefail an early-exiting reader SIGPIPEs the echo writer and a present
+# entry reads as missing (YAN-1587).
 
 protected_dir_violations=0
 for dir in "${PROTECTED_DIRS[@]}"; do
-    if echo "$FLAGGED_FILES" | grep -q "/$dir/\|^$dir/"; then
+    if grep -q "/$dir/\|^$dir/" <<<"$FLAGGED_FILES"; then
         log_violation "Protected directory found in removal list: $dir"
         ((protected_dir_violations+=1))
     fi
@@ -158,7 +161,7 @@ echo "=========================================="
 
 protected_file_violations=0
 for file in "${PROTECTED_FILES[@]}"; do
-    if echo "$FLAGGED_FILES" | grep -qE "(^|/)$file$"; then
+    if grep -qE "(^|/)$file$" <<<"$FLAGGED_FILES"; then
         log_violation "Protected file found in removal list: $file"
         ((protected_file_violations+=1))
     fi
@@ -277,7 +280,7 @@ for pattern in "${SECURITY_PATTERNS[@]}"; do
     # Convert glob pattern to grep pattern
     grep_pattern=$(echo "$pattern" | sed 's/\*/.*/')
 
-    if echo "$FLAGGED_FILES" | grep -qE "$grep_pattern"; then
+    if grep -qE "$grep_pattern" <<<"$FLAGGED_FILES"; then
         log_warning "Security-sensitive file pattern detected: $pattern"
         ((security_issues+=1))
     fi
@@ -311,8 +314,8 @@ fi
 if command -v du &> /dev/null; then
     total_size_line=$(grep -i "total size\|space.*recover" "$REPORT_PATH" | head -1 || true)
 
-    if echo "$total_size_line" | grep -qi "GB"; then
-        size_value=$(echo "$total_size_line" | grep -oP '\d+\.?\d*(?=\s*GB)' | head -1 || echo "0")
+    if grep -qi "GB" <<<"$total_size_line"; then
+        size_value=$(grep -oP '\d+\.?\d*(?=\s*GB)' <<<"$total_size_line" | head -1 || echo "0")
         if (( $(echo "$size_value > 10" | bc -l) )); then
             log_warning "Large total size detected: ${size_value}GB - verify this is correct"
         fi
@@ -337,7 +340,7 @@ if [[ -f "$TARGET_DIR/.cleanupignore" ]]; then
             continue
         fi
 
-        if echo "$FLAGGED_FILES" | grep -q "$protected_item"; then
+        if grep -q "$protected_item" <<<"$FLAGGED_FILES"; then
             log_violation "Custom protected item found in removal list: $protected_item"
         fi
     done < "$TARGET_DIR/.cleanupignore"

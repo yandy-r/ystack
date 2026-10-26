@@ -63,8 +63,12 @@ generate_tree() {
 
 # Get recently updated files (portable across GNU/BSD)
 get_recent_files() {
-    # Find all markdown files and get their timestamps using portable stat
-    find "$DOCS_DIR" -type f -name "*.md" 2>/dev/null | while IFS= read -r file; do
+    # Find all markdown files and get their timestamps using portable stat.
+    # Sort into a variable and trim with head on a here-string, not
+    # `sort | head`: under pipefail an early-exiting head SIGPIPEs the writer
+    # (YAN-1587).
+    local stamped sorted
+    stamped="$(find "$DOCS_DIR" -type f -name "*.md" 2>/dev/null | while IFS= read -r file; do
         # Try GNU stat first, fallback to BSD stat
         if timestamp=$(stat -c '%Y' "$file" 2>/dev/null); then
             # GNU stat
@@ -73,7 +77,10 @@ get_recent_files() {
             # BSD stat
             echo "$timestamp $file"
         fi
-    done | sort -rn | head -10 | while read -r timestamp file; do
+    done)"
+    [[ -n "$stamped" ]] || return 0
+    sorted="$(sort -rn <<<"$stamped")"
+    head -n 10 <<<"$sorted" | while read -r timestamp file; do
         # Format date (both GNU and BSD date support -r)
         local date
         date=$(date -d "@$timestamp" '+%Y-%m-%d' 2>/dev/null || date -r "$timestamp" '+%Y-%m-%d' 2>/dev/null)

@@ -43,8 +43,13 @@ echo -e "${GREEN}=== Commit Message Validation ===${NC}\n"
 echo "Validating: $COMMIT_MSG"
 echo ""
 
-# Extract the subject line (first line)
-SUBJECT=$(echo "$COMMIT_MSG" | head -n1)
+# Match variables with here-strings, not `echo | grep -q`: under pipefail an
+# early-exiting reader SIGPIPEs the echo writer and a present pattern reads
+# as missing (YAN-1587).
+
+# Extract the subject line (first line). Parameter expansion keeps the whole
+# message in memory — no echo writer for an early-exiting head to SIGPIPE.
+SUBJECT="${COMMIT_MSG%%$'\n'*}"
 
 # Check if message is empty
 if [ -z "$SUBJECT" ]; then
@@ -54,7 +59,7 @@ if [ -z "$SUBJECT" ]; then
 fi
 
 # Validate format: <type>(<scope>): <subject> or <type>: <subject>
-if ! echo "$SUBJECT" | grep -qE '^[a-z]+(\([a-z0-9-]+\))?!?: .+'; then
+if ! grep -qE '^[a-z]+(\([a-z0-9-]+\))?!?: .+' <<<"$SUBJECT"; then
     echo -e "${RED}✗ Error: Subject line doesn't match conventional commit format${NC}"
     echo "  Expected: <type>(<scope>): <subject> or <type>: <subject>"
     echo "  Got: $SUBJECT"
@@ -86,23 +91,23 @@ if [ -n "$TYPE" ]; then
 fi
 
 # Extract scope (if present)
-if echo "$SUBJECT" | grep -qE '\([a-z0-9-]+\)'; then
+if grep -qE '\([a-z0-9-]+\)' <<<"$SUBJECT"; then
     SCOPE=$(echo "$SUBJECT" | grep -oE '\([a-z0-9-]+\)' | tr -d '()')
     echo -e "${GREEN}✓ Scope '$SCOPE' is present${NC}"
 
     # Check scope format (lowercase, alphanumeric + hyphens)
-    if ! echo "$SCOPE" | grep -qE '^[a-z0-9-]+$'; then
+    if ! grep -qE '^[a-z0-9-]+$' <<<"$SCOPE"; then
         echo -e "${YELLOW}⚠ Warning: Scope should be lowercase alphanumeric with hyphens${NC}"
         WARNINGS=$((WARNINGS + 1))
     fi
 fi
 
 # Check for breaking change indicator (!)
-if echo "$SUBJECT" | grep -qE '!:'; then
+if grep -qE '!:' <<<"$SUBJECT"; then
     echo -e "${YELLOW}⚠ Breaking change indicator detected (!)${NC}"
 
     # Check if BREAKING CHANGE footer is present in full message
-    if ! echo "$COMMIT_MSG" | grep -qE 'BREAKING CHANGE:'; then
+    if ! grep -qE 'BREAKING CHANGE:' <<<"$COMMIT_MSG"; then
         echo -e "${YELLOW}⚠ Warning: Breaking change indicator used but no BREAKING CHANGE footer found${NC}"
         echo "  Consider adding: BREAKING CHANGE: <description>"
         WARNINGS=$((WARNINGS + 1))
@@ -128,7 +133,7 @@ if [ -n "$SUBJECT_TEXT" ]; then
 
     # Check if subject starts with uppercase (should be lowercase)
     FIRST_CHAR=$(echo "$SUBJECT_TEXT" | cut -c1)
-    if echo "$FIRST_CHAR" | grep -qE '[A-Z]'; then
+    if grep -qE '[A-Z]' <<<"$FIRST_CHAR"; then
         # Portable lowercase conversion using bash parameter expansion
         REST="${SUBJECT_TEXT:1}"
         LOWERCASE_FIRST="${FIRST_CHAR,,}"
@@ -143,7 +148,7 @@ if [ -n "$SUBJECT_TEXT" ]; then
     fi
 
     # Check if subject ends with period (should not)
-    if echo "$SUBJECT_TEXT" | grep -qE '\.$'; then
+    if grep -qE '\.$' <<<"$SUBJECT_TEXT"; then
         echo -e "${YELLOW}⚠ Warning: Subject should not end with a period${NC}"
         WARNINGS=$((WARNINGS + 1))
     else
@@ -154,7 +159,7 @@ if [ -n "$SUBJECT_TEXT" ]; then
     FIRST_WORD=$(echo "$SUBJECT_TEXT" | awk '{print $1}')
 
     # Common non-imperative patterns
-    if echo "$FIRST_WORD" | grep -qE '(added|fixed|updated|changed|removed|deleted)$'; then
+    if grep -qE '(added|fixed|updated|changed|removed|deleted)$' <<<"$FIRST_WORD"; then
         echo -e "${YELLOW}⚠ Warning: Use imperative mood (add, fix, update, not added, fixed, updated)${NC}"
         echo "  Got: '$FIRST_WORD'"
         echo "  Prefer: '$(echo "$FIRST_WORD" | sed 's/ed$//' | sed 's/d$//')'"
@@ -193,11 +198,11 @@ if [ "$BODY_LINES" -gt 0 ]; then
 fi
 
 # Check for BREAKING CHANGE footer
-if echo "$COMMIT_MSG" | grep -qE 'BREAKING CHANGE:'; then
+if grep -qE 'BREAKING CHANGE:' <<<"$COMMIT_MSG"; then
     echo -e "${YELLOW}⚠ Breaking change footer detected${NC}"
 
     # Verify format
-    if echo "$COMMIT_MSG" | grep -qE '^BREAKING CHANGE: .+'; then
+    if grep -qE '^BREAKING CHANGE: .+' <<<"$COMMIT_MSG"; then
         echo -e "${GREEN}✓ BREAKING CHANGE footer is properly formatted${NC}"
     else
         echo -e "${RED}✗ Error: BREAKING CHANGE footer format incorrect${NC}"
@@ -207,7 +212,7 @@ if echo "$COMMIT_MSG" | grep -qE 'BREAKING CHANGE:'; then
 fi
 
 # Check for issue references
-if echo "$COMMIT_MSG" | grep -qE '(Fixes|Closes|Resolves|Related to) #[0-9]+'; then
+if grep -qE '(Fixes|Closes|Resolves|Related to) #[0-9]+' <<<"$COMMIT_MSG"; then
     echo -e "${GREEN}✓ Issue reference found${NC}"
 fi
 

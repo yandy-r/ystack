@@ -83,17 +83,17 @@ categorize_file() {
     local file="$1"
 
     # Test files
-    if echo "$file" | grep -qE '(test|spec|__tests__|\.test\.|\.spec\.)'; then
+    if grep -qE '(test|spec|__tests__|\.test\.|\.spec\.)' <<<"$file"; then
         return 1
     fi
 
     # Documentation files
-    if echo "$file" | grep -qE '\.(md|txt|rst|adoc)$|^docs/'; then
+    if grep -qE '\.(md|txt|rst|adoc)$|^docs/' <<<"$file"; then
         return 2
     fi
 
     # Config files
-    if echo "$file" | grep -qE '\.(json|yaml|yml|toml|ini|conf|config)$|^\.|package\.json|tsconfig|eslint|prettier'; then
+    if grep -qE '\.(json|yaml|yml|toml|ini|conf|config)$|^\.|package\.json|tsconfig|eslint|prettier' <<<"$file"; then
         return 3
     fi
 
@@ -111,8 +111,9 @@ ALL_CHANGED_FILES=$(
 # Categorize each file
 while IFS= read -r file; do
     if [ -n "$file" ]; then
-        categorize_file "$file"
-        case $? in
+        rc=0
+        categorize_file "$file" || rc=$?
+        case "$rc" in
             0) SOURCE_FILES=$((SOURCE_FILES + 1)) ;;
             1) TEST_FILES=$((TEST_FILES + 1)) ;;
             2) DOC_FILES=$((DOC_FILES + 1)) ;;
@@ -179,14 +180,17 @@ fi
 show_files_by_category() {
     local category="$1"
     local pattern="$2"
-    local files
+    local files rc
 
     if [ "$category" = "Source" ]; then
         # Source files are those that don't match other patterns
         files=$(echo "$ALL_CHANGED_FILES" | while IFS= read -r file; do
             if [ -n "$file" ]; then
-                categorize_file "$file"
-                [ $? -eq 0 ] && echo "$file"
+                rc=0
+                categorize_file "$file" || rc=$?
+                if [ "$rc" -eq 0 ]; then
+                    echo "$file"
+                fi
             fi
         done)
     else
@@ -242,14 +246,17 @@ else
     echo "Potential agent scopes:"
     echo "$ALL_CHANGED_FILES" | grep -v '^$' | xargs -r dirname | sort | uniq -c | sort -rn | head -5 | while read -r count dir; do
         scope=$(basename "$dir")
-        [ "$scope" != "." ] && echo "  - Agent for: $scope ($count files)"
+        if [ "$scope" != "." ]; then
+            echo "  - Agent for: $scope ($count files)"
+        fi
     done
     echo ""
 fi
 
 # Check for common patterns that might need documentation
 NEEDS_DOCS=false
-if echo "$ALL_CHANGED_FILES" | grep -qE '^(src/|lib/|app/)'; then
+# A here-string avoids SIGPIPE from an early grep match under pipefail.
+if grep -qE '^(src/|lib/|app/)' <<<"$ALL_CHANGED_FILES"; then
     if [ "$SOURCE_FILES" -ge 3 ]; then
         NEEDS_DOCS=true
     fi

@@ -315,7 +315,7 @@ detect_ci() {
     [[ -z "$file" ]] && continue
     scan="$(scan_workflow "$file")"
     branches="${branches}$(printf '%s\n' "$scan" | sed -n 's/^B //p')"$'\n'
-    if [[ -z "$publish" ]] && printf '%s\n' "$scan" | grep -qE '^(T|R)$'; then
+    if [[ -z "$publish" ]] && grep -qE '^(T|R)$' <<<"$scan"; then
       publish="${file#"${ROOT}"/}"
     fi
   done < <(workflow_files)
@@ -389,10 +389,16 @@ detect_sync_merges() {
 
 detect_linear_refs() {
   local base="$1" key_re='(^|[^A-Za-z0-9])[A-Z]{2,}-[0-9]+' deny_re='(CVE|UTF|ISO|RFC|SHA|PEP)-[0-9]'
-  if {
+  # Capture each stage and match with here-strings, not a pipeline ending in
+  # `grep -q`: under pipefail the early-exiting reader SIGPIPEs the writer on
+  # repos with many refs and a present key reads as absent (YAN-1587).
+  local names filtered
+  names="$({
     g log -n "$RECENT_COMMITS" --format='%s' "$base" 2>/dev/null
     g for-each-ref --format='%(refname:short)' refs/heads refs/remotes
-  } | grep -Ev "$deny_re" | grep -Eq "$key_re"; then
+  } || true)"
+  filtered="$(grep -Ev "$deny_re" <<<"$names" || true)"
+  if grep -Eq "$key_re" <<<"$filtered"; then
     echo 1
   else
     echo 0

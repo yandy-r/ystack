@@ -114,11 +114,11 @@ cmd_reply() {
   require_arg "root_comment_id" "$root_id"
   require_arg "body"            "$body"
 
-  if ! printf '%s' "$pr" | grep -qE '^[0-9]+$'; then
+  if ! grep -qE '^[0-9]+$' <<<"$pr"; then
     printf 'resolve-thread.sh: pr_number must be a positive integer, got: %s\n' "$pr" >&2
     exit 1
   fi
-  if ! printf '%s' "$root_id" | grep -qE '^[0-9]+$'; then
+  if ! grep -qE '^[0-9]+$' <<<"$root_id"; then
     printf 'resolve-thread.sh: root_comment_id must be a positive integer, got: %s\n' "$root_id" >&2
     exit 1
   fi
@@ -139,7 +139,7 @@ cmd_issue_reply() {
   require_arg "pr_number" "$pr"
   require_arg "body"      "$body"
 
-  if ! printf '%s' "$pr" | grep -qE '^[0-9]+$'; then
+  if ! grep -qE '^[0-9]+$' <<<"$pr"; then
     printf 'resolve-thread.sh: pr_number must be a positive integer, got: %s\n' "$pr" >&2
     exit 1
   fi

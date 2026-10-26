@@ -118,7 +118,9 @@ PYEOF
 
     if $dry_run; then
         info "[dry-run] would write $dest"
-        printf '%s' "$rendered" | head -20
+        # Print the preview from a here-string, not `printf | head`: under
+        # pipefail the early-exiting head SIGPIPEs the writer (YAN-1587).
+        head -n 20 <<<"$rendered"
         return 0
     fi
 

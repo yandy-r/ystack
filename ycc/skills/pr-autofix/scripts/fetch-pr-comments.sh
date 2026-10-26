@@ -131,7 +131,7 @@ done
 require_arg "--pr"  "$PR"
 require_arg "--out" "$OUT"
 
-if ! printf '%s' "$PR" | grep -qE '^[0-9]+$'; then
+if ! grep -qE '^[0-9]+$' <<<"$PR"; then
   printf 'fetch-pr-comments.sh: --pr must be a positive integer, got: %s\n' "$PR" >&2
   exit 1
 fi

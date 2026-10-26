@@ -136,14 +136,17 @@ else
       DETECTED_TYPE="prd"
     else
       # Content-based fallback: check first 40 lines for signature headers
+      # HEAD_CONTENT comes from `head -40 <file>` (no pipe writer); match it
+      # with here-strings, not `echo | grep -q`, so pipefail cannot SIGPIPE
+      # the writer and misread a present header (YAN-1587).
       HEAD_CONTENT=$(head -40 "$SOURCE_PATH" 2>/dev/null || echo "")
-      if echo "$HEAD_CONTENT" | grep -q "## Critically Relevant Files"; then
+      if grep -q "## Critically Relevant Files" <<<"$HEAD_CONTENT"; then
         DETECTED_TYPE="parallel-plan"
-      elif echo "$HEAD_CONTENT" | grep -q "## Mandatory Reading\|## Step-by-Step Tasks"; then
+      elif grep -q "## Mandatory Reading\|## Step-by-Step Tasks" <<<"$HEAD_CONTENT"; then
         DETECTED_TYPE="prp-plan"
-      elif echo "$HEAD_CONTENT" | grep -q "## Problem Statement"; then
+      elif grep -q "## Problem Statement" <<<"$HEAD_CONTENT"; then
         DETECTED_TYPE="prd"
-      elif echo "$HEAD_CONTENT" | grep -q "## Executive Summary"; then
+      elif grep -q "## Executive Summary" <<<"$HEAD_CONTENT"; then
         DETECTED_TYPE="feature-spec"
       else
         ERRORS+=("ERROR: Could not detect source type from file: $BASENAME. Use --type to specify.")
