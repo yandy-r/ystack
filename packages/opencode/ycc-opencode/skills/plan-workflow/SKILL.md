@@ -384,7 +384,7 @@ visual-plan ${STORE_FLAG} "${parallel_plan_file}"
 
 ### Step 34: Display Completion Summary
 
-Skipped when `RESEARCH_ONLY=true` or the user stopped at the checkpoint. Otherwise use the "Full Workflow Complete Summary" in `references/checkpoint-messages.md`. List only files actually created (`--plan-only`: omit Research Phase files). In linear mode replace its implementation command with: "Linear-mode plans are not yet consumable by implement-plan or prp-implement (YAN-1155); use --store=local for plans you will implement now."
+Skipped when `RESEARCH_ONLY=true` or the user stopped at the checkpoint. Otherwise use the "Full Workflow Complete Summary" in `references/checkpoint-messages.md`. List only files actually created (`--plan-only`: omit Research Phase files). In linear mode replace its implementation command with `/ycc:implement-plan --store=linear <feature-slug>`.
 
 ## Optimized Mode
 

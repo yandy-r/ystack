@@ -93,6 +93,19 @@ Provide completion summary:
 
 [List any problems or warnings]
 
+## Linear ← include this section only when ARTIFACT_STORE=linear
+
+- **Issues moved**: [parent/task keys and resulting state types, or none]
+- **Skipped on resume**: [completed task ids/keys; canceled task ids/keys]
+- **Untracked tasks**: [ids without mapped issues; suggest re-saving with /ycc:parallel-plan]
+- **Project**: [URL; completed, or left open with reason]
+- **Plan**: [Document URL]
+- **Report**: [absolute report cache path; Project status update URL, or pending]
+
+### Linear sync pending
+
+[Each unapplied transition/report write, or None; preserve the same list in the report with pending: true while unapplied]
+
 ## Worktree Status ← include this section only when WORKTREE_ACTIVE=true
 
 [Output of list-worktrees.sh]
@@ -122,6 +135,8 @@ LINT_PASS: PASS
 Print every signal verbatim as the last lines of the completion summary. Use `PASS` only
 when the matching criterion in `## Success Criteria` is met; otherwise `FAIL` (for example
 `FILES_CHANGED_NONEMPTY: FAIL` when the "Files Changed" section enumerated no files).
+
+In linear mode, Step 9 already writes kind `report` and Saves a Project status update per `references/linear-sync.md`. Include its URL (or pending failure), issue transitions, skipped tasks and Project completion reason above; do not claim a remote write succeeded without its response. Keep the Goal Signals unchanged and last.
 
 ## Goal pairing
 

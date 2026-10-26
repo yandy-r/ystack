@@ -1,54 +1,86 @@
 #!/usr/bin/env bash
-# Check that required planning documents exist for implementation
-# Usage: check-prerequisites.sh <feature-name>
-#
-# Supports monorepo configurations via .plans-config file.
-# See resolve-plans-dir.sh for configuration options.
-
+# Check that required planning documents exist for implementation.
+# Usage: check-prerequisites.sh <feature-name> [--store=linear|local] [--plan=<path>]
 set -euo pipefail
-
-FEATURE_NAME="${1:-}"
-
-# Source the shared resolver to get PLANS_DIR
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SHARED_DIR="${SCRIPT_DIR}/../../../shared/scripts"
-
-if [[ -f "${SHARED_DIR}/resolve-plans-dir.sh" ]]; then
-  # shellcheck source=../../../shared/scripts/resolve-plans-dir.sh
-  source "${SHARED_DIR}/resolve-plans-dir.sh"
+if [[ -f "${SHARED_DIR}/resolve-artifact-store.sh" ]]; then
+  # shellcheck source=../../../shared/scripts/resolve-artifact-store.sh
+  source "${SHARED_DIR}/resolve-artifact-store.sh"
 else
-  # Fallback if shared resolver not found
-  echo "WARNING: resolve-plans-dir.sh not found, using default path" >&2
-  PLANS_DIR="docs/plans"
+  echo "ERROR: resolve-artifact-store.sh not found at ${SHARED_DIR}" >&2
+  echo "Cannot resolve plans directory safely; refusing to guess." >&2
+  exit 1
 fi
-
-PLAN_DIR="${PLANS_DIR}/${FEATURE_NAME}"
-
-if [[ -z "$FEATURE_NAME" ]]; then
+# shellcheck source=../../../shared/scripts/artifact-body.sh
+source "${SHARED_DIR}/artifact-body.sh"
+FEATURE_NAME='' STORE_FLAG='' PLAN_FILE=''
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --store=*) STORE_FLAG=$1 ;;
+    --plan=*)
+      PLAN_FILE=${1#--plan=}
+      [[ -n "$PLAN_FILE" ]] || { echo 'ERROR: Plan path required' >&2; exit 1; }
+      ;;
+    --*) echo "ERROR: Unknown option: $1" >&2; exit 1 ;;
+    *)
+      if [[ -n "$FEATURE_NAME" ]]; then
+        echo 'Usage: check-prerequisites.sh <feature-name> [--store=linear|local] [--plan=<path>]' >&2
+        exit 1
+      fi
+      FEATURE_NAME=$1
+      ;;
+  esac
+  shift
+done
+if [[ -n "$STORE_FLAG" ]]; then resolve_artifact_store "$PWD" "$STORE_FLAG" || exit 1; fi
+if [[ -z "$FEATURE_NAME" && -z "$PLAN_FILE" ]]; then
   echo "ERROR: Feature name required"
   echo "Usage: check-prerequisites.sh <feature-name>"
   exit 1
 fi
-
+if [[ -n "$PLAN_FILE" ]]; then
+  PLAN_DIR=$(dirname "$PLAN_FILE")
+  if [[ -d "$PLAN_DIR" ]]; then
+    PLAN_DIR=$(CDPATH='' cd -- "$PLAN_DIR" >/dev/null && pwd -P)
+  elif [[ "$PLAN_DIR" != /* ]]; then
+    PLAN_DIR="$PWD/$PLAN_DIR"
+  fi
+  PLAN_FILE="${PLAN_DIR}/$(basename "$PLAN_FILE")"
+  FEATURE_NAME=${FEATURE_NAME:-${PLAN_DIR##*/}}
+else
+  PLAN_DIR="$(get_plans_feature_dir "$FEATURE_NAME")" || exit 1
+  PLAN_FILE="${PLAN_DIR}/parallel-plan.md"
+fi
+hydrate_message() {
+  echo 'Run Lookup and hydrate the plan from Linear before implementation.'
+  echo 'See artifact-store.md, Implementation skills (Resolve and hydrate).'
+}
 if [[ ! -d "$PLAN_DIR" ]]; then
   echo "ERROR: Plan directory not found: $PLAN_DIR"
   echo ""
-  echo "Create the planning documents first:"
-  echo "  1. Run /shared-context ${FEATURE_NAME}"
-  echo "  2. Run /parallel-plan ${FEATURE_NAME}"
+  if [[ "${ARTIFACT_STORE:-}" == linear ]]; then
+    hydrate_message
+  else
+    echo "Create the planning documents first:"
+    echo "  1. Run /shared-context ${FEATURE_NAME}"
+    echo "  2. Run /parallel-plan ${FEATURE_NAME}"
+  fi
   exit 1
 fi
-
-if [[ ! -f "${PLAN_DIR}/parallel-plan.md" ]]; then
-  echo "ERROR: ${PLAN_DIR}/parallel-plan.md not found"
+if [[ ! -f "$PLAN_FILE" ]]; then
+  echo "ERROR: ${PLAN_FILE} not found"
   echo ""
-  echo "The implementation requires a parallel plan to be created first."
-  echo "Run: /parallel-plan ${FEATURE_NAME}"
-  echo ""
-  echo "This will create parallel-plan.md with detailed implementation tasks."
+  if [[ "${ARTIFACT_STORE:-}" == linear ]]; then
+    hydrate_message
+  else
+    echo "The implementation requires a parallel plan to be created first."
+    echo "Run: /parallel-plan ${FEATURE_NAME}"
+    echo ""
+    echo "This will create parallel-plan.md with detailed implementation tasks."
+  fi
   exit 1
 fi
-
 if [[ ! -f "${PLAN_DIR}/shared.md" ]]; then
   echo "WARNING: ${PLAN_DIR}/shared.md not found"
   echo "The shared context document is recommended for implementation."
@@ -57,34 +89,26 @@ if [[ ! -f "${PLAN_DIR}/shared.md" ]]; then
 fi
 
 echo "Prerequisites satisfied"
-echo "  Found: ${PLAN_DIR}/parallel-plan.md"
-
-if [[ -f "${PLAN_DIR}/shared.md" ]]; then
-  echo "  Found: ${PLAN_DIR}/shared.md"
-fi
-
-# Count pattern matches in the plan. grep -c prints the count itself; exit 1
-# only means zero matches. Any other non-zero status is a real read failure.
+echo "  Found: ${PLAN_FILE}"
+if [[ -f "${PLAN_DIR}/shared.md" ]]; then echo "  Found: ${PLAN_DIR}/shared.md"; fi
+# grep -c returns 1 for zero matches; other statuses are real read failures.
 plan_count() {
   local pattern="$1" status=0 count
-  count=$(grep -cE "$pattern" "${PLAN_DIR}/parallel-plan.md" 2>/dev/null) || status=$?
+  if [[ ! -r "$PLAN_FILE" ]]; then
+    echo "ERROR: Failed to read ${PLAN_FILE}" >&2
+    exit 2
+  fi
+  count=$(grep -cE "$pattern" < <(artifact_body "$PLAN_FILE")) || status=$?
   if [[ "$status" -gt 1 ]]; then
-    echo "ERROR: Failed to read ${PLAN_DIR}/parallel-plan.md" >&2
+    echo "ERROR: Failed to read ${PLAN_FILE}" >&2
     exit "$status"
   fi
   echo "$count"
 }
-
-# Count tasks in the plan
 TASK_COUNT=$(plan_count "^#### Task")
 echo "  Tasks in plan: ${TASK_COUNT}"
-
-# Count phases
 PHASE_COUNT=$(plan_count "^### (Phase|Batch)")
 echo "  Phases/Batches in plan: ${PHASE_COUNT}"
-
-# Count independent tasks
 INDEPENDENT_COUNT=$(plan_count "(Depends on \[none\]|\*\*Dependencies\*\*: *[Nn]one)")
 echo "  Independent tasks: ${INDEPENDENT_COUNT}"
-
 exit 0

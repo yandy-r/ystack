@@ -35,21 +35,16 @@
 #   1.1|Create user model|none
 #   1.2|Add validation|none
 #
-# Supports monorepo configurations via .plans-config file.
-# See resolve-plans-dir.sh for configuration options.
 
 set -euo pipefail
 
 PLAN_FILE="${1:-}"
 
-# Source the shared resolver for consistency
+# Strip identity frontmatter before either parsing pass.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SHARED_DIR="${SCRIPT_DIR}/../../../ycc-shared/scripts"
-
-if [[ -f "${SHARED_DIR}/resolve-plans-dir.sh" ]]; then
-  # shellcheck source=../../../ycc-shared/scripts/resolve-plans-dir.sh
-  source "${SHARED_DIR}/resolve-plans-dir.sh" 2>/dev/null || true
-fi
+# shellcheck source=../../../ycc-shared/scripts/artifact-body.sh
+source "${SHARED_DIR}/artifact-body.sh"
 
 if [[ -z "$PLAN_FILE" ]]; then
   echo "Usage: parse-dependencies.sh <path-to-parallel-plan.md>" >&2
@@ -60,6 +55,11 @@ if [[ ! -f "$PLAN_FILE" ]]; then
   echo "ERROR: File not found: $PLAN_FILE" >&2
   exit 1
 fi
+if [[ ! -r "$PLAN_FILE" ]]; then
+  echo "ERROR: Cannot read: $PLAN_FILE" >&2
+  exit 1
+fi
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pass 1 — Extract optional ## Worktree Setup header (parent path + slug).
@@ -89,7 +89,7 @@ in_wt_setup && /^\- \*\*Parent\*\*:/ {
   print "WT_FEATURE_SLUG=" slug
   found = 1
 }
-' "$PLAN_FILE"
+' < <(artifact_body "$PLAN_FILE")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pass 2 — Extract tasks and their dependencies using a state machine.
@@ -195,7 +195,7 @@ pending_id != "" && /^- \*\*Dependencies\*\*:/ {
 END {
   flush_pending()
 }
-' "$PLAN_FILE" | while IFS='|' read -r task_id title deps; do
+' < <(artifact_body "$PLAN_FILE") | while IFS='|' read -r task_id title deps; do
   task_id=$(echo "$task_id" | tr -d ' ')
   title=$(echo "$title" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
   deps=$(echo "$deps" | tr -d ' ')

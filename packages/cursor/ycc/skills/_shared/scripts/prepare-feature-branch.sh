@@ -9,7 +9,7 @@
 # Behavior:
 #   - Rejects an unrelated dirty checkout (only plan-artifact paths allowed:
 #     docs/plans/<slug>/*, docs/orchestration/<slug>*,
-#     docs/prps/{plans,specs,prds}/<slug>*).
+#     docs/prps/{plans,specs,prds}/<slug>*, plus cache-only .gitignore additions).
 #   - On feat/<slug>: idempotent no-op.
 #   - On trunk (main/master/trunk/develop, plus the RELEASING.md trunk) and
 #     feat/<slug> exists: switch to it.
@@ -162,6 +162,28 @@ fi
 #
 # Allow plan-artifact paths; reject anything else.
 
+is_artifact_gitignore() {
+  local root
+  root=$(git rev-parse --show-toplevel)
+  [[ -f "$root/.gitignore" && ! -L "$root/.gitignore" ]] || return 1
+  if git cat-file -e HEAD:.gitignore 2>/dev/null; then
+    # Compare the complete working file with HEAD, including staged changes.
+    git -C "$root" diff --no-ext-diff --no-textconv --unified=0 HEAD -- .gitignore | awk '
+      /^diff --git / || /^index / || /^--- / || /^\+\+\+ / || /^@@ / { next }
+      /^\+\/?\.ycc\/artifacts\/?$/ { added++; next }
+      /^\\ No newline at end of file$/ { next }
+      { bad = 1 }
+      END { exit (bad || !added) }
+    '
+  else
+    awk '
+      /^\/?\.ycc\/artifacts\/?$/ { added++; next }
+      { bad = 1 }
+      END { exit (bad || !added) }
+    ' "$root/.gitignore"
+  fi
+}
+
 is_plan_artifact() {
   local path="$1"
   case "$path" in
@@ -170,6 +192,7 @@ is_plan_artifact() {
     docs/prps/plans/"${FEATURE_SLUG}"*) return 0 ;;
     docs/prps/specs/"${FEATURE_SLUG}"*) return 0 ;;
     docs/prps/prds/"${FEATURE_SLUG}"*) return 0 ;;
+    .gitignore) is_artifact_gitignore; return $? ;;
     *) return 1 ;;
   esac
 }

@@ -221,6 +221,44 @@ Switched to a new branch 'feat/demo'" "prep: no RELEASING.md stderr unchanged"
   assert_exit "$PREP_RC" 2 "prep: no RELEASING.md does not treat develop2 as a trunk"
 }
 
+test_prep_artifact_gitignore() {
+  local repo rule staged
+  for rule in '.ycc/artifacts/' '/.ycc/artifacts/' '.ycc/artifacts' '/.ycc/artifacts'; do
+    for staged in no yes; do
+      repo="$(mkrepo)"
+      commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
+      printf '%s\n' "$rule" >>"${repo}/.gitignore"
+      if [[ "$staged" == yes ]]; then git -C "$repo" add .gitignore; fi
+      run_prep "$repo" demo
+      assert_exit "$PREP_RC" 0 "prep: accepts $staged staged cache-only rule $rule"
+      assert_contains "$(cat "${repo}/.gitignore")" "$rule" 'prep: carries cache ignore onto feature branch'
+    done
+    repo="$(mkrepo)"
+    printf '%s\n' "$rule" >"${repo}/.gitignore"
+    run_prep "$repo" demo
+    assert_exit "$PREP_RC" 0 "prep: accepts untracked cache-only rule $rule"
+  done
+
+  repo="$(mkrepo)"
+  commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
+  printf '%s\n' '.ycc/artifacts/' 'unrelated/' >>"${repo}/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects cache rule plus unrelated addition'
+  assert_contains "$PREP_ERR" '.gitignore' 'prep: identifies unrelated gitignore'
+
+  repo="$(mkrepo)"
+  commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
+  printf '%s\n' '.ycc/artifacts/' >"${repo}/.gitignore"
+  git -C "$repo" add .gitignore
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects staged deletion plus cache addition'
+
+  repo="$(mkrepo)"
+  printf '%s\n' '.ycc/artifacts/' 'unrelated/' >"${repo}/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects unrelated untracked gitignore rule'
+}
+
 test_prep_state_trunk_nonstandard() {
   local repo
   repo="$(mkrepo)"
@@ -573,7 +611,14 @@ case "$1 $2" in
   "auth status") exit 0 ;;
   "repo view") echo main ;;
   "pr list") echo "" ;;
-  "pr create") shift 2; printf '%s\n' "$@" >>"$GH_LOG" ;;
+  "pr create")
+    shift 2
+    printf '%s\n' "$@" >>"$GH_LOG"
+    while [[ $# -gt 0 ]]; do
+      if [[ "$1" == --body ]]; then printf '%s\n' "$2" >"${GH_LOG}.body"; break; fi
+      shift
+    done
+    ;;
   *) exit 1 ;;
 esac
 STUB
@@ -634,9 +679,71 @@ test_create_pr() {
   assert_eq "$(cat "$GH_LOG")" "" "create-pr: no PR created after a refusal"
 }
 
+gh_related_issues() {
+  awk '/^## Related Issues$/ { related = 1; next }
+       related && /^## / { exit }
+       related && NF { print }' "${GH_LOG}.body"
+}
+
+test_create_pr_related_issues() {
+  local repo expected helper_root CREATE_PR="$CREATE_PR"
+  local warning='Skipping Linear issue links: no ARTIFACT_LINEAR_TEAM configured and no Linear MCP to verify keys.'
+  stub_gh
+  repo="$(mkrepo)"
+  git -C "$repo" checkout -q -b feat/yan-11-related
+  commit_file "$repo" .plans-config $'scope: local\nlinear_team: YAN' 'chore: configure team'
+  commit_file "$repo" old.txt old $'fix: older\n\nCloses YAN-12\nCloses #10\nFixes #9'
+  commit_file "$repo" new.txt new $'fix: newer\n\nRefs YAN-15\nRefs YAN-12\nCloses YAN-11\nCloses #9\nRefs OTHER-1'
+  git -C "$repo" push -q origin HEAD
+  run_create_pr "$repo" --create
+  assert_exit "$CREATE_RC" 0 'create-pr: related issue collection creates PR'
+  expected=$'Closes YAN-11\nRefs YAN-15\nCloses YAN-12\nCloses #9\nCloses #10'
+  assert_eq "$(gh_related_issues)" "$expected" 'create-pr: action semantics, dedupe, team filter and commit order'
+  if [[ "$CREATE_OUT" != *"$warning"* ]]; then ok 'create-pr: configured team does not warn'; else ko 'create-pr: configured team unexpectedly warns'; fi
+
+  commit_file "$repo" .plans-config 'scope: local' 'chore: remove team'
+  git -C "$repo" push -q origin HEAD
+  run_create_pr "$repo" --create
+  assert_exit "$CREATE_RC" 0 'create-pr: missing team still creates PR'
+  assert_eq "$(gh_related_issues)" $'Closes #9\nCloses #10' 'create-pr: no team skips Linear but keeps GitHub refs'
+  assert_contains "$CREATE_OUT" "$warning" 'create-pr: candidates without team print canonical warning'
+
+  repo="$(mkrepo)"
+  git -C "$repo" checkout -q -b feat/plain
+  commit_file "$repo" plain.txt plain 'feat: plain'
+  git -C "$repo" push -q origin HEAD
+  run_create_pr "$repo" --create
+  assert_exit "$CREATE_RC" 0 'create-pr: no candidates creates PR'
+  assert_eq "$(gh_related_issues)" 'Closes #' 'create-pr: no links keeps placeholder'
+  if [[ "$CREATE_OUT" != *"$warning"* ]]; then ok 'create-pr: no candidates does not warn'; else ko 'create-pr: no candidates unexpectedly warns'; fi
+  git -C "$repo" checkout -q -b feat/yan-99-unverified
+  git -C "$repo" push -q origin HEAD
+  run_create_pr "$repo" --create
+  assert_exit "$CREATE_RC" 0 'create-pr: unverified hint still creates PR'
+  assert_eq "$(gh_related_issues)" 'Closes #' 'create-pr: unverified-only links keep placeholder'
+  assert_contains "$CREATE_OUT" "$warning" 'create-pr: unverified-only hint warns'
+
+  # A copied script tree lets missing/failing optional helpers be tested without
+  # changing the source checkout or relying on a configurable production hook.
+  helper_root="${SANDBOX_ROOT}/optional-helper"
+  mkdir -p "${helper_root}/git-workflow/scripts" "${helper_root}/_shared"
+  cp "$CREATE_PR" "${helper_root}/git-workflow/scripts/create-pr.sh"
+  cp -R "$SHARED" "${helper_root}/_shared/scripts"
+  CREATE_PR="${helper_root}/git-workflow/scripts/create-pr.sh"
+  rm "${helper_root}/_shared/scripts/collect-linear-keys.sh"
+  run_create_pr "$repo" --create
+  assert_exit "$CREATE_RC" 0 'create-pr: missing collector does not prevent PR'
+  assert_eq "$(gh_related_issues)" 'Closes #' 'create-pr: missing collector keeps placeholder'
+  printf '#!/usr/bin/env bash\nexit 1\n' >"${helper_root}/_shared/scripts/collect-linear-keys.sh"
+  run_create_pr "$repo" --create
+  assert_exit "$CREATE_RC" 0 'create-pr: failing collector does not prevent PR'
+  assert_eq "$(gh_related_issues)" 'Closes #' 'create-pr: failing collector keeps placeholder'
+}
+
 # ---------------------------------------------------------------------------
 
 test_prep_no_state_unchanged
+test_prep_artifact_gitignore
 test_prep_state_trunk_nonstandard
 test_prep_branches_from_origin_trunk
 test_prep_from_other_trunk_uses_state_trunk
@@ -650,6 +757,7 @@ test_guard_sync_check
 test_guard_backport_label
 test_guard_backport_label_slow_log
 test_create_pr
+test_create_pr_related_issues
 
 echo
 echo "release branch-prep tests: ${PASS} passed, ${FAIL} failed"

@@ -15,7 +15,7 @@ Execute a parallel implementation plan by deploying implementor agents in depend
 ## Hard Gates
 
 - `--worktree` and `--no-worktree` together → abort (exact message in Arguments).
-- `--dry-run` → print the plan only; never dispatch agents or manage team state. STOP HERE.
+- `--dry-run` → print the plan only; never dispatch agents or manage team state. STOP HERE. In linear mode it also makes no Linear or local writes (no `--ensure`, no cache write); see `references/linear-sync.md`.
 - Always run the branch-prep helper before any dispatch — narrative-only branch instructions are how agents end up committing to `main`.
 - Never pass `isolation: "worktree"` per agent — all agents in all batches share the one feature worktree (or the prepared checkout under `--no-worktree`).
 - Standalone task failure: record it and continue only independent tasks. Team failure: no auto-retry or skipping; ask the user before advancing.
@@ -35,25 +35,26 @@ Final step of the planning workflow; requires `parallel-plan.md` from the parall
      shared.md              parallel-plan.md      parallel-plan.md
 ```
 
-If parallel-plan.md doesn't exist, run `/parallel-plan [feature-name]` first.
+In local mode, if parallel-plan.md doesn't exist, run `/parallel-plan [feature-name]` first. In linear mode, use Phase 0 Lookup before concluding that a plan is missing.
 
 ## Arguments
 
 **Target**: `$ARGUMENTS`
 
-Parse flags first, then treat the remainder as the feature name:
+Parse flags first, then resolve the remaining feature name, plan path, or Linear reference using `references/plan-inputs.md`:
 
 - `--worktree` — (legacy — now default; safe to omit) Accepted as a silent no-op. Worktree isolation is on by default; this flag matches the new default and has no additional effect.
 - `--no-worktree` — Force worktree mode **OFF** regardless of plan annotations. Create/use `feat/<feature-name>` in the current checkout and run tasks there. No feature worktree is created.
-- `<feature-name>` — The name of the feature to implement (matches directory name in `docs/plans/`).
+- `--store=local|linear` — Artifact-store override; strip and retain as `STORE_FLAG` (empty when absent), forwarding it to every resolver call.
+- `<feature-name | plan-path | Linear-reference>` — Existing feature name, cached plan path, or issue key/URL, Project URL/slug, or Document URL/id; see artifact-store.md **Implementation skills > Inputs**.
 
-Strip the supported flags from `$ARGUMENTS` and set `DRY_RUN=true|false`, `WORKTREE_MODE=true|false`, and `WORKTREE_FLAG_PRESENT=true|false`. The remaining non-flag token is the feature name.
+Strip the flags from `$ARGUMENTS` and set ``, `DRY_RUN=true|false`, `WORKTREE_MODE=true|false`, and `WORKTREE_FLAG_PRESENT=true|false`. Retain the remaining input; derive the feature slug during Phase 0.
 
 **Validation**:
 
 - `--worktree` and `--no-worktree` together → abort with: `--worktree and --no-worktree are mutually exclusive. Use --no-worktree to opt out of the default.`
 
-If no feature name remains after stripping flags, abort with this usage line followed by the Examples in `references/plan-inputs.md` (default worktree, `--dry-run`, `--no-worktree`, and the combinations):
+If no input remains after stripping flags, abort with this usage line followed by the Examples in `references/plan-inputs.md`:
 
 Usage: /implement-plan [--dry-run] [--worktree] [--no-worktree] <feature-name>
 
@@ -66,18 +67,26 @@ Read `~/.config/opencode/shared/references/standalone-dispatch.md` for standalon
 
 ### Step 1: Validate Prerequisites
 
-After flag parsing, extract the feature name (first non-flag argument) and run:
+First read `~/.config/opencode/shared/references/artifact-store.md` **Implementation skills**, **Sync**, **Lookup**, and **Helper API**. Apply **Inputs** before resolution (it decides whether the input selects `--store=linear`, including the local-plan-wins and `--store=local` conflict rules). Resolve and print the store (default `local`), retaining the printed mode and absolute paths across tool calls:
 
 ```bash
-~/.config/opencode/skills/implement-plan/scripts/check-prerequisites.sh [feature-name]
+bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
 ```
 
-If the script exits with error: display the error message, instruct the user to run `/parallel-plan` first to create the implementation plan, and **STOP HERE** — do not proceed.
+In linear mode, follow **Resolve and hydrate** (Lookup → Load `parallel-plan` and available `shared`) before prerequisites or branch preparation; retain absolute `PLAN_PATH` and `SHARED_PATH`. Follow `references/linear-sync.md` throughout this run. Local feature-name input keeps the existing prerequisite call:
+
+```bash
+~/.config/opencode/skills/implement-plan/scripts/check-prerequisites.sh ${STORE_FLAG} [feature-name]
+```
+
+For linear mode, call the helper with `${STORE_FLAG} --plan="${PLAN_PATH}" <resolved-slug>`; `PLAN_PATH` must be the absolute hydrated cache path. An explicit local plan path uses `${STORE_FLAG} --plan="${PLAN_PATH}" <feature-name>` without changing its store; with no store flag, the local feature-name call above is unchanged.
+
+If the script exits with error: display the error message and **STOP HERE** — do not proceed. In local mode, instruct the user to run `/parallel-plan` first; in linear mode, preserve Lookup's diagnostics rather than claiming no plan without querying Linear.
 
 ### Step 2: Read Planning Documents
 
-1. `docs/plans/[feature-name]/parallel-plan.md` — the implementation plan
-2. `docs/plans/[feature-name]/shared.md` — architecture context
+1. Local: `docs/plans/[feature-name]/parallel-plan.md` (or explicit plan path); linear: absolute `PLAN_PATH` — the implementation plan
+2. Local: companion `shared.md`; linear: hydrated `SHARED_PATH` when available — architecture context
 
 Also read files listed in the "Critically Relevant Files" section of parallel-plan.md.
 
@@ -85,17 +94,18 @@ Also read files listed in the "Critically Relevant Files" section of parallel-pl
 
 ### Step 3: Extract Tasks
 
-Run when building the execution graph (Phase 1 task extraction):
+For local inputs, set absolute `PLAN_PATH` and companion `SHARED_PATH` from the resolved plan directory (refresh both after worktree relocation); linear mode keeps the absolute cache paths. Run when building the execution graph (Phase 1 task extraction):
 
 ```bash
-~/.config/opencode/skills/implement-plan/scripts/parse-dependencies.sh docs/plans/[feature-name]/parallel-plan.md
+~/.config/opencode/skills/implement-plan/scripts/parse-dependencies.sh "${PLAN_PATH}"
 ```
 
 The script emits optional header lines (`WT_PARENT_PATH=<path>`, `WT_FEATURE_SLUG=<slug>` — present only when the plan has a `## Worktree Setup` section) followed by per-task rows (`TASK_ID|TASK_TITLE|DEPENDENCIES`). Row fields and the monorepo `.plans-config` behavior are documented in `references/plan-inputs.md`.
+Parse task specifications from the body, not identity frontmatter.
 
 ### How Worktree Mode Is Decided
 
-Use standalone-dispatch.md §8.1 for precedence and variables in both modes. Skill input: `WT_FEATURE_SLUG` is the parsed annotation slug if present, otherwise the feature-name argument (no extra sanitization/cap). Always derive `WT_REPO_NAME` and `FEATURE_BRANCH`; `--no-worktree` sets `WORKTREE_ACTIVE=false` even when parser headers exist.
+Use standalone-dispatch.md §8.1 for precedence and variables in both modes. Skill input: `WT_FEATURE_SLUG` is the parsed annotation slug if present, otherwise the resolved feature slug (the feature-name argument in local mode; no extra sanitization/cap). Always derive `WT_REPO_NAME` and `FEATURE_BRANCH`; `--no-worktree` sets `WORKTREE_ACTIVE=false` even when parser headers exist.
 
 ### Step 4: Build Dependency Graph
 
@@ -111,6 +121,7 @@ Use `track the task` for each plan item with `subject="[Task ID] [Task Title]"` 
 `description="<full specification and dependencies>"`. Capture the returned task IDs;
 wire dependencies via `update the todo tracker` with `addBlockedBy` using those IDs. See
 `references/plan-inputs.md` (Task list format).
+In linear mode, reconcile mapped task issues before registration per `references/linear-sync.md`; completed/canceled tasks are skipped, not dispatched, and completed prerequisites count as satisfied.
 
 ### Step 6: Identify First Batch
 
@@ -120,7 +131,7 @@ All tasks with `Depends on [none]` form the first batch; mark them ready for exe
 
 ### Steps 6.5–6.7
 
-Use standalone-dispatch.md §8.2 in both dispatch modes for Git inspection, required branch preparation, one-time parent setup, and one-way artifact relocation. Expected dirty artifacts: `docs/plans/${WT_FEATURE_SLUG}/` only; unrelated dirty files stop and require user cleanup. Move `docs/plans/${WT_FEATURE_SLUG}/parallel-plan.md` with `docs/plans/${WT_FEATURE_SLUG}/shared.md` as companion; other research artifacts from the same feature directory may ride as extra arguments. Keep returned `$PLAN_PATH` canonical; later validation/reports use the execution tree. Branch-prep exit contract: `~/.config/opencode/shared/references/branch-prep.md`.
+Use standalone-dispatch.md §8.2 in both dispatch modes for Git inspection, required branch preparation and one-time parent setup. **Local mode:** expected dirty artifacts: `docs/plans/${WT_FEATURE_SLUG}/` only; unrelated dirty files stop and require user cleanup. Move `docs/plans/${WT_FEATURE_SLUG}/parallel-plan.md` with `docs/plans/${WT_FEATURE_SLUG}/shared.md` as companion; other research artifacts from the same feature directory may ride as extra arguments. Keep returned `$PLAN_PATH` canonical; later validation/reports use the execution tree. **Linear mode:** skip `move-plan-to-worktree.sh` and all artifact relocation; keep absolute cache paths from Phase 0 for worktree prompts and plan validation. The cache is gitignored; the only expected dirty path is a `.gitignore` whose sole change adds the `.ycc/artifacts/` rule, which branch preparation accepts. Branch-prep exit contract: `~/.config/opencode/shared/references/branch-prep.md`.
 
 ## Phase 3: Execute in Batches
 
@@ -128,6 +139,8 @@ Use standalone-dispatch.md §8.2 in both dispatch modes for Git inspection, requ
 
 If `--dry-run` is present, read `references/output-formats.md` (Dry-run formats), print the default batch roster, and do not dispatch any agents.
 **STOP HERE** after either dry-run output.
+
+After this gate, linear mode runs the start transitions and pending replay in `references/linear-sync.md` before dispatch.
 
 ### Step 8: Execute standalone batches
 
@@ -161,6 +174,7 @@ All parallel agents in this batch share this path; batching guarantees no two ag
 ```
 
 Implementor prompt template: `references/agent-task-prompt.md` — read once before the loop for the full task prompt.
+For both paths, apply `references/linear-sync.md` before each batch and after its orchestrator validation; implementors never sync Linear or edit plan identity.
 
 #### Process Batch Results (Path A)
 
@@ -190,6 +204,8 @@ Repeat from the ready-task selection until no tasks remain, then Phase 4.
 2. Verify all "Files to Create" exist.
 3. Sanity-check the modifications.
 
+In linear mode, write kind `report` and Save its Project status update, then apply parent/Project completion via `references/linear-sync.md`; local mode retains its existing report behavior and makes no Linear calls.
+
 ### Step 10: Display Summary
 
 When `WORKTREE_ACTIVE=true`, first capture: `bash ~/.config/opencode/shared/scripts/list-worktrees.sh "${WT_REPO_NAME}" "${WT_FEATURE_SLUG}"`.
@@ -204,7 +220,7 @@ The implementation must: complete all tasks in the plan, respect dependency orde
 
 ## Monorepo Support
 
-Plans are read from the git repository root in `docs/plans/` by default; running from any subdirectory still reads from the root. A `.plans-config` at repo root (`plans_dir: docs/plans`) customizes the directory; with `scope: local` in a package-level `.plans-config`, plans are read from that package's local `docs/plans/`. Structure example in `references/plan-inputs.md` (Monorepo Support).
+Local-mode plans are read from the git repository root in `docs/plans/` by default; running from any subdirectory still reads from the root. A `.plans-config` at repo root (`plans_dir: docs/plans`) customizes the directory; with `scope: local` in a package-level `.plans-config`, plans are read from that package's local `docs/plans/`. Linear mode resolves under `.ycc/artifacts/<slug>/` in the invoking checkout and passes absolute cache paths to worktree agents. Structure example in `references/plan-inputs.md` (Monorepo Support).
 
 ## Success Criteria
 
@@ -221,3 +237,4 @@ Pair with the `/goal` session directive to loop the batch executor to completion
 - `references/plan-inputs.md` — read when parsing tasks, building the dependency graph, registering tasks, showing usage, or resolving the monorepo plans directory.
 - `references/agent-task-prompt.md` — read once before dispatching implementor agents.
 - `references/output-formats.md` — read when printing `--dry-run` output or the Phase 4 completion summary, or writing a `/goal` condition.
+- `references/linear-sync.md` — orchestrator-only Linear lifecycle hooks; canonical behavior lives in artifact-store.md.

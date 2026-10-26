@@ -26,9 +26,12 @@ Parse flags first, then treat the remainder as the task description:
 - `--sequential`: force single-task batches (tightly dependent tasks). With worktree mode active, all sequential tasks run in the single feature worktree.
 - `--worktree`: legacy, now default; accepted as a silent no-op.
 - `--no-worktree`: force worktree mode off. All tasks run in the current checkout; no feature worktree is created.
-- `<task-description>`: the task to orchestrate (required, may be multi-word).
+- `--store=local|linear`: artifact-store override (see `{{package-root}}/shared/references/artifact-store.md`, Implementation skills). Default `local`; `linear` is opt-in.
+- `<task-description>`: the task to orchestrate (required, may be multi-word), or a Linear issue reference (key like `YAN-123`, or issue URL) that selects linear mode (see Linear Mode).
 
-Strip flags from `$ARGUMENTS` and set ``, `DRY_RUN=true|false`, `PLAN_ONLY=true|false`, `SEQUENTIAL=true|false`, `WORKTREE_MODE=true|false` (true unless `--no-worktree`). Join the remaining tokens into `TASK_DESCRIPTION`.
+Strip flags from `$ARGUMENTS` and set ``, `DRY_RUN=true|false`, `PLAN_ONLY=true|false`, `SEQUENTIAL=true|false`, `WORKTREE_MODE=true|false` (true unless `--no-worktree`), and `STORE_FLAG` (the stripped `--store=...` flag, empty when absent; pass `${STORE_FLAG}` to every resolver call). Join the remaining tokens into `TASK_DESCRIPTION`.
+
+**Linear input**: immediately after flag parsing, before slug derivation, check whether `TASK_DESCRIPTION` is a Linear issue reference (key or `linear.app` issue URL, per artifact-store.md **Implementation skills > Inputs**). If it is and `--store=local` was passed, abort with `A Linear plan reference requires linear mode; drop --store=local.` Otherwise resolve and print the mode (`resolve-artifact-store.sh ${STORE_FLAG} --shell`), apply the Linear call gate, and read the issue's title, description and sub-issues as `TASK_DESCRIPTION` (reads are allowed under `--dry-run`/`--plan-only`; they make no Linear writes). Any other input, including a `store: linear` config alone, skips Linear Mode entirely.
 
 
 ## Gates (hold across the whole run)
@@ -120,6 +123,18 @@ Do not dispatch agents or run worktree scripts in dry-run mode.
 - Team creation is skipped entirely; no team cleanup needed.
 - With `WORKTREE_MODE=true`, read dispatch-playbook.md section 3 now and include a `## Worktree Setup` section immediately after frontmatter and before Batch 1, listing only the parent path. No child paths, no `**Children**:` list.
 - **Stop here.** Do not deploy agents.
+
+## Linear Mode
+
+Contract: `{{package-root}}/shared/references/artifact-store.md` (Implementation skills: Status sync, Report and completion, Orchestrate). Applies only when the input was a Linear issue reference (see Linear input under Current Task); otherwise skip this section entirely (default `local`: no Linear calls, no behavior change). Only this orchestrating skill calls Linear MCP; subagents never do, and agent prompts must not mention Linear tools.
+
+1. **Run start** (non-dry, non-plan-only, immediately before the first dispatch): move the issue to `started` only when it is `backlog`, `unstarted` or `triage`. Never move an issue backwards or touch other issues.
+2. **Failure**: leave the issue `started`; add one comment with the failed task id, failing check and a short excerpt (no secrets, no full logs).
+3. **Report**: when the issue has a Project, resolve `--ensure --kind=report --slug=<project-slug>`, write a brief pointer-based report there and Save it on success and failure alike (status update `onTrack` when every task passed, else `atRisk`). With no Project, skip the upload.
+4. **Completion**: mark the issue `completed` only when final verification (Step 15) passes.
+5. **Unreachable MCP mid-run**: keep going; list unapplied transitions in the summary under `## Linear sync pending`.
+
+`--plan-only` still writes only `docs/orchestration/[sanitized-task-name].md`, never an artifact-store kind.
 
 ## Phase 4: Parallel Agent Deployment
 

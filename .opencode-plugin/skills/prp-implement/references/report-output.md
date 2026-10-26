@@ -11,11 +11,13 @@
 
 ## Implementation report
 
+Local mode:
+
 ```bash
 mkdir -p docs/prps/reports
 ```
 
-Write report to `docs/prps/reports/{plan-name}-report.md`:
+Linear mode: resolve the report path instead with `resolve-artifact-store.sh ${STORE_FLAG} --ensure --kind=prp-report --slug=<slug>` and write it there; Save and completion follow `references/linear-sync.md`. Content below is the same in both modes.
 
 ```markdown
 # Implementation Report: [Feature Name]
@@ -85,7 +87,7 @@ If this implementation was for a PRD phase:
 1. Update the phase status from `in-progress` to `complete`
 2. Add report path as reference
 
-### Archive Plan
+### Archive Plan (local mode only)
 
 Run inside `$WT_PARENT_PATH` (when `WORKTREE_ACTIVE=true`) so the archive lives next to the implementation report, not back in main. `$PLAN_PATH` is the relocated plan path set in Phase 2; if the run was `--no-worktree` it falls back to `$ARGUMENTS`.
 
@@ -94,6 +96,8 @@ PLAN_PATH="${PLAN_PATH:-$ARGUMENTS}"
 mkdir -p "$(dirname -- "$PLAN_PATH")/completed"
 mv "$PLAN_PATH" "$(dirname -- "$PLAN_PATH")/completed/"
 ```
+
+Linear mode has no archive move: close the parent issue and apply the Project-completion rule per `references/linear-sync.md`.
 
 ### Worktree Summary (when `WORKTREE_ACTIVE=true`)
 
@@ -110,7 +114,7 @@ Include the full output (markdown table + cleanup commands) in the implementatio
 
 ## User output and Goal Signals
 
-Report to user:
+Report to user (linear mode: print `[plan Document URL] → issues closed` instead of the archive path on the **Plan** line, and use the Linear Artifacts section):
 
 ```
 ## Implementation Complete
@@ -142,6 +146,11 @@ Report to user:
 
 - Report: `docs/prps/reports/{name}-report.md`
 - Archived Plan: `docs/prps/plans/completed/{name}.plan.md`
+
+### Linear Artifacts ← include this section only when ARTIFACT_STORE=linear (omit the two Artifacts lines above)
+
+- Report: [Linear Project / status update URL, or pending]
+- Plan: [Linear plan Document URL] (not archived; parent issue completed)
 
 ### PRD Progress (if applicable)
 
@@ -187,6 +196,8 @@ LINT_PASS: PASS, TESTS_PASS: PASS, BUILD_PASS: PASS, REPORT_CREATED: PASS,
 PLAN_ARCHIVED: PASS. If any signal prints FAIL, keep fixing and re-running validation
 until all seven are PASS. Stop after 25 turns if not achieved.
 ```
+
+In linear mode, replace the plan path with the Linear reference or cached plan path; `PLAN_ARCHIVED` then means what SKILL.md Success Criteria says for linear mode.
 
 The transcript-output contract and shared caveats (worktree cwd, interactive failure
 prompts, platform availability) live in the shared reference — read it before relying on a

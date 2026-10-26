@@ -24,11 +24,11 @@ You are implementing one task from a larger feature plan. Read the context docum
 
 ### Required Reading
 
-1. **Plan Document**: docs/plans/{{FEATURE_NAME}}/parallel-plan.md
+1. **Plan Document**: {{PLAN_PATH}} (absolute, read-only)
    - Read the full plan to understand the feature
    - Focus on Task {{TASK_ID}} for your specific instructions
 
-2. **Shared Context**: docs/plans/{{FEATURE_NAME}}/shared.md
+2. **Shared Context**: {{SHARED_PATH}} (absolute, read-only; omit when unavailable)
    - Understand the architecture and patterns
    - Note the relevant files and their purposes
 
@@ -55,6 +55,7 @@ You are implementing one task from a larger feature plan. Read the context docum
 3. **Follow Existing Patterns**: Match the codebase style and conventions
 4. **Validate Changes**: Check for linting errors after modifications
 5. **Report Results**: Return a summary of what you changed
+6. **Orchestrator-Owned Plan and Status**: Never edit the plan or its frontmatter, and never call Linear MCP or other external tracker tools. Report status only to the orchestrator. Read the supplied absolute plan/context paths even if the cache is outside your working directory; all implementation writes stay in the assigned working directory.
 
 ## Output Format
 
@@ -85,7 +86,8 @@ After completing the task, provide:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `{{FEATURE_NAME}}` | Feature directory name | `user-authentication` |
+| `{{PLAN_PATH}}` | Canonical absolute plan path; linear cache is not moved into the feature worktree | `/repo/.ycc/artifacts/user-authentication/parallel-plan.md` |
+| `{{SHARED_PATH}}` | Absolute companion context path; omit its reading item when absent | `/repo/.ycc/artifacts/user-authentication/shared.md` |
 | `{{TASK_ID}}` | Task identifier | `1.1`, `2.3` or `T0`, `T1` |
 | `{{TASK_TITLE}}` | Task title from plan | `Create user model` |
 | `{{FILES_TO_READ}}` | Files from "READ THESE BEFORE TASK" | `- /src/models/base.ts` |
@@ -122,11 +124,11 @@ You are implementing one task from a larger feature plan. Read the context docum
 
 ### Required Reading
 
-1. **Plan Document**: docs/plans/user-authentication/parallel-plan.md
+1. **Plan Document**: /repo/.ycc/artifacts/user-authentication/parallel-plan.md (absolute, read-only)
    - Read the full plan to understand the feature
    - Focus on Task 1.1 for your specific instructions
 
-2. **Shared Context**: docs/plans/user-authentication/shared.md
+2. **Shared Context**: /repo/.ycc/artifacts/user-authentication/shared.md (absolute, read-only)
    - Understand the architecture and patterns
    - Note the relevant files and their purposes
 
@@ -168,6 +170,7 @@ Follow the pattern in /src/models/base-model.ts for consistency.
 3. **Follow Existing Patterns**: Match the codebase style and conventions
 4. **Validate Changes**: Check for linting errors after modifications
 5. **Report Results**: Return a summary of what you changed
+6. **Orchestrator-Owned Plan and Status**: Never edit the plan or its frontmatter, and never call Linear MCP or other external tracker tools. Report status only to the orchestrator. The supplied absolute plan/context paths may be outside your working directory; implementation writes stay in the assigned working directory.
 
 ## Output Format
 

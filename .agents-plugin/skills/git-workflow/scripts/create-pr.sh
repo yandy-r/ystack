@@ -61,11 +61,9 @@ fi
 # Detect the forge provider and select the matching CLI (gh / tea / glab).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 FORGE_LIB="${SCRIPT_DIR}/../../../ycc-shared/scripts/lib/forge.sh"
-[[ -f "$FORGE_LIB" ]] || FORGE_LIB="${HOME}/.agents/ycc-shared/scripts/lib/forge.sh"
 # shellcheck source=/dev/null
 source "$FORGE_LIB"
 PR_GUARD="${SCRIPT_DIR}/../../../ycc-shared/scripts/pr-guard.sh"
-[[ -f "$PR_GUARD" ]] || PR_GUARD="${HOME}/.agents/ycc-shared/scripts/pr-guard.sh"
 
 PROVIDER="$(forge_detect_provider origin)"
 FORGE_CLI="$(forge_cli "$PROVIDER")"
@@ -339,6 +337,50 @@ else
     echo ""
 fi
 
+# Related issues: Linear branch hints and commit keys from the shared helper,
+# filtered by ARTIFACT_LINEAR_TEAM, plus GitHub issues referenced in commits.
+# See _shared/references/artifact-store.md "PR linking". Missing or failing
+# helpers never prevent PR creation; session-aware plan links are added by callers.
+LINEAR_KEYS_SCRIPT="${SCRIPT_DIR}/../../../ycc-shared/scripts/collect-linear-keys.sh"
+RESOLVE_STORE_SCRIPT="${SCRIPT_DIR}/../../../ycc-shared/scripts/resolve-artifact-store.sh"
+
+LINEAR_TEAM="${ARTIFACT_LINEAR_TEAM:-}"
+if [ -z "$LINEAR_TEAM" ] && [ -f "$RESOLVE_STORE_SCRIPT" ]; then
+    LINEAR_TEAM=$(bash "$RESOLVE_STORE_SCRIPT" --shell 2>/dev/null | awk '
+        /^ARTIFACT_LINEAR_TEAM=/ { sub(/^ARTIFACT_LINEAR_TEAM=/, ""); if ($0 != "\047\047") print }
+    ' || true)
+fi
+
+RELATED_ISSUES=""
+if [ -f "$LINEAR_KEYS_SCRIPT" ]; then
+    LINEAR_KEYS_OUT=$(bash "$LINEAR_KEYS_SCRIPT" --base "origin/$BASE_BRANCH" --team "$LINEAR_TEAM" 2>/dev/null || true)
+    if [ -n "$LINEAR_TEAM" ]; then
+        while IFS=$'\t' read -r LINEAR_KEY _LINEAR_SRC LINEAR_ACTION; do
+            [ -n "$LINEAR_KEY" ] || continue
+            case "$LINEAR_ACTION" in
+                closes) LINEAR_VERB=Closes ;;
+                refs) LINEAR_VERB=Refs ;;
+                *) continue ;;
+            esac
+            RELATED_ISSUES="${RELATED_ISSUES:+${RELATED_ISSUES}
+}${LINEAR_VERB} ${LINEAR_KEY}"
+        done <<<"$LINEAR_KEYS_OUT"
+    elif [ -n "$LINEAR_KEYS_OUT" ]; then
+        echo 'Skipping Linear issue links: no ARTIFACT_LINEAR_TEAM configured and no Linear MCP to verify keys.' >&2
+    fi
+fi
+
+# GitHub issues referenced in commit messages (Closes/Fixes/Resolves #n).
+GH_REFS=$(grep -oiE '(closes|fixes|resolves) #[0-9]+' <<<"$COMMIT_MESSAGES" 2>/dev/null | grep -oE '#[0-9]+' | awk '!seen[$0]++' || true)
+while IFS= read -r GH_REF; do
+    [ -n "$GH_REF" ] || continue
+    RELATED_ISSUES="${RELATED_ISSUES:+${RELATED_ISSUES}
+}Closes ${GH_REF}"
+done <<<"$GH_REFS"
+
+# No linked issues: keep the bare placeholder for the author to fill in.
+[ -n "$RELATED_ISSUES" ] || RELATED_ISSUES="Closes #"
+
 # Create description based on commits
 PR_DESCRIPTION="## Summary
 
@@ -379,7 +421,7 @@ PR_DESCRIPTION="${PR_DESCRIPTION}
 
 ## Related Issues
 
-Closes #
+${RELATED_ISSUES}
 
 ## Breaking Changes
 

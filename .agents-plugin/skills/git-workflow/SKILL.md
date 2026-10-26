@@ -105,6 +105,7 @@ Only when `pr ∈ actions`. Read `references/pr-creation.md` before Step 22. Dec
 - Step 22b: resolve `$BASE`, run the sync-check guard (exit 3: no PR, stop), offer backport, per `~/.agents/ycc-shared/references/pr-base-and-backport.md`. Exit 2 (malformed `RELEASING.md`) stops with the parse error and `/release-model --audit`.
 - Step 23: read `templates/pr-template.md`.
 - Step 25: PR title must be Conventional Commit format and pass `validate-commit.sh`.
+- Step 26a: link Linear and GitHub issues in `## Related Issues` per `references/pr-creation.md` (contract: artifact-store.md PR linking).
 - Step 28: MCP `mcp__github__create_pull_request` first, `gh pr create` fallback; forge routing via `~/.agents/ycc-shared/references/forge-detection.md` (`tea` for forgejo/gitea).
 - Step 27: draft when work is incomplete or feedback is wanted; honor `--draft`.
 
@@ -129,4 +130,4 @@ Read `references/examples-and-troubleshooting.md` for the commit/docs/agent/PR/o
 - `references/examples-and-troubleshooting.md` — read for checklists, examples, or when a step fails.
 - `templates/commit-types.md`, `templates/documentation-decision.md`, `templates/agent-prompts.md`, `templates/pr-template.md` — read at Steps 8, 6, 14, 23.
 - `scripts/analyze-changes.sh` (Step 2), `scripts/validate-commit.sh` (Steps 10, 18, 25, 36), `scripts/create-pr.sh` (Step 24; `--analyze --base "$BASE"`; defensive existing-PR check).
-- Shared: `~/.agents/ycc-shared/references/{forge-detection,pr-base-and-backport,ci-monitoring,goal-pairing}.md`, `~/.agents/ycc-shared/scripts/{pr-guard,ci-monitor}.sh`. `branch-prep.md` does not apply: this skill never creates branches.
+- Shared: `~/.agents/ycc-shared/references/{forge-detection,pr-base-and-backport,ci-monitoring,goal-pairing,artifact-store}.md`, `~/.agents/ycc-shared/scripts/{pr-guard,ci-monitor,collect-linear-keys}.sh`. `branch-prep.md` does not apply: this skill never creates branches.

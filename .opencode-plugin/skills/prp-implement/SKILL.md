@@ -9,7 +9,7 @@ description: Executes PRP plan files with validation loops, reports, and archivi
 
 > **OpenCode V2 compatibility:** `--team` is unsupported. If it is supplied, abort before setup or dispatch and ask the caller to rerun without it. This target uses native standalone `subagent` calls only.
 
-Execute a plan file step-by-step with continuous validation. Every change is verified immediately; never accumulate broken state. Detect the package manager, prepare the Git branch, execute tasks, validate static/unit/build/integration/edge cases, write `docs/prps/reports/`, and archive the plan. Detect parallel-capable plans and prompt for execution mode unless a flag selects it.
+Execute a plan file step-by-step with continuous validation. Every change is verified immediately; never accumulate broken state. Detect the package manager, prepare the Git branch, execute tasks, validate static/unit/build/integration/edge cases, write `docs/prps/reports/`, and archive the plan (linear mode: see Phase 5). Detect parallel-capable plans and prompt for execution mode unless a flag selects it.
 
 > Adapted from PRPs-agentic-eng by Wirasm. Part of the PRP workflow series.
 
@@ -29,17 +29,19 @@ Execute a plan file step-by-step with continuous validation. Every change is ver
 
 Extract flags from `$ARGUMENTS` before treating the remainder as a plan path:
 
-| Flag            | Effect                                                                                                                                                             |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--parallel`    | Force standalone parallel execution when the plan has `Batches`; skip the prompt. Otherwise warn and fall back to sequential. Works in opencode, Cursor, Codex. |
-| `--worktree`    | Silent legacy no-op; isolation is on by default.                                                                                                                   |
-| `--no-worktree` | Force worktree mode off regardless of annotations; use the prepared current checkout.                                                                              |
+| Flag                    | Effect                                                                                                                                                                 |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--parallel`            | Force standalone parallel execution when the plan has `Batches`; skip the prompt. Otherwise warn and fall back to sequential. Works in opencode, Cursor, Codex.     |
+| `--worktree`            | Silent legacy no-op; isolation is on by default.                                                                                                                       |
+| `--no-worktree`         | Force worktree mode off regardless of annotations; use the prepared current checkout.                                                                                  |
+| `--store=local\|linear` | Artifact store override; strip it, retain as `STORE_FLAG` (empty when absent), and forward it to every resolver call. See artifact-store.md **Implementation skills**. |
 
-Set `PARALLEL_FLAG=true|false`, ``, `WORKTREE_MODE=true|false`, `DRY_RUN=true|false`. The remaining text is the plan file path.
+Set `PARALLEL_FLAG=true|false`, ``, `WORKTREE_MODE=true|false`, `DRY_RUN=true|false`. The remaining text is the plan input: a plan path, a cached linear plan path, or a Linear reference. `~/.config/opencode/shared/references/artifact-store.md` **Implementation skills > Inputs** defines issue keys, references, linear plan paths and which of them select linear mode (an existing local plan path wins).
 
 Validation (abort with these exact messages):
 
 - Both `--worktree` and `--no-worktree`: `--worktree and --no-worktree are mutually exclusive. Use --no-worktree to opt out of the default.`
+- `--store=local` with a Linear reference or linear plan path: `A Linear plan reference requires linear mode; drop --store=local.`
 
 
 ### Package Manager and Validation Scripts
@@ -52,13 +54,14 @@ Read `~/.config/opencode/shared/references/standalone-dispatch.md` for standalon
 
 ## Phase 1 — LOAD
 
-Read the stripped plan path (`PLAN_PATH`); extract Summary, Patterns to Mirror, Files to Change, Step-by-Step Tasks, Validation Commands, Acceptance Criteria. Missing or invalid plan:
+Local mode: read the stripped plan path (`PLAN_PATH`) exactly as before; extract Summary, Patterns to Mirror, Files to Change, Step-by-Step Tasks, Validation Commands, Acceptance Criteria. Missing or invalid plan:
 
 ```
 Error: Plan file not found or invalid.
 Run /prp-plan <feature-description> to create a plan first.
 ```
 
+Linear mode: follow artifact-store.md **Implementation skills > Resolve and hydrate** for kind `prp-plan` before branch preparation (`resolve-artifact-store.sh ${STORE_FLAG} --shell`, reading `ARTIFACT_STORE=`; Linear call gate; Lookup; Load); set `PLAN_PATH` to the absolute cache path and read its `tasks` map (rebuilt in memory when missing). A missing plan follows Lookup step 7 (ask, listing what was tried) — never report "not found" without querying Linear. Parse the hydrated file as above.
 Read `references/detection.md` (Parallel-Capable Detection and Execution Mode Decision) now. A `## Batches` section makes the plan parallel-capable: parse its ordering and task `BATCH:` fields. Select sequential or parallel standalone execution; record `EXECUTION_MODE=sequential|parallel`.
 
 
@@ -73,13 +76,13 @@ grep -c "^## Worktree Setup" "$PLAN_PATH"; [ $? -le 1 ]
 grep -c "^\- \*\*Worktree\*\*:" "$PLAN_PATH"; [ $? -le 1 ]
 ```
 
-With a parent annotation, use its path before whitespace/comment and slug segment after `<repo>-`. Otherwise derive `WT_FEATURE_SLUG` from plan basename: strip `.plan.md`, lowercase, replace `[^a-z0-9-]` with `-`, collapse runs, truncate to 40 chars. `WORKTREE_ACTIVE` follows common mode selection; sequential tasks use the parent execution tree too.
+With a parent annotation, use its path before whitespace/comment and slug segment after `<repo>-`. Otherwise derive `WT_FEATURE_SLUG` from plan basename: strip `.plan.md`, lowercase, replace `[^a-z0-9-]` with `-`, collapse runs, truncate to 40 chars. In linear mode derive it from the cache slug (the plan's parent directory name) instead; the cache basename is always `prp-plan.md`. `WORKTREE_ACTIVE` follows common mode selection; sequential tasks use the parent execution tree too.
 
 **CHECKPOINT**: Plan loaded. All sections identified. Tasks extracted. Parallel capability detected. Execution mode chosen.
 
 ## Phase 2 — PREPARE
 
-Follow standalone-dispatch.md §8.2 for Git-state inspection, required branch preparation, one-time parent worktree setup, and one-way plan relocation. Input plan is the stripped `$ARGUMENTS`; optional companion artifacts ride as extra move arguments. Retain `$PLAN_PATH` as the canonical path for validation, prompts, report, and archive. All subsequent git operations and writes run in `$WT_PARENT_PATH` when active; `--no-worktree` uses the prepared current checkout.
+Follow standalone-dispatch.md §8.2 for Git-state inspection, required branch preparation, and one-time parent worktree setup. Local mode keeps the one-way plan relocation; linear mode skips `move-plan-to-worktree.sh` — the plan is not moved into the worktree and worktree tasks read the absolute cache `$PLAN_PATH`. In linear mode the cache is gitignored and the only expected dirty path is a `.gitignore` whose sole change adds the `.ycc/artifacts/` rule, which branch preparation accepts. Input plan is the stripped `$ARGUMENTS`; optional companion artifacts ride as extra move arguments (local only). Retain `$PLAN_PATH` as the canonical path for validation, prompts, report, and archive/completion. All subsequent git operations and writes run in `$WT_PARENT_PATH` when active; `--no-worktree` uses the prepared current checkout.
 
 Sync remote after preparation in the execution tree:
 
@@ -91,7 +94,7 @@ git pull --rebase origin $(git branch --show-current) 2>/dev/null || true
 
 ## Phase 3 — EXECUTE
 
-Branch on `EXECUTION_MODE` chosen in Phase 1.
+Branch on `EXECUTION_MODE` chosen in Phase 1. In linear mode, read `references/linear-sync.md` now and apply it (orchestrator only; `implementor` subagents never call Linear).
 
 ### Path A — Sequential Execution
 
@@ -143,14 +146,18 @@ Read `references/validation-and-failures.md` now. Run every level in order; fix 
 
 ## Phase 5 — REPORT
 
-Read `references/report-output.md` now for report template, PRD update, archive commands, and worktree section.
+Read `references/report-output.md` now for report template, PRD update, archive/completion commands, and worktree section.
+
+Local mode (unchanged):
 
 1. Create `docs/prps/reports/{plan-name}-report.md`, including assessment vs reality, task status, all validation levels, changed files, verbatim deviations, issues, tests, next steps.
 2. If a PRD phase: change `in-progress` to `complete`, add report path.
 3. Archive canonical `$PLAN_PATH` to its sibling `completed/` inside the execution tree (fallback to stripped `$ARGUMENTS` under `--no-worktree`).
 4. If `WORKTREE_ACTIVE=true`, capture `list-worktrees.sh` output after archive; include full table and cleanup commands under `## Worktree Summary` in the report.
 
-**CHECKPOINT**: Report created. PRD updated. Plan archived. Worktree summary captured (if applicable).
+Linear mode: resolve the report with `bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=prp-report --slug=<slug>` (`<slug>` = cache parent directory name), write it there, and complete per `references/linear-sync.md` instead of the archive move.
+
+**CHECKPOINT**: Report created. PRD updated. Plan archived (local) or Linear completion applied (linear). Worktree summary captured (if applicable).
 
 ## Phase 6 — OUTPUT
 
@@ -168,7 +175,7 @@ Read `references/validation-and-failures.md` when any type-check, test, lint, bu
 - **TESTS_PASS**: All tests green, new tests written.
 - **BUILD_PASS**: Build succeeds.
 - **REPORT_CREATED**: Implementation report saved.
-- **PLAN_ARCHIVED**: Plan moved to `docs/prps/plans/completed/`.
+- **PLAN_ARCHIVED**: Local: plan moved to `docs/prps/plans/completed/`. Linear: parent tracking issue and every tracked task issue are `completed` (or `canceled`) and the Project status update was posted (see `references/linear-sync.md`).
 
 ## /goal pairing and Next Steps
 
@@ -177,6 +184,7 @@ Read `references/report-output.md` (Goal pairing) for the condition template; re
 ## References — read when
 
 - `references/detection.md`: Phase 0 package manager/scripts and Phase 1 parallel detection/mode selection.
+- `references/linear-sync.md`: linear-mode status sync, report Save, completion, and offline replay (Phase 3/5).
 - `references/agent-task-prompt.md`: once before parallel implementor dispatch.
 - `references/validation-and-failures.md`: Phase 4 validation and any failed check.
 - `references/report-output.md`: Phase 5 report/PRD/archive, Phase 6 user output, or `/goal` condition.

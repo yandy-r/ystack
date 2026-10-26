@@ -5,6 +5,8 @@
 - Status
 - Kinds
 - Planning skills
+- Implementation skills
+- PR linking
 - Layout
 - Frontmatter
 - Sync
@@ -37,7 +39,7 @@ Planning artifacts default to their existing local paths. Linear storage is opt-
 | `resolve-artifact-store.sh`                 | YAN-1153 | Shipped           |
 | This reference                              | YAN-1152 | Shipped           |
 | Planning skills and validators              | YAN-1154 | Migrated (opt-in) |
-| Implementation skills and validators        | YAN-1155 | Not migrated      |
+| Implementation skills and validators        | YAN-1155 | Migrated (opt-in) |
 | Review and report skills                    | YAN-1156 | Not migrated      |
 | Generators, capability matrix, `/skill:init`   | YAN-1157 | Not migrated      |
 | Existing `docs/plans` and `docs/prps` trees | YAN-1158 | Leave in place    |
@@ -64,7 +66,7 @@ Document titles are `<slug> · <kind>`. `<kind>` is the cache filename stem, omi
 
 A review keeps its PR comment unchanged. With no reviewed issue, attach its Document to the feature Project; if no Project exists, keep the review local only.
 
-`prp-implement` `{plan}-report.md` and `code-report` `report.md` both use the report kind. Store the status-update id in `linear.statusUpdate`; a long report also has `linear.document`.
+`prp-implement` `{plan}-report.md` (kind `prp-report`), `implement-plan` (kind `report`) and `code-report` `report.md` (kind `report`) all use the report kind and share the `report.md` cache file. Local mode resolves `prp-report` to `docs/prps/reports/<slug>-report.md` under the current checkout and `report` to `<PLANS_DIR>/<slug>/report.md`; linear mode resolves both to `.ycc/artifacts/<slug>/report.md`. Store the status-update id in `linear.statusUpdate`; a long report also has `linear.document`.
 
 ### Plan task issues
 
@@ -122,7 +124,70 @@ Validators inspect content through `artifact_body` so leading identity frontmatt
 
 Linear planning artifacts belong to the current worktree's `.ycc/artifacts/` cache. Do not move them between worktrees; Load pulls remote changes into a clean cache. Local mode retains the existing committed-docs worktree behavior.
 
-Linear-mode plans are not yet consumable by the implementation skills (YAN-1155). Use `--store=local` for plans you will implement now; completion messages must print this caveat instead of an implementation command in linear mode.
+Completion messages in linear mode print the implementation command with the feature slug or the cached plan path; see Implementation skills.
+
+## Implementation skills
+
+`implement-plan`, `prp-implement` and `orchestrate` consume planning artifacts through this store. The orchestrating skill alone talks to Linear; implementor subagents (`implementor`) read the hydrated cache file and never call a Linear MCP, tracker tool, or edit the plan or its frontmatter.
+
+### Inputs
+
+Each skill accepts, in addition to today's input (feature name, plan path, task description):
+
+- `--store=local|linear`, parsed, stripped and forwarded to every resolver call exactly as in Planning skills.
+- A Linear reference: an issue key matching `^[A-Z][A-Z0-9]{1,9}-[0-9]+$` exactly (uppercase; when `ARTIFACT_LINEAR_TEAM` is set its prefix must equal that team), or a `linear.app` issue, Project or Document URL. A bare Project slug or Document id counts as a reference only with an explicit `--store=linear`.
+- A path to a cached plan. A file is a linear plan when it lies under `${ARTIFACT_ROOT}/.ycc/artifacts/` or its leading frontmatter has a `linear:` block or `pending: true`; any other path keeps local behavior unchanged and is never treated as a reference.
+
+A Linear reference or a linear plan path selects linear mode for the run, as if `--store=linear` were passed. Combined with `--store=local`, abort with: `A Linear plan reference requires linear mode; drop --store=local.` Anything else (a feature name such as `oauth-2`, a local plan path) follows normal Store resolution, and an existing local `${PLANS_DIR}/<name>/` wins over reference parsing, so the default (`local`) keeps today's behavior byte-for-byte: same paths, archive, report, no Linear calls.
+
+### Resolve and hydrate
+
+In linear mode, before Git branch preparation:
+
+1. Resolve and print the mode (`--shell`), then apply the Linear call gate. A missing or unauthorized MCP stops the run with the gate message; there is no local fallback for a plan that exists only in Linear.
+2. Run Lookup for the plan kind (`parallel-plan` for `implement-plan`, `prp-plan` for `prp-implement`). Map the hit to a slug: the Document title prefix before `·`, else the feature Project name. An issue reference with sub-issues is the parent tracking issue; any other issue resolves through its parent. Either way the run covers the whole plan. Lookup step 7 asks; never report "no plan" before querying Linear.
+3. Hydrate once with Load into the current checkout's cache: `--ensure --kind=<kind> --slug=<slug>`, then pull the Document body and stamp identity. `implement-plan` also hydrates `shared` when that Document exists; a missing `shared` Document is a warning, like a missing local `shared.md`. Load's Conflict rule applies; never overwrite unpushed local edits.
+4. Use the absolute cache path as `PLAN_PATH` for parsing, prompts and validation. Linear-mode plans are never moved into the feature worktree (`move-plan-to-worktree.sh` is skipped); worktree tasks read the plan by absolute path. Derive `WT_FEATURE_SLUG` (and any team context) from the cache slug, never from the cache basename. The cache itself is gitignored; the only dirty path `--ensure` can leave is a `.gitignore` whose sole change adds the `.ycc/artifacts/` rule, and branch preparation accepts exactly that change and carries it onto the feature branch.
+5. Read the `tasks` map from the plan's frontmatter. If it is missing, rebuild it in memory from the parent tracking issue's sub-issues by literal task heading id, as in Plan task issues, without creating issues or writing the map to the cache. A task with no issue still runs; list it as untracked in the report and suggest re-saving the plan with its planning skill.
+
+### Status sync
+
+The orchestrator moves issues by state type, not team-specific state names:
+
+| When                                              | Change                                                                                                                                                               |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run starts: immediately before the first dispatch | Replay pending transitions first (below). Parent tracking issue → `started` when `backlog`, `unstarted` or `triage`; Project → `started` when `backlog` or `planned` |
+| Before a task or batch dispatches                 | Each task issue in it → `started` when `backlog`, `unstarted` or `triage`                                                                                            |
+| Task passes its validation                        | Task issue → `completed`. `prp-implement` parallel runs mark a batch's issues after its between-batch checks pass                                                    |
+| Task or batch fails                               | Leave the issue `started`; add one comment with the task id, the failing check and a short excerpt. Never paste secrets or full logs                                 |
+| All tasks pass final validation                   | Parent tracking issue → `completed`; post the report (below)                                                                                                         |
+
+- A task whose issue is already `completed` is treated as done and skipped, so a re-run resumes; a `canceled` issue's task is skipped as removed. Print both in the summary.
+- Never move an issue backwards, reopen it, change its assignee, or touch issues outside the plan's `tasks` map and parent.
+- Timestamps: before a transition or comment, fetch the issue's `updatedAt`. If it equals the stored `tasks.<id>.updatedAt`, re-stamp it from the response afterwards so a later planning re-save does not mistake the transition for an independent edit. If it differs, or no stamp is stored, apply the transition but leave the stored stamp unchanged so planning still sees the independent edit. Identity keys are outside `contentHash`, so re-stamping never marks the body dirty.
+- `--dry-run` makes no Linear writes and no local writes: no `--ensure`, no cache write, no Load push or Conflict. It may run Lookup, reuse an existing cache file read-only, or parse a fetched body from a temporary file outside the repository.
+
+### Report and completion
+
+- Write the run report to kind `prp-report` (`prp-implement`) or `report` (`implement-plan`, `orchestrate` with a Project) and Save it on success and failure alike: one Project status update with health `onTrack` when every task passed and `atRisk` otherwise, plus a Document when the report exceeds the status-update size. Record `linear.statusUpdate`.
+- Linear mode replaces `prp-implement`'s archive move. Instead, close the issues as above and complete the Project only when its name equals the plan slug, it carries `ARTIFACT_LINEAR_LABEL` when one is set, it is not `ARTIFACT_LINEAR_PROJECT`, and every issue in it is `completed` or `canceled`. Otherwise leave the Project open and say why.
+- The Goal Signal `PLAN_ARCHIVED` keeps its name. Local mode: the plan moved to `completed/`. Linear mode: the parent tracking issue and every tracked task issue are `completed` (or `canceled`) and the Project status update was posted.
+- If the MCP becomes unreachable mid-run, keep implementing. At the moment a transition fails, resolve the report path with `--ensure`, append the transition under `## Linear sync pending` in that file and set its `pending: true`, so an interrupted run still leaves the record; the final report merges into the same file. Print the list at the end. The next run on the same plan replays the pending transitions before dispatching, following Offline, and removes each one it applies.
+
+### Orchestrate
+
+`orchestrate` builds its own decomposition. Its Linear behavior applies only when its input is a Linear issue reference (a `store: linear` config alone changes nothing): it reads that issue's title, description and sub-issues as the task description before deriving any slug, moves the issue to `started` immediately before the first dispatch, comments on failure, saves a `report` when the issue has a Project (on success and failure), and marks the issue `completed` only when the run's final verification passes. `--plan-only` keeps writing `docs/orchestration/`; that path is not an artifact-store kind.
+
+## PR linking
+
+`prp-pr` and `git-workflow` add Linear and GitHub issue links to the PR body's related-issues section:
+
+1. Collect candidates with `collect-linear-keys.sh --base origin/<base>` (always the remote-tracking base, so commits already merged upstream are never scanned). It prints `<KEY>\t<source>\t<closes|refs>`: the branch hint (`branch`, `closes`) and commit keywords (`commit`; `Closes`/`Fixes`/`Resolves` → `closes`, `Refs` → `refs`; a key seen with both keeps `closes`). Also add the `linear.issue` of a linear plan implemented on this branch (its cache path is known in the session, or `.ycc/artifacts/<slug>/` matches the branch slug) as `plan`, `closes`.
+2. Verify each key in Linear when a Linear MCP is reachable; drop keys that do not resolve. Without an MCP, keep only keys whose team equals `ARTIFACT_LINEAR_TEAM`; with no team configured, keep none and print `Skipping Linear issue links: no ARTIFACT_LINEAR_TEAM configured and no Linear MCP to verify keys.` only when candidates existed, because unverified branch hints can be false positives (`fix/utf-8-…`).
+3. Emit `Closes <KEY>-<n>` for each verified `closes` issue and `Refs <KEY>-<n>` for each `refs`-only issue, plus `Closes #<n>` for each GitHub issue attached to a closed Linear issue (Linear attachment URLs `https://github.com/<owner>/<repo>/issues/<n>` matching `origin`) or closed by a commit (`Closes|Fixes|Resolves #<n>`). Never duplicate a line already in the body or template.
+4. In linear mode, link the Linear Project and plan Document URLs instead of `docs/prps` paths in the artifacts section.
+
+This applies in both store modes: linking needs only the hint and, when available, the MCP.
 
 ## Layout
 
@@ -240,7 +305,7 @@ pending: false
 3. Normalize CRLF and CR line endings to LF. Do not trim the result or add/remove its trailing newline; preserve every other byte, including non-identity frontmatter.
 4. SHA-256 those bytes for `contentHash`. Push the same identity-stripped content to Linear: identity values are never pushed, while non-identity frontmatter remains in the pushed and hashed body. Apply the same procedure after pulls.
 
-Validators that inspect headings or body structure must skip frontmatter; that migration is part of YAN-1154/YAN-1155.
+Validators that inspect headings or body structure must skip frontmatter (`artifact_body`).
 
 ## Sync
 
@@ -298,7 +363,7 @@ If the MCP fails during step 4 or 5, keep the local file and follow Offline.
 
 An invalid value at the selected level does not fall through. An explicit resolve prints an error and returns 1; sourced auto-resolution prints `WARNING`, unsets every `ARTIFACT_*` variable, and does not fail the caller.
 
-The default is intentionally `local` while implementation-side Linear reads and init wiring remain unfinished. Linear mode is opt-in through `--store=linear` or `store: linear`; a later default-store flip issue changes step 4. Local resolution and writes do not require a Linear MCP.
+The default is intentionally `local` while `/skill:init` wiring (YAN-1157) remains unfinished. Linear mode is opt-in through `--store=linear` or `store: linear`; a later default-store flip issue changes step 4. Local resolution and writes do not require a Linear MCP.
 
 The `store` and `linear_*` walks compare physical paths (`pwd -P`) and stop after the start directory's physical Git toplevel, or physical `PLANS_ROOT` without Git. Symlinked paths therefore cannot escape the boundary. The original start directory still goes to `resolve_plans_dir`, whose upward/topmost `PLANS_*` behavior is unchanged.
 
@@ -353,6 +418,7 @@ bash "skill://ycc-shared/scripts/resolve-artifact-store.sh" [--store=linear|loca
 - `--shell` prints every existing `ARTIFACT_*` mode/config variable using Bash `printf %q`; planning skills print it and read `ARTIFACT_STORE` from stdout rather than silently evaluating it. `ARTIFACT_REPO_ROOT` is used by sourced local path resolution but is not added to `--shell` output.
 - `--help` prints usage. `--debug` or `PLANS_DEBUG=1` enables debug output.
 - `--kind` and `--slug` together print `get_artifact_path`; without them, default output remains `ARTIFACT_DIR`. With both options, local `--ensure` creates only that file's parent or that directory itself; linear `--ensure` calls `ensure_artifact_dir` for the cache base and gitignore rule. Without kind/slug, `--ensure` calls `ensure_artifact_dir` unchanged.
+- Report kinds: `report` resolves locally to `${PLANS_DIR}/<slug>/report.md`; `prp-report` resolves to `<repo>/docs/prps/reports/<slug>-report.md` under the current checkout. Both resolve to `.ycc/artifacts/<slug>/report.md` in linear mode. Local `--ensure` creates only the parent directory.
 - Sourcing auto-resolves without `exit` or enabling `set -e`; check `${ARTIFACT_STORE:-}` before use. Call `resolve_artifact_store` explicitly to pass a flag/start directory or receive invalid-input status.
 
 ```bash
@@ -369,6 +435,14 @@ artifact_body path/to/artifact.md
 bash "skill://ycc-shared/scripts/artifact-body.sh" path/to/artifact.md
 ```
 
+For PR-linking candidates, run the read-only collector (it never calls Linear):
+
+```bash
+bash "skill://ycc-shared/scripts/collect-linear-keys.sh" [--base <ref>] [--team <TEAM>] [start-dir]
+```
+
+It prints deduplicated `<KEY><TAB><source><TAB><closes|refs>` rows, uppercased, with the branch hint first (`branch`, `closes`) and commit keys next (`commit`) in Git log order. Commit candidates use case-insensitive `Closes`, `Fixes` or `Resolves` (→ `closes`) or `Refs` (→ `refs`) followed by a colon or space and a key with the branch-hint prefix shape `[A-Za-z][A-Za-z0-9]{1,9}-<digits>`; a key seen with both keywords reports `closes`. The team filter defaults to `ARTIFACT_LINEAR_TEAM`; `--team ''` collects all teams. A `--base` naming a branch that has a remote-tracking `origin/<base>` uses the remote ref. The default base is the merge base with `origin/HEAD`, falling back to `origin/main`, then `main`; if none resolves, commit scanning is skipped with a warning on stderr. No candidates is a successful empty result; bad arguments fail. Apply PR linking's verification rule to every candidate before emitting a link line.
+
 ## Repository mapping
 
 Default: one Linear Project per feature, named exactly `<slug>`, inside `ARTIFACT_LINEAR_TEAM`, with `ARTIFACT_LINEAR_LABEL` applied. Reuse a matching Project or create it on first save.
@@ -379,7 +453,7 @@ A plan's parent tracking issue is the verified hint issue when present; otherwis
 
 ## Worktrees
 
-- Linear mode does not move plan files between worktrees. Planning skills use Load to pull into a worktree cache instead of following the committed-docs move in `worktree-strategy.md`; local mode retains that existing behavior. Implementation skills have not migrated (YAN-1155), so linear-mode plans are not yet consumable there: use `--store=local` for implementation now. Pushing from the main checkout does not refresh another worktree's clean cache: Load's differing-`updatedAt` rule pulls the new remote body there.
+- Linear mode does not move plan files between worktrees. Planning skills use Load to pull into a worktree cache instead of following the committed-docs move in `worktree-strategy.md`; local mode retains that existing behavior. Implementation skills hydrate the plan once into the invoking checkout's cache and pass its absolute path to worktree tasks (see Implementation skills). Pushing from the main checkout does not refresh another worktree's clean cache: Load's differing-`updatedAt` rule pulls the new remote body there.
 - Push every pending artifact before removing a worktree. Unpushed pending files block routine cleanup.
 - Lookup step 2 checks both the current worktree cache and the main checkout cache, so per-worktree roots do not hide existing work.
 

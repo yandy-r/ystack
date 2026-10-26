@@ -112,7 +112,19 @@ Check for related PRP artifacts:
 - `docs/prps/plans/` — Plans that were executed (including the `completed/` subfolder)
 - `docs/prps/prds/` — Related PRDs
 
-Reference these in the PR body if they exist.
+Reference these in the PR body if they exist. When the resolved store is `linear` (`bash "skill://ycc-shared/scripts/resolve-artifact-store.sh" --shell`, reading `ARTIFACT_STORE=`; default `local`), list the Linear Project and plan Document URLs from the artifact cache identity instead of `docs/prps` paths, per artifact-store.md **PR linking**.
+
+### Linear Issue Links
+
+Link issues in the Related Issues section per `skill://ycc-shared/references/artifact-store.md` **PR linking** (collection, verification, `Closes` vs `Refs`, skip message):
+
+```bash
+bash "skill://ycc-shared/scripts/collect-linear-keys.sh" --base "origin/<base>"
+```
+
+- Rows are `<KEY>\t<source>\t<closes|refs>`; do not pass `--team` (it defaults to the configured team).
+- Also add the `linear.issue` from the cached plan's frontmatter (`.ycc/artifacts/<slug>/{parallel-plan,prp-plan}.md`, slug matching the branch) as a `closes` candidate.
+- Emit `Closes <KEY>` for `closes` keys and `Refs <KEY>` for `refs`-only keys, plus `Closes #<n>` for linked GitHub issues, without duplicating lines already in the body or template.
 
 ---
 
