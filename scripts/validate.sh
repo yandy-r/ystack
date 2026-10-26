@@ -18,8 +18,9 @@
 #   - inventory  validates ycc skill frontmatter, the shared inventory, the formatter bundle and
 #                plan-workflow regressions, per-runtime worktree roots (scripts/test-worktree-roots.sh) and
 #                the clean skill report generator (scripts/test-clean-report.sh), the
-#                grep -c fallback regression suite (scripts/test-grep-count-helpers.sh) and the
-#                pipefail grep regression suite (scripts/test-pipefail-grep-helpers.sh)
+#                grep -c fallback regression suite (scripts/test-grep-count-helpers.sh), the
+#                pipefail grep regression suite (scripts/test-pipefail-grep-helpers.sh) and
+#                artifact-store regressions (scripts/test-artifact-store.sh)
 #   - omp        checks generated OMP skill, agent and command drift (bytes and modes), content policy and golden
 #                tests, plus native package manifests, catalog listing, lockstep versions and closure, and the
 #                built-in command pin against a live omp (warns and skips when omp is absent)
@@ -244,6 +245,8 @@ run_target() {
             "${REPO_ROOT}/scripts/test-pipefail-grep-helpers.sh" || fail "test-pipefail-grep-helpers.sh"
             echo "== validate: helper root discovery =="
             "${REPO_ROOT}/scripts/test-helper-root-discovery.sh" || fail "test-helper-root-discovery.sh"
+            echo "== validate: artifact store regressions =="
+            "${REPO_ROOT}/scripts/test-artifact-store.sh" || fail "test-artifact-store.sh"
             echo "== validate: formatter bundle smoke =="
             "${REPO_ROOT}/scripts/validate-formatters-bundle.sh" || fail "validate-formatters-bundle.sh"
             echo "== validate: style.sh Node CLI resolution =="
