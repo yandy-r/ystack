@@ -16,7 +16,8 @@ end of a script, and requests with no marker, answer the text `DONE`.
   check-script OUT PACKAGE KEY...  every step of each KEY got the result its script expects
   check-agents OUT PACKAGE       every ycc agent ran to completion on the model its
                                  frontmatter role selects (@slow, @task, else the main model)
-  check-skills OUT PACKAGE       every ycc skill read through skill:// from the installed cache
+  check-skills OUT PACKAGE       every ycc skill read through skill:// from the installed cache,
+                                 in one batch with no compaction request in between
   check-ttsr SESSION_DIR         one ycc-python-trigger and one ycc-golang-trigger
                                  ttsr_injection entry for the whole session
   check-rpc OUT [--approve yes|no] the rpc session asked one `Allow tool: bash` select, the
@@ -53,6 +54,9 @@ PERMISSION_FILE = "permission-probe"
 NAME_LINE = re.compile(r"^name:\s*(\S+)\s*$", re.MULTILINE)
 MODEL_LINE = re.compile(r"^model:\s*['\"]?([^'\"\n]+)['\"]?\s*$", re.MULTILINE)
 SESSION_TIMEOUT = 240
+# Declared for every scripted model so a whole-package read batch never trips compaction.
+CONTEXT_WINDOW = 2_000_000
+MAX_TOKENS = 8192
 
 
 class SmokeError(Exception):
@@ -253,7 +257,21 @@ def models_yml(port: int) -> str:
 
     def block(url: str, ids: tuple[str, ...]) -> dict[str, Any]:
         api = "openai-completions"
-        models = [{"id": i, "name": i, "api": api, "reasoning": False, "input": ["text"]} for i in ids]
+        # Without an explicit window omp assumes 128k tokens. S5 returns every SKILL.md in one
+        # turn (~570 KB), which overflows that and starts a compaction that races the tool batch
+        # and replaces late results with "No result provided" (YAN-1606).
+        models = [
+            {
+                "id": i,
+                "name": i,
+                "api": api,
+                "reasoning": False,
+                "input": ["text"],
+                "contextWindow": CONTEXT_WINDOW,
+                "maxTokens": MAX_TOKENS,
+            }
+            for i in ids
+        ]
         return {"baseUrl": url, "apiKey": "none", "api": api, "auth": "none", "models": models}
 
     providers = {
@@ -404,6 +422,11 @@ def check_agents(out: Path, package: Path) -> str:
 def check_skills(out: Path, package: Path) -> str:
     data = load(out)
     names = skills(package)
+    # Every request must belong to the script. An unmarked request means omp compacted the
+    # session mid-batch, which can drop late results as "No result provided" (YAN-1606).
+    stray = sorted({str(r.get("key")) for r in data["requests"]} - {"SCRIPT-skills"})
+    if stray:
+        raise SmokeError(f"requests outside SCRIPT-skills (omp compacted the session?): keys {stray}")
     reply = [r for r in requests_for(data, "SCRIPT-skills") if r.get("step") == 1]
     if not reply:
         raise SmokeError("the skill reads never returned")
