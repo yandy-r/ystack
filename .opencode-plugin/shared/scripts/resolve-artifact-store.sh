@@ -6,7 +6,7 @@
 set -uo pipefail
 
 # shellcheck source=resolve-plans-dir.sh
-source "$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)/resolve-plans-dir.sh" || {
+source "$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd -P)/resolve-plans-dir.sh" 2>/dev/null || {
   if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then exit 1; else return 1; fi
 }
 
@@ -22,6 +22,8 @@ _artifact_config_value() {
 # Each key inherits independently, but never from outside this repository.
 _artifact_find_config_value() {
   local key="$1" dir="$2" boundary="$3" value
+  # A boundary that is not an ancestor cannot bound a walk: inspect only start.
+  if [[ "$dir" != "$boundary" && "$dir" != "${boundary%/}/"* ]]; then boundary=$dir; fi
   while :; do
     if value=$(_artifact_config_value "$key" "${dir}/.plans-config"); then
       printf '%s' "$value"
@@ -34,22 +36,15 @@ _artifact_find_config_value() {
 }
 
 _artifact_branch_hint() {
-  local start_dir="$1" team="$2" branch prefix regex char i
+  local start_dir="$1" team="$2" branch prefix regex
   branch=$(git -C "$start_dir" branch --show-current 2>/dev/null) || return 0
   [[ -n "$branch" ]] || return 0
   branch=$(printf '%s' "$branch" | tr '[:lower:]' '[:upper:]')
   prefix='[A-Z][A-Z0-9]{1,9}'
   if [[ -n "$team" ]]; then
     team=$(printf '%s' "$team" | tr '[:lower:]' '[:upper:]')
-    prefix=''
-    # Treat the configured team literally, never as executable regex syntax.
-    for ((i = 0; i < ${#team}; i++)); do
-      char=${team:i:1}
-      case "$char" in
-        [A-Z0-9]) prefix+="$char" ;;
-        *) prefix+="\\${char}" ;;
-      esac
-    done
+    [[ "$team" =~ ^[A-Z0-9]+$ ]] || return 0
+    prefix=$team
   fi
   regex="(^|[/_-])(${prefix})-([0-9]+)([/_-]|$)"
   if [[ "$branch" =~ $regex ]]; then
@@ -63,6 +58,7 @@ resolve_artifact_store() {
     ARTIFACT_LINEAR_WORKSPACE ARTIFACT_LINEAR_TEAM ARTIFACT_LINEAR_PROJECT \
     ARTIFACT_LINEAR_LABEL ARTIFACT_LINEAR_HINT
   local start_dir='' store='' source_name='' flag_set=0 global_config git_root boundary
+  local phys_start phys_plans_root
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --store=*) store=${1#--store=}; source_name=flag; flag_set=1 ;;
@@ -81,10 +77,12 @@ resolve_artifact_store() {
     _error 'Artifact-store start directory does not exist'; return 1
   }
   resolve_plans_dir "$start_dir" || return 1
-  git_root=$(git -C "$start_dir" rev-parse --show-toplevel 2>/dev/null) || git_root=''
-  boundary=${git_root:-$PLANS_ROOT}
+  phys_start=$(CDPATH='' cd -- "$start_dir" >/dev/null && pwd -P) || return 1
+  phys_plans_root=$(CDPATH='' cd -- "$PLANS_ROOT" >/dev/null 2>&1 && pwd -P) || phys_plans_root=$PLANS_ROOT
+  git_root=$(git -C "$phys_start" rev-parse --show-toplevel 2>/dev/null) || git_root=''
+  boundary=${git_root:-$phys_plans_root}
   if [[ "$flag_set" == 0 ]]; then
-    if store=$(_artifact_find_config_value store "$start_dir" "$boundary"); then
+    if store=$(_artifact_find_config_value store "$phys_start" "$boundary"); then
       source_name=config
     else
       global_config="${XDG_CONFIG_HOME:-${HOME}/.config}/ycc/config"
@@ -98,23 +96,30 @@ resolve_artifact_store() {
   fi
   case "$store" in
     linear|local) ;;
-    *) _error "Invalid artifact store '${store}' (${source_name}); expected linear or local"; return 1 ;;
+    *)
+      if [[ "${_ARTIFACT_AUTO_RESOLVE:-}" == 1 ]]; then
+        _warn "Invalid artifact store '${store}' (${source_name}); expected linear or local"
+      else
+        _error "Invalid artifact store '${store}' (${source_name}); expected linear or local"
+      fi
+      return 1
+      ;;
   esac
 
   export ARTIFACT_STORE="$store" ARTIFACT_STORE_SOURCE="$source_name"
   export ARTIFACT_ROOT="$PLANS_ROOT"
   if [[ "$store" == linear ]]; then
-    if [[ -n "$git_root" && "$PLANS_ROOT" != "$git_root" && "$PLANS_ROOT" != "$git_root/"* ]]; then
+    if [[ -n "$git_root" && "$phys_plans_root" != "$git_root" && "$phys_plans_root" != "$git_root/"* ]]; then
       ARTIFACT_ROOT=$git_root
     fi
     export ARTIFACT_DIR="${ARTIFACT_ROOT}/.ycc/artifacts"
   else
     export ARTIFACT_DIR="$PLANS_DIR"
   fi
-  ARTIFACT_LINEAR_WORKSPACE=$(_artifact_find_config_value linear_workspace "$start_dir" "$boundary") || ARTIFACT_LINEAR_WORKSPACE=''
-  ARTIFACT_LINEAR_TEAM=$(_artifact_find_config_value linear_team "$start_dir" "$boundary") || ARTIFACT_LINEAR_TEAM=''
-  ARTIFACT_LINEAR_PROJECT=$(_artifact_find_config_value linear_project "$start_dir" "$boundary") || ARTIFACT_LINEAR_PROJECT=''
-  ARTIFACT_LINEAR_LABEL=$(_artifact_find_config_value linear_label "$start_dir" "$boundary") || ARTIFACT_LINEAR_LABEL=''
+  ARTIFACT_LINEAR_WORKSPACE=$(_artifact_find_config_value linear_workspace "$phys_start" "$boundary") || ARTIFACT_LINEAR_WORKSPACE=''
+  ARTIFACT_LINEAR_TEAM=$(_artifact_find_config_value linear_team "$phys_start" "$boundary") || ARTIFACT_LINEAR_TEAM=''
+  ARTIFACT_LINEAR_PROJECT=$(_artifact_find_config_value linear_project "$phys_start" "$boundary") || ARTIFACT_LINEAR_PROJECT=''
+  ARTIFACT_LINEAR_LABEL=$(_artifact_find_config_value linear_label "$phys_start" "$boundary") || ARTIFACT_LINEAR_LABEL=''
   export ARTIFACT_LINEAR_WORKSPACE ARTIFACT_LINEAR_TEAM ARTIFACT_LINEAR_PROJECT ARTIFACT_LINEAR_LABEL
   export ARTIFACT_LINEAR_HINT
   ARTIFACT_LINEAR_HINT=$(_artifact_branch_hint "$start_dir" "$ARTIFACT_LINEAR_TEAM")
@@ -134,10 +139,15 @@ get_feature_artifact_dir() {
 
 # Check before either write entry point so a non-repository cannot gain a cache.
 _artifact_require_git_root() {
-  local git_root inside
+  local git_root inside phys_root
+  if [[ -L "${ARTIFACT_ROOT}/.gitignore" || -L "${ARTIFACT_ROOT}/.ycc" || -L "$ARTIFACT_DIR" ]]; then
+    _error 'Artifact writes refuse symlinked .gitignore, .ycc, or artifact directory'
+    return 1
+  fi
+  phys_root=$(CDPATH='' cd -- "$ARTIFACT_ROOT" >/dev/null 2>&1 && pwd -P) || phys_root=''
   inside=$(git -C "$ARTIFACT_ROOT" rev-parse --is-inside-work-tree 2>/dev/null) || inside=''
   git_root=$(git -C "$ARTIFACT_ROOT" rev-parse --show-toplevel 2>/dev/null) || git_root=''
-  if [[ "$inside" != true || -z "$git_root" || ( "$ARTIFACT_ROOT" != "$git_root" && "$ARTIFACT_ROOT" != "$git_root/"* ) ]]; then
+  if [[ "$inside" != true || -z "$git_root" || ( "$phys_root" != "$git_root" && "$phys_root" != "$git_root/"* ) ]]; then
     _error 'Linear artifact writes require ARTIFACT_ROOT inside a Git work tree'
     return 1
   fi
@@ -147,13 +157,14 @@ ensure_artifact_gitignore() {
   [[ -n "${ARTIFACT_STORE:-}" ]] || resolve_artifact_store || return 1
   [[ "$ARTIFACT_STORE" == linear ]] || return 0
   _artifact_require_git_root || return 1
-  local file="${ARTIFACT_ROOT}/.gitignore" last_byte ignore_source ignore_line ignore_pattern git_root
+  local file="${ARTIFACT_ROOT}/.gitignore" last_byte ignore_source ignore_pattern git_root
   git_root=$(git -C "$ARTIFACT_ROOT" rev-parse --show-toplevel) || return 1
   # Only a committed-style ignore within this repo is portable to sub-agents.
   # NUL output avoids splitting paths with whitespace or colons.
-  if { IFS= read -r -d '' ignore_source && IFS= read -r -d '' ignore_line && IFS= read -r -d '' ignore_pattern; } < <(printf '.ycc/artifacts/probe\0' | git -C "$ARTIFACT_ROOT" check-ignore -v -z --no-index --stdin 2>/dev/null); then
-    [[ "$ignore_source" == /* ]] || ignore_source="${ARTIFACT_ROOT}/${ignore_source}"
-    ignore_source="$(CDPATH='' cd -- "$(dirname "$ignore_source")" >/dev/null 2>&1 && pwd)/${ignore_source##*/}"
+  # Fields: source, line number (discarded into _), pattern, path.
+  if { IFS= read -r -d '' ignore_source && IFS= read -r -d '' _ && IFS= read -r -d '' ignore_pattern; } < <(printf '.ycc/artifacts/probe\0' | git -C "$ARTIFACT_ROOT" check-ignore -v -z --no-index --stdin 2>/dev/null); then
+    [[ "$ignore_source" == /* ]] || ignore_source="${git_root}/${ignore_source}"
+    ignore_source="$(CDPATH='' cd -- "$(dirname "$ignore_source")" >/dev/null 2>&1 && pwd -P)/${ignore_source##*/}"
     if [[ "$ignore_source" == "$git_root/"* && "${ignore_source##*/}" == .gitignore && "$ignore_pattern" != '!'* ]]; then
       return 0
     fi
@@ -208,5 +219,5 @@ _artifact_store_cli() {
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   _artifact_store_cli "$@"
 else
-  resolve_artifact_store || :
+  _ARTIFACT_AUTO_RESOLVE=1 resolve_artifact_store || :
 fi
