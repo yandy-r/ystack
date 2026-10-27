@@ -153,6 +153,26 @@ class CodexMarketplaceTestCase(unittest.TestCase):
         self.assertIn("nothing to remove", result.stdout)
         self.assertEqual(self.dest.read_text(encoding="utf-8"), original)
 
+    def test_remove_dry_run_previews_entry_removal_without_writes(self) -> None:
+        other = {"name": "other", "source": {"source": "github", "repo": "a/b"}}
+        original = json.dumps({"name": "custom", "plugins": [other, {"name": "ycc"}]})
+        self.dest.write_text(original, encoding="utf-8")
+        result = self.run_helper("remove", "--dry-run", str(self.dest))
+        self.assertEqual(result.stdout, f"[dry-run] would remove marketplace entry ycc from {self.dest}\n")
+        self.assertEqual(self.dest.read_text(encoding="utf-8"), original)
+
+    def test_remove_dry_run_previews_scaffold_only_deletion_without_writes(self) -> None:
+        self.merge()
+        original = self.dest.read_text(encoding="utf-8")
+        result = self.run_helper("remove", "--dry-run", str(self.dest))
+        self.assertEqual(result.stdout, f"[dry-run] would remove {self.dest} (only the ycc entry was left)\n")
+        self.assertEqual(self.dest.read_text(encoding="utf-8"), original)
+
+    def test_remove_dry_run_no_ycc_entry_noop(self) -> None:
+        self.dest.write_text('{"name":"custom","plugins":[{"name":"other"}]}\n', encoding="utf-8")
+        result = self.run_helper("remove", "--dry-run", str(self.dest))
+        self.assertIn("nothing to remove", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

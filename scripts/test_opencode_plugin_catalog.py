@@ -393,6 +393,18 @@ class LoadsAfterRemoveTestCase(CatalogBase):
         result = self.loads_after_remove()
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_missing_destination_does_not_load(self) -> None:
+        result = self.loads_after_remove()
+        self.assertEqual(result.returncode, 1, result.stderr)
+
+    def test_absent_entry_with_nothing_owned_does_not_load(self) -> None:
+        self.destination.write_text('{"plugins": ["user-plugin"]}\n', encoding="utf-8")
+        result = self.loads_after_remove()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.destination.write_text('{\n  // note\n  "plugins": ["user-plugin",],\n}\n', encoding="utf-8")
+        result = self.loads_after_remove()
+        self.assertEqual(result.returncode, 1, result.stderr)
+
 
 class StateScopeTestCase(unittest.TestCase):
     def setUp(self) -> None:

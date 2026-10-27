@@ -108,6 +108,8 @@ cursor_commands_entries() {
 
 # Preflight both carriers before any user file is changed. The helpers reject
 # unsafe ownership, local edits, malformed hooks, and symlink destinations.
+# Slice-helper stdout (its dry-run preview lines) is discarded: the real step
+# prints them once under --dry-run and never in a live run; stderr stays.
 cursor_carrier_preflight() {
     local action="$1" skills_home
     local -a flags=()
@@ -122,17 +124,17 @@ cursor_carrier_preflight() {
         fi
         if cursor_commands_entries; then
             python3 "${SLICE_HELPER}" install --target cursor --slice commands --dry-run \
-                "${skills_flags[@]}" "${flags[@]}" "${CURSOR_COMMANDS_ENTRIES[@]}" || return 1
+                "${skills_flags[@]}" "${flags[@]}" "${CURSOR_COMMANDS_ENTRIES[@]}" >/dev/null || return 1
         fi
     fi
     if [[ "${action}" == "remove" ]] && step_enabled commands; then
         if cursor_commands_entries; then
             python3 "${SLICE_HELPER}" remove --target cursor --slice commands --dry-run \
-                "${flags[@]}" "${CURSOR_COMMANDS_ENTRIES[@]}" || return 1
+                "${flags[@]}" "${CURSOR_COMMANDS_ENTRIES[@]}" >/dev/null || return 1
         fi
     fi
     if step_enabled hooks; then
-        python3 "${SLICE_HELPER}" "${action}" --target cursor --slice hooks --dry-run "${flags[@]}" || return 1
+        python3 "${SLICE_HELPER}" "${action}" --target cursor --slice hooks --dry-run "${flags[@]}" >/dev/null || return 1
     fi
     if step_enabled hooks; then
         [[ "${action}" == "remove" ]] && flags+=(--remove)

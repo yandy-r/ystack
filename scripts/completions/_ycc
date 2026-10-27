@@ -22,7 +22,7 @@ _ycc() {
         '(--global)--project[write into the current project]'
         '(--project)--global[write into user-global config]'
         '--force[let repo values win]'
-        '--dry-run[preview without writing (mcp and omp steps; others skipped)]'
+        '--dry-run[preview without writing (settings, rules, mcp; hooks on claude/cursor; base removal; all omp steps)]'
         '--help[show help]'
     )
     local mode='--mode[marketplace source mode]:mode:(local repo)'

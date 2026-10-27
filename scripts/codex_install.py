@@ -356,7 +356,7 @@ def remove(use_cli: bool, *, dry_run: bool = False) -> None:
             kept_packages.add(package)
         elif use_cli and plugins.get(selector, {"enabled": True}) == {"enabled": True}:
             if dry_run:
-                print(f"[dry-run] would run codex plugin remove {selector}")
+                print(f"[dry-run] would run: codex plugin remove {selector}")
             else:
                 cli("plugin", "remove", selector, check=False)
     removable = [f"{package}@ycc" for package in MIGRATION_PACKAGES if package not in kept_packages]
@@ -373,7 +373,7 @@ def remove(use_cli: bool, *, dry_run: bool = False) -> None:
     ):
         if use_cli:
             if dry_run:
-                print("[dry-run] would run codex plugin marketplace remove ycc")
+                print("[dry-run] would run: codex plugin marketplace remove ycc")
             else:
                 cli("plugin", "marketplace", "remove", "ycc")
         if registered == owned_marketplace and destination.exists():

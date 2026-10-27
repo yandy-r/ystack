@@ -212,12 +212,38 @@ before="$(tree_digest "${home}")"
 install_must_succeed "${home}" sync --target cursor --intent hooks --dry-run
 assert_contains "${INSTALL_OUT}" "would copy ${REPO_ROOT}/packages/cursor/ycc-hooks/hooks/herdr-session-start.sh -> ${home}/.cursor/hooks/herdr-session-start.sh" "cursor hooks sync previews the script copy"
 assert_home_unchanged "${home}" "${before}" "cursor hooks sync preview"
+copy_lines="$(grep -c "would copy .*herdr-session-start.sh" <<<"${INSTALL_OUT}" || true)"
+if [[ "${copy_lines}" == "1" ]]; then ok "cursor hooks dry-run prints the script copy once"; else ko "cursor hooks dry-run prints the script copy once" "${INSTALL_OUT}"; fi
 install_must_succeed "${home}" sync --target cursor --intent hooks
+assert_not_contains "${INSTALL_OUT}" "[dry-run]" "live cursor hooks sync prints no preview lines"
 before="$(tree_digest "${home}")"
 install_must_succeed "${home}" remove --target cursor --intent hooks --dry-run
 assert_contains "${INSTALL_OUT}" "would remove ${home}/.cursor/hooks/herdr-session-start.sh" "cursor hooks remove previews the script removal"
 assert_contains "${INSTALL_OUT}" "would remove empty directory ${home}/.cursor/hooks" "cursor hooks remove previews the emptied hooks dir"
+remove_lines="$(grep -c "would remove ${home}/.cursor/hooks/herdr-session-start.sh" <<<"${INSTALL_OUT}" || true)"
+if [[ "${remove_lines}" == "1" ]]; then ok "cursor hooks dry-run prints the script removal once"; else ko "cursor hooks dry-run prints the script removal once" "${INSTALL_OUT}"; fi
 assert_home_unchanged "${home}" "${before}" "cursor hooks removal preview"
+install_must_succeed "${home}" remove --target cursor --intent hooks
+assert_not_contains "${INSTALL_OUT}" "[dry-run]" "live cursor hooks remove prints no preview lines"
+
+# Legacy Codex base removal previews the marketplace entry through the helper,
+# lists each path once, and forecasts the emptied marketplace cache directory.
+if ! repo_codex_native; then
+    home="$(new_home)"
+    mkdir -p "${home}/.codex/plugins/cache/local-ycc-plugins/ycc/skills" "${home}/.agents/plugins" "${home}/.codex/agents"
+    cp -R "${REPO_ROOT}/.codex-plugin/agents/." "${home}/.codex/agents/"
+    printf '%s\n' '{ "name": "local-ycc-plugins", "interface": { "displayName": "Local YCC Plugins" }, "plugins": [{ "name": "ycc" }, { "name": "other" }] }' > "${home}/.agents/plugins/marketplace.json"
+    before="$(tree_digest "${home}")"
+    install_must_succeed "${home}" remove --target codex --only base --dry-run
+    assert_contains "${INSTALL_OUT}" "would remove marketplace entry ycc from ${home}/.agents/plugins/marketplace.json" "codex legacy removal previews the marketplace entry"
+    assert_contains "${INSTALL_OUT}" "would remove ${home}/.codex/plugins/cache/local-ycc-plugins" "codex legacy removal previews the emptied cache directory"
+    first_agent="$(find "${REPO_ROOT}/.codex-plugin/agents" -maxdepth 1 -name '*.toml' -printf '%f\n' | sort | sed -n 1p)"
+    agent_lines="$(grep -c "would remove ${home}/.codex/agents/${first_agent}\$" <<<"${INSTALL_OUT}" || true)"
+    if [[ "${agent_lines}" == "1" ]]; then ok "codex legacy removal lists each agent once"; else ko "codex legacy removal lists each agent once" "${INSTALL_OUT}"; fi
+    assert_home_unchanged "${home}" "${before}" "codex legacy base removal preview"
+else
+    skip_listed "codex legacy base removal preview"
+fi
 
 echo
 echo "== install.sh --target all --only <step>: targets without the step sit it out =="

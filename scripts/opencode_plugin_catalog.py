@@ -451,7 +451,15 @@ def run_notes(catalog: Catalog, args: argparse.Namespace) -> int:
 def run_loads_after_remove(args: argparse.Namespace) -> int:
     """Whether a name remains after the same removal the merge helper would apply."""
     from managed_config_entries import expand_leaf_rules
-    from merge_managed_config import PROFILES, MergeError, load_source, load_state, parse_pointer, remove_json
+    from merge_managed_config import (
+        PROFILES,
+        MergeError,
+        load_source,
+        load_state,
+        parse_pointer,
+        remove_json,
+        strip_jsonc,
+    )
 
     destination = args.destination.expanduser()
     profile = PROFILES[args.profile]
@@ -468,7 +476,12 @@ def run_loads_after_remove(args: argparse.Namespace) -> int:
             state_entry = {}
         profile = expand_leaf_rules(profile, source, [parse_pointer(key) for key in state_entry if key.startswith("/")])
         rendered, _, _, _, _, _ = remove_json(source, destination, profile, groups, state_entry, args.force)
-        projected = destination if rendered is None else json.loads(rendered)
+        if rendered is not None:
+            projected = json.loads(rendered)
+        elif destination.is_file():
+            projected = json.loads(strip_jsonc(destination.read_text(encoding="utf-8")) or "{}")
+        else:
+            projected = {}
         if not isinstance(projected, dict):
             return 0
         plugins = projected.get("plugins", [])
