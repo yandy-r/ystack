@@ -260,11 +260,9 @@ _artifact_require_git_root() {
   fi
 }
 
-ensure_artifact_gitignore() {
-  [[ -n "${ARTIFACT_STORE:-}" ]] || resolve_artifact_store || return 1
-  [[ "$ARTIFACT_STORE" == linear ]] || return 0
-  _artifact_require_git_root || return 1
-  local file="${ARTIFACT_ROOT}/.gitignore" last_byte ignore_source ignore_pattern git_root count
+# Read-only coverage check: 0 means present, 1 means append, 2 means unsafe.
+_artifact_gitignore_present() {
+  local file="${ARTIFACT_ROOT}/.gitignore" ignore_source ignore_pattern git_root count
   git_root=$(git -C "$ARTIFACT_ROOT" rev-parse --show-toplevel) || return 1
   # Only committed-style ignores within this repo are portable. A non-negated
   # repo rule must cover direct, nested, and representative feature-cache probes
@@ -276,12 +274,22 @@ ensure_artifact_gitignore() {
     count=$((count + 1))
     [[ "$ignore_source" == /* ]] || ignore_source="${git_root}/${ignore_source}"
     ignore_source="$(CDPATH='' cd -- "$(dirname "$ignore_source")" >/dev/null 2>&1 && pwd -P)/${ignore_source##*/}"
-    [[ "$ignore_source" == "$git_root/"* && "${ignore_source##*/}" == .gitignore && "$ignore_pattern" != '!'* ]] || return 1
+    [[ "$ignore_source" == "$git_root/"* && "${ignore_source##*/}" == .gitignore && "$ignore_pattern" != '!'* ]] || return 2
   done < <(printf '.ycc/artifacts/probe\0.ycc/artifacts/probe-dir/probe\0.ycc/artifacts/feat/cache\0' | git -C "$ARTIFACT_ROOT" check-ignore -v -z --no-index --stdin 2>/dev/null)
   [[ "$count" == 3 ]] && return 0
   if [[ -f "$file" ]] && grep -qxE '/?\.ycc/artifacts/?' "$file"; then
     return 0
   fi
+  return 1
+}
+
+ensure_artifact_gitignore() {
+  [[ -n "${ARTIFACT_STORE:-}" ]] || resolve_artifact_store || return 1
+  [[ "$ARTIFACT_STORE" == linear ]] || return 0
+  _artifact_require_git_root || return 1
+  local file="${ARTIFACT_ROOT}/.gitignore" last_byte status=0
+  _artifact_gitignore_present || status=$?
+  case "$status" in 0) return 0 ;; 2) return 1 ;; esac
   if [[ -s "$file" ]]; then
     # Command substitution strips a final newline, leaving an empty last byte.
     last_byte=$(tail -c 1 "$file") || return 1

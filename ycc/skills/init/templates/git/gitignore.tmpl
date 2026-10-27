@@ -48,6 +48,11 @@ Thumbs.db
 .claude/session-data/
 .claude/plans/
 
+{{#IF_ARTIFACT_STORE}}
+# Planning artifacts — Linear's local cache
+.ycc/artifacts/
+{{/IF_ARTIFACT_STORE}}
+
 {{#IF_RUST}}
 # ==============================================================================
 # Rust

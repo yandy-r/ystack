@@ -65,16 +65,26 @@ Every `{{VAR}}` used across all templates:
 `{{#NAME}}…{{/NAME}}` keeps its contents when the condition holds and is removed entirely
 otherwise.
 
-| Block                                                    | Kept when                                                                                                                                           | Used in                                   |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `IF_RUST`, `IF_TS`, `IF_GO`, `IF_PYTHON`, `IF_TERRAFORM` | The block's language matches `primary_language` (all of `secondary_languages` too for `gitignore.tmpl`)                                             | Most templates                            |
-| `IF_RELEASE_MODEL`                                       | `RELEASING.md` exists at the project root after Phase 5.5 — already present (`has_releasing_md=true`) or created by `release-model` in this run | `AGENTS.md.tmpl`, `github/labels.md.tmpl` |
-| `IF_CLAUDE_ONLY`                                         | Claude-specific content exists (Phase 2 or user-supplied) — otherwise only the `@AGENTS.md` shim remains                                            | `CLAUDE.md.tmpl`                          |
+| Block                                                    | Kept when                                                                                                                                              | Used in                                                                              |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `IF_RUST`, `IF_TS`, `IF_GO`, `IF_PYTHON`, `IF_TERRAFORM` | The block's language matches `primary_language` (all of `secondary_languages` too for `gitignore.tmpl`)                                                | Most templates                                                                       |
+| `IF_RELEASE_MODEL`                                       | `RELEASING.md` exists at the project root after Phase 5.5 — already present (`has_releasing_md=true`) or created by `release-model` in this run    | `AGENTS.md.tmpl`, `github/labels.md.tmpl`                                            |
+| `IF_ARTIFACT_STORE`                                      | Phase 5.6 succeeds with effective choice linear, or the root pointer was already linear and tracked; failed setup or an explicit local choice drops it | `AGENTS.md.tmpl` (`## Planning artifacts`), `git/gitignore.tmpl` (`.ycc/artifacts/`) |
+| `IF_CLAUDE_ONLY`                                         | Claude-specific content exists (Phase 2 or user-supplied) — otherwise only the `@AGENTS.md` shim remains                                               | `CLAUDE.md.tmpl`                                                                     |
 
 `IF_RELEASE_MODEL` is resolved in Phase 5.5, after `release-model` has had its chance
 to run, so the `## Branching & releases` pointer and the `backport:X.Y` label family never
 reference a `RELEASING.md` that does not exist. Under `--dry-run` it is kept when
 `has_releasing_md=true` or `--release-model` was passed.
+
+`IF_ARTIFACT_STORE` is resolved in Phase 5.6: keep it only after a successful helper run
+with effective choice linear, or when the root `.plans-config` was already linear and
+tracked. A failed helper/MCP run drops it even if a pointer remains on disk.
+`render-template` does not compute it: pass `--keep IF_ARTIFACT_STORE` for both templates.
+Under `--dry-run`, keep it only when the effective choice is linear: the root pointer is
+already linear and tracked, or `--artifact-store` / `--artifact-store=linear` was passed;
+an explicit `--artifact-store=local` always drops it. Phase 5 performs read-only Gather
+before a helper preview; unresolved values are shown as placeholders, not passed to it.
 
 ---
 

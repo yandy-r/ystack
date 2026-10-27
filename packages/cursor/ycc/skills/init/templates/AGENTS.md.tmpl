@@ -36,3 +36,9 @@ This is the canonical, tool-neutral repository policy.
 
 Read [`RELEASING.md`](RELEASING.md) before branching, opening a PR, or releasing. It is the source of truth for trunk, maintenance branches, and backports. Never merge one long-lived branch into another to sync it.
 {{/IF_RELEASE_MODEL}}
+{{#IF_ARTIFACT_STORE}}
+
+## Planning artifacts
+
+Planning artifacts live in Linear (see `.plans-config`); `.ycc/artifacts/` is a gitignored local cache. If it's missing, pull from Linear.
+{{/IF_ARTIFACT_STORE}}

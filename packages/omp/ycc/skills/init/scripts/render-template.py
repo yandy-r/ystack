@@ -11,8 +11,8 @@ Usage:
 * --profile is key=value output from profile-project.sh; "-" or piped stdin
   reads it from stdin. Regular files, FIFOs and /dev/fd paths are accepted.
 * --set KEY=VALUE overrides the profile. --keep BLOCK keeps a block that is
-  not computed automatically (IF_RELEASE_MODEL, IF_LABELS, IF_CONTRIBUTING,
-  IF_CLAUDE_ONLY).
+  not computed automatically (IF_RELEASE_MODEL, IF_ARTIFACT_STORE, IF_LABELS,
+  IF_CONTRIBUTING, IF_CLAUDE_ONLY).
 
 Blocks:
   {{#NAME}} ... {{/NAME}} markers must be alone on their line. Blocks nest,
