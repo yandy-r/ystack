@@ -40,6 +40,9 @@
 #   - hooks-workflow verify-hooks.sh               (advisory comment, codex)
 #   - research-to-issues validate-prerequisites.sh (content-based type detect)
 #   - compatibility-audit audit-target-features.sh (--help)
+#
+# Frontmatter body-only reads (YAN-1674; not a SIGPIPE race, so no control):
+#   - research-to-issues validate-prerequisites.sh (section 6b)
 # The old_* control functions are invoked indirectly through control_sigpipes.
 # shellcheck disable=SC2317
 set -euo pipefail
@@ -294,8 +297,9 @@ else
 fi
 
 # --- 6. research-to-issues validate-prerequisites.sh (smoke) ------------------
-# HEAD_CONTENT is built with `head -40 <file>` (no pipe writer), so the old
-# code passes too; the case pins the content-based detection on a large file.
+# HEAD_CONTENT is head -40 of the artifact_body here-string (no pipe writer),
+# so the old code passes too; the case pins the content-based detection on a
+# large file.
 
 VP_NEW="${REPO_ROOT}/ycc/skills/research-to-issues/scripts/validate-prerequisites.sh"
 VP_DIR="${SCRATCH}/vp"
