@@ -23,21 +23,22 @@ from generate_codex_common import (  # noqa: E402
     VERBATIM_SKILL_FILES,
     drop_self_fallbacks,
     parse_frontmatter,
+    self_fallbacks,
 )
 
-_FALLBACK_LINE = re.compile(r'^\s*\[\[ -f "\$\w+" \]\] \|\| ')
 
+def without_dropped_fallbacks(rel: Path, legacy: str) -> str:
+    """Remove from the legacy baseline exactly the fallback lines native rendering drops.
 
-def without_dropped_fallbacks(rel: Path, legacy: str, content: str) -> str:
-    """Drop the legacy fallback lines whose native rendering the native script no longer carries."""
+    Native shell rendering is line-for-line, so the indices self_fallbacks() reports on the
+    undropped native render are the legacy lines that native output no longer carries.
+    """
     if rel.suffix not in skills.NATIVE_SHELL_SUFFIXES:
         return legacy
-    emitted = set(content.splitlines())
-    return "".join(
-        line
-        for line in legacy.splitlines(keepends=True)
-        if not (_FALLBACK_LINE.match(line) and skills.rewrite_native_paths(line, rel).rstrip("\n") not in emitted)
-    )
+    with patch.object(skills, "drop_self_fallbacks", lambda text: text):
+        undropped = skills.rewrite_native_paths(legacy, rel)
+    dead = {index for index, _ in self_fallbacks(undropped)}
+    return "".join(line for index, line in enumerate(legacy.splitlines(keepends=True)) if index not in dead)
 
 
 class NativeResourceTestCase(unittest.TestCase):
@@ -138,9 +139,7 @@ class NativeResourceTestCase(unittest.TestCase):
                 continue
             with self.subTest(document=rel):
                 content = (self.root / rel).read_text(encoding="utf-8")
-                checked += self.assert_resource_paths(
-                    rel, without_dropped_fallbacks(rel, legacy.read_text(), content), content
-                )
+                checked += self.assert_resource_paths(rel, without_dropped_fallbacks(rel, legacy.read_text()), content)
         self.assertGreater(checked, 200)
 
     def test_resource_invariant_rejects_extra_parent_traversal(self) -> None:

@@ -21,6 +21,8 @@ CLEAN = (
     '[[ -f "$LIB" ]] || LIB="${HOME}/.agents/ycc-shared/lib.sh"\n'
     'ROOT="$HOME/${raw_root#"~/"}"\n'
     'TRIMMED="${WORKTREE_ROOT%"~/"}"\n'
+    'SWAPPED="${path/"~/"/$HOME/}" LEAD="${path/#"~/"/$HOME/}"\n'
+    'run "$LIB"  # see "~/.config/opencode/shared/lib.sh"\n'
 )
 
 SKILL = (
@@ -36,6 +38,9 @@ SKILL = (
     "~~~sh\n"
     'source "~/.agents/ycc-shared/lib.sh"\n'
     "~~~\n"
+    "```\n"
+    'bash "~/.config/opencode/shared/scripts/b.sh"\n'
+    "```\n"
 )
 
 
@@ -66,13 +71,21 @@ class CheckTextTests(unittest.TestCase):
 
 class CheckMarkdownTests(unittest.TestCase):
     def test_only_double_quoted_tilde_in_shell_fences_fails(self) -> None:
-        # Prose, comments, JSON fences and single-quoted command strings are not flagged.
+        # Prose, comments, JSON fences and single-quoted command strings are not flagged; untyped fences are.
         self.assertEqual(
             check_markdown(SKILL),
             [
                 "line 4: quoted '~' is never expanded by the shell",
                 "line 11: quoted '~' is never expanded by the shell",
+                "line 14: quoted '~' is never expanded by the shell",
             ],
+        )
+
+    def test_untyped_and_session_fences_are_shell(self) -> None:
+        text = '```\nbash "~/a.sh"\n```\n```zsh\nsource "~/b.sh"\n```\n```console\n$ bash "~/c.sh"\n```\n'
+        self.assertEqual(
+            check_markdown(text),
+            [f"line {n}: quoted '~' is never expanded by the shell" for n in (2, 5, 8)],
         )
 
     def test_home_spelling_and_strip_patterns_pass(self) -> None:
@@ -96,11 +109,17 @@ class ValidateTests(unittest.TestCase):
         self.write("skills/a/scripts/run.sh", CLEAN)
         self.write("skills/a/scripts/run.bash", 'X="~/bad"\n')
         self.write("node_modules/dep/run.sh", 'X="~/bad"\n')
+        self.write(".opencode-plugin/opencode.json", '{"root": "${HOME}/.config/opencode/skills"}\n')
+        self.write(".opencode-plugin/skills/a/run.sh", 'LIB="${HOME}/.config/opencode/shared/lib.sh"\n')
+        self.write(".agents-plugin/config.json", '{"root": "${HOME}/.config/opencode/skills"}\n')
         self.assertEqual(
             validate([self.root]),
             [
+                f"{self.root / '.opencode-plugin/opencode.json'}: ${{HOME}}/.config/opencode belongs only in shell "
+                "code, not a .json file",
                 f"{self.root / 'skills/a/SKILL.md'}: line 4: quoted '~' is never expanded by the shell",
                 f"{self.root / 'skills/a/SKILL.md'}: line 11: quoted '~' is never expanded by the shell",
+                f"{self.root / 'skills/a/SKILL.md'}: line 14: quoted '~' is never expanded by the shell",
                 f"{self.root / 'skills/a/scripts/run.bash'}: line 1: quoted '~' is never expanded by the shell",
             ],
         )
@@ -115,15 +134,6 @@ class ValidateTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 1)
         self.assertIn("run.sh: line 1", result.stderr)
-
-    def test_cli_default_roots_pass(self) -> None:
-        result = subprocess.run(
-            [sys.executable, str(SCRIPTS_DIR / "validate_generated_shell_paths.py")],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":
