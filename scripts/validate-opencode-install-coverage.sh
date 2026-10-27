@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Verifies that every ~/.config/opencode/<root>/... reference inside
+# Verifies that every ~/.config/opencode/<root>/... reference (or its
+# ${HOME}/$HOME spelling) inside
 # the .opencode-plugin/ bundle is either:
 #   (a) installable: <root> is in OPENCODE_BUNDLE_UNITS
 #       (scripts/lib/install/targets/opencode.sh) AND
@@ -56,6 +57,7 @@ ALLOWLIST_ROOTS = {
     "sessions",         # runtime session state
     "session-data",     # runtime session state
     "plugins",          # opencode's own plugin install/cache location (read at runtime, not bundle-shipped)
+    "mcp-library",      # user-maintained MCP library (read by init, never bundle-shipped)
 }
 # Top-level files installed directly (bypassing the bundle-unit
 # rsync). These exist at .opencode-plugin/<file> as plain top-level
@@ -67,11 +69,12 @@ ALLOWLIST_FILES = {
     "settings-hooks-fragment.json", # generated hook fragment, not shipped
 }
 
-# Match ~/.config/opencode/<root>(/<rest>)?
+# Match ~/.config/opencode/<root>(/<rest>)? and the ${HOME}/$HOME spellings
+# that generated shell scripts use (a quoted ~ is never expanded).
 # - <root> is one path segment of normal name characters
 # - <rest> is greedy across path-safe characters; may include trailing /
 PATH_RE = re.compile(
-    r"~/\.config/opencode/([A-Za-z0-9._-]+)(?:/([A-Za-z0-9._/-]*))?"
+    r"(?:~|\$\{HOME\}|\$HOME)/\.config/opencode/([A-Za-z0-9._-]+)(?:/([A-Za-z0-9._/-]*))?"
 )
 
 unknown_roots: dict[str, str] = {}    # root -> first .opencode-plugin file referencing it

@@ -26,14 +26,14 @@ set -euo pipefail
 # Detect the forge provider and select the matching CLI (gh / tea).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 FORGE_LIB="${SCRIPT_DIR}/../../../shared/scripts/lib/forge.sh"
-[[ -f "$FORGE_LIB" ]] || FORGE_LIB="~/.config/opencode/shared/scripts/lib/forge.sh"
+[[ -f "$FORGE_LIB" ]] || FORGE_LIB="${HOME}/.config/opencode/shared/scripts/lib/forge.sh"
 # shellcheck source=/dev/null
 source "$FORGE_LIB"
 
 # Plans are judged by their body: leading identity frontmatter (linear:, tasks:)
 # is metadata and must never satisfy or hide headings and task markers.
 ARTIFACT_BODY_LIB="${SCRIPT_DIR}/../../../shared/scripts/artifact-body.sh"
-[[ -f "$ARTIFACT_BODY_LIB" ]] || ARTIFACT_BODY_LIB="~/.config/opencode/shared/scripts/artifact-body.sh"
+[[ -f "$ARTIFACT_BODY_LIB" ]] || ARTIFACT_BODY_LIB="${HOME}/.config/opencode/shared/scripts/artifact-body.sh"
 # shellcheck source=/dev/null
 source "$ARTIFACT_BODY_LIB"
 

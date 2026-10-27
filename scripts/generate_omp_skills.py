@@ -23,6 +23,7 @@ from typing import Any
 
 from generate_codex_common import (
     VERBATIM_SKILL_FILES,
+    drop_self_fallbacks,
     dump_frontmatter,
     fix_mcp_malformed_tokens,
     load_agent_aliases,
@@ -456,7 +457,8 @@ def rewrite_script_plugin_paths(text: str, rel: Path, catalog: Catalog) -> str:
     """Script fallbacks become the script-relative primary path; comments get `skill://` (D4).
 
     Child processes cannot resolve `skill://` and OMP sets no plugin-root variable, so a
-    `${CLAUDE_PLUGIN_ROOT}` used as code anywhere but a fallback assignment fails.
+    `${CLAUDE_PLUGIN_ROOT}` used as code anywhere but a fallback assignment fails. A
+    rewritten fallback repeats its primary path, so the dead fallback line is dropped.
     """
 
     def fallback(match: re.Match[str]) -> str:
@@ -471,7 +473,7 @@ def rewrite_script_plugin_paths(text: str, rel: Path, catalog: Catalog) -> str:
     for line in text.splitlines():
         if PLUGIN_ROOT_TOKEN in line and not line.lstrip().startswith("#"):
             raise OmpGenerationError(f"{rel}: unsupported {PLUGIN_ROOT_TOKEN} use in script code: {line.strip()}")
-    return rewrite_plugin_paths(text, rel, catalog)
+    return rewrite_plugin_paths(drop_self_fallbacks(text), rel, catalog)
 
 
 def _rewrite_code_tools(code: str) -> str:

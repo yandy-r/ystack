@@ -116,9 +116,9 @@ Derive `<slug>` from the feature name (kebab-case), not the cache filename `prp-
 1. Resolve and print the mode, then read `ARTIFACT_STORE=` from stdout:
 
    ```bash
-   bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
-   OUT="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=prp-plan --slug=<slug>)"
-   RESEARCH_DIR="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=prp-research --slug=<slug>)"
+   bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   OUT="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=prp-plan --slug=<slug>)"
+   RESEARCH_DIR="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=prp-research --slug=<slug>)"
    ```
 
    These calls resolve only; do not run `--ensure`, `mkdir`, Load, or any other write before the C.2 dry-run exit. Dry runs write nothing and require no Linear gate.
@@ -194,7 +194,7 @@ Define:
 Now that the dry-run exit is past, in linear mode apply the Linear call gate before ensuring the plan destination:
 
 ```bash
-OUT="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=prp-plan --slug=<slug>)"
+OUT="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=prp-plan --slug=<slug>)"
 mkdir -p "$(dirname "$OUT")"
 ```
 

@@ -15,7 +15,7 @@ Canonical rules: `~/.config/opencode/shared/references/artifact-store.md` **Impl
 
 ## Phase 5 report and completion
 
-1. Resolve the report path: `bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=prp-report --slug=<slug>`; write the report there (same content as the local report template). Do this on failure as well as success.
+1. Resolve the report path: `bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=prp-report --slug=<slug>`; write the report there (same content as the local report template). Do this on failure as well as success.
 2. Save it: post one Project status update with health `onTrack` when every task passed, `atRisk` otherwise; when the report exceeds the status-update size, also save it as a Document (`<slug> · report`). Record `linear.statusUpdate` (and `linear.document` when long) in the report cache file's frontmatter.
 3. Replace the archive move: parent tracking issue → `completed` once all tasks pass final validation. Complete the Project only under the contract's Project completion rule (name equals the plan slug, carries `ARTIFACT_LINEAR_LABEL` when set, not `ARTIFACT_LINEAR_PROJECT`, every issue `completed` or `canceled`); otherwise leave it open and say why in the report/summary.
 4. `PLAN_ARCHIVED: PASS` in linear mode means: parent tracking issue and every tracked task issue are `completed` (or `canceled`) and the Project status update was posted.

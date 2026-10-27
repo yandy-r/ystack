@@ -38,7 +38,7 @@ Reuse this single path for every iteration.
 ## Step 3 — Loop iteration
 
 ```bash
-bash "~/.config/opencode/shared/scripts/ci-monitor.sh" \
+bash "${HOME}/.config/opencode/shared/scripts/ci-monitor.sh" \
   --pr "$PR_NUMBER" \
   --branch "$HEAD_BRANCH" \
   --base "$BASE_BRANCH" \

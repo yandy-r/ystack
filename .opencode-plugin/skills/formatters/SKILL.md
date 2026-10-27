@@ -110,7 +110,7 @@ Note each item that will be skipped (existing config, manifest detected, etc.).
 Invoke the self-contained installer shipped inside the skill:
 
 ```
-STYLE_SH="~/.config/opencode/skills/formatters/scripts/bundle/style.sh"
+STYLE_SH="${HOME}/.config/opencode/skills/formatters/scripts/bundle/style.sh"
 ```
 
 Build `init_args`:

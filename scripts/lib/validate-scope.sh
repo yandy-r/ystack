@@ -56,6 +56,9 @@ validate_scope_owned_targets() {
         scripts/validate_packages.py | scripts/test_validate_packages.py) echo "packages" ;;
         scripts/validate_install_doc_ids.py | scripts/test_validate_install_doc_ids.py) echo "packages" ;;
         scripts/validate_capability_matrix.py | scripts/test_validate_capability_matrix.py) echo "packages" ;;
+        # Generated shell helper-path check; its tests are in the [tool.mypy] file list.
+        scripts/validate_generated_shell_paths.py) echo "packages" ;;
+        scripts/test_validate_generated_shell_paths.py) echo "packages types" ;;
         # Claude package generator, validator and tests.
         scripts/generate_claude_packages.py | scripts/generate-claude-packages.sh | scripts/validate-claude-packages.sh | scripts/validate_claude_native.py | scripts/test_validate_claude_native.py | scripts/test_generate_claude_packages.py | scripts/test-claude-native-packages.sh | scripts/claude_native_smoke.py) echo "claude claude-native" ;;
         # Hidden v7 Claude split (ycc + ycc-agents): builder/validator, tests and opt-in live harness.

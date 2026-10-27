@@ -133,7 +133,7 @@ If `--ci` was passed and any refusal fires, append: `--ci will not run because t
 
 ```bash
 JSONL_FILE="$(mktemp /tmp/pr-autofix-comments.XXXXXX.jsonl)"
-bash "~/.config/opencode/skills/pr-autofix/scripts/fetch-pr-comments.sh" \
+bash "${HOME}/.config/opencode/skills/pr-autofix/scripts/fetch-pr-comments.sh" \
   --pr "$PR_NUMBER" \
   --out "$JSONL_FILE"
 ```
@@ -258,7 +258,7 @@ A thin wrapper over the loop shared with `/prp-pr` Phase 7 and `/git-workflow` P
 If at least one comment was `Apply`'d (Fixed or Failed) or `Skip`'d, post one consolidated summary comment:
 
 ```bash
-bash "~/.config/opencode/skills/pr-autofix/scripts/post-summary.sh" \
+bash "${HOME}/.config/opencode/skills/pr-autofix/scripts/post-summary.sh" \
   --pr "$PR_NUMBER" \
   --fixed "$FIXED_COUNT" \
   --failed "$FAILED_COUNT" \

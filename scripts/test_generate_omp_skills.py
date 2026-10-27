@@ -126,10 +126,12 @@ class PathRewriteTest(FixtureTestCase):
             body,
         )
 
-    def test_script_fallback_uses_relative_primary_and_comments_use_urls(self) -> None:
+    def test_script_fallback_collapses_to_relative_primary_and_comments_use_urls(self) -> None:
         self.generate()
         script = self.read("demo/scripts/run.sh")
-        self.assertIn('[[ -f "$LIB" ]] || LIB="${SCRIPT_DIR}/../../_shared/scripts/lib.sh"', script)
+        # The fallback would repeat the script-relative primary, so it is dropped as dead code.
+        self.assertIn('LIB="${SCRIPT_DIR}/../../_shared/scripts/lib.sh"\necho', script)
+        self.assertNotIn("|| LIB=", script)
         self.assertIn("# Rules: skill://ycc-shared/references/guide.md#rules", script)
         self.assertIn("echo 'run /skill:releaser next'", script)
         self.assertNotIn("CLAUDE_PLUGIN_ROOT", script)

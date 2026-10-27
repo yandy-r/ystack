@@ -70,7 +70,7 @@ Read `~/.config/opencode/shared/references/standalone-dispatch.md` for standalon
 First read `~/.config/opencode/shared/references/artifact-store.md` **Implementation skills**, **Sync**, **Lookup**, and **Helper API**. Apply **Inputs** before resolution (including the local-plan-wins and `--store=local` conflict rules): when a Linear reference or linear plan path selects linear mode and `STORE_FLAG` is empty, set `STORE_FLAG=--store=linear` before the first resolver call and forward it to every later call, consistent with `references/plan-inputs.md`. Resolve and print the store (default `local`), retaining the printed mode and absolute paths across tool calls:
 
 ```bash
-bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
 ```
 
 In linear mode, follow **Resolve and hydrate** (Lookup → Load `parallel-plan` and available `shared`) before prerequisites or branch preparation; retain absolute `PLAN_PATH` and `SHARED_PATH`. Follow `references/linear-sync.md` throughout this run. Local feature-name input keeps the existing prerequisite call:

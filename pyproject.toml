@@ -28,6 +28,8 @@ files = [
   "scripts/codex_native_smoke.py",
   "scripts/test_codex_native_smoke.py",
   "scripts/validate_capability_matrix.py",
+  "scripts/validate_generated_shell_paths.py",
+  "scripts/test_validate_generated_shell_paths.py",
   "scripts/generate_omp_skills.py",
   "scripts/test_generate_omp_skills.py",
   "scripts/generate_omp_agents.py",

@@ -172,6 +172,8 @@ expect_targets "install ID validator selects packages and types" "packages types
 expect_targets "install ID tests select packages" "packages" scripts/test_validate_install_doc_ids.py
 expect_targets "capability matrix validator selects packages and types" "packages types" scripts/validate_capability_matrix.py
 expect_targets "capability matrix tests select packages" "packages" scripts/test_validate_capability_matrix.py
+expect_targets "generated shell path validator selects packages and types" "packages types" scripts/validate_generated_shell_paths.py
+expect_targets "generated shell path tests select packages and types (mypy files)" "packages types" scripts/test_validate_generated_shell_paths.py
 expect_targets "capability matrix selects the bundle targets including packages" "${BUNDLES}" ycc/skills/_shared/references/target-capability-matrix.md
 expect_targets "settings select everything" "${ALL}" ycc/settings/models.json
 expect_targets "package model selects content, native, generators, parity and types" "cursor codex opencode omp claude claude-native cursor-native codex-native packages types" scripts/package_model.py

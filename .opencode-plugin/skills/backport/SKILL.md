@@ -68,7 +68,7 @@ Validation — stop with the usage line on failure:
    first."
 
 3. **Release state.** Run
-   `bash "~/.config/opencode/shared/scripts/release-state.sh" get` from the repo:
+   `bash "${HOME}/.config/opencode/shared/scripts/release-state.sh" get` from the repo:
 
    | Result                                  | Action                                                                                                                                        |
    | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -86,7 +86,7 @@ Read-only; it creates no worktree, branch, label or PR. Lines: the given `releas
 else every entry of `MAINTENANCE`. For each line:
 
 ```bash
-bash "~/.config/opencode/shared/scripts/backport-audit.sh" release/X.Y [--since REF]
+bash "${HOME}/.config/opencode/shared/scripts/backport-audit.sh" release/X.Y [--since REF]
 ```
 
 Exit 0 is clean, 3 has findings, 1 and 2 are errors (show stderr; stop on 2). Output
@@ -112,7 +112,7 @@ The work list is a set of `(PR, target, merge_sha, title)` rows.
 Run when `--pending` is passed (Phase 2 work-list build):
 
 ```bash
-bash "~/.config/opencode/skills/backport/scripts/find-pending.sh" --repo .
+bash "${HOME}/.config/opencode/skills/backport/scripts/find-pending.sh" --repo .
 ```
 
 Each stdout line is `<pr>\t<release/X.Y>\t<merge_sha>\t<title>`. Relay every stderr
@@ -154,7 +154,7 @@ Process rows in order (lowest PR first). For each row:
 Run for each planned row in Phase 3 order:
 
 ```bash
-bash "~/.config/opencode/skills/backport/scripts/cherry-pick-pr.sh" \
+bash "${HOME}/.config/opencode/skills/backport/scripts/cherry-pick-pr.sh" \
   <pr> <release/X.Y> --sha <merge_sha> --repo .
 ```
 
@@ -271,7 +271,7 @@ For each opened backport PR, run the loop documented in
 Protocol"), exactly as `/pr-autofix` Phase 7 does — policy is not restated here:
 
 ```bash
-bash "~/.config/opencode/shared/scripts/ci-monitor.sh" \
+bash "${HOME}/.config/opencode/shared/scripts/ci-monitor.sh" \
   --pr <M> --branch <backport-branch> --base release/X.Y \
   --max-pushes 5 --max-same-failure 3 --timeout-min 30 \
   --log-file ~/.config/opencode/session-data/ci-watch/<M>-<utc-timestamp>.log

@@ -73,15 +73,15 @@ Set `<slug>` from `REPO_NAME`: lowercase, replace characters outside `[a-z0-9._-
 1. Print the mode and read `ARTIFACT_STORE=` from stdout:
 
    ```bash
-   bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
-   OUT="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=blueprint --slug=<slug>)"
+   bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   OUT="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=blueprint --slug=<slug>)"
    ```
 
 2. For a real linear run only, apply the **Linear call gate** from `~/.config/opencode/shared/references/artifact-store.md` before any write or pull. Dry runs only resolve paths, never ensure, Load or create files.
 3. Before Lookup/Load in a real linear run, establish the safe cache and gitignore rule:
 
    ```bash
-   OUT="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=blueprint --slug=<slug>)"
+   OUT="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=blueprint --slug=<slug>)"
    ```
 
 Then follow artifact-store.md **Planning skills**: when document identity is missing, Lookup steps 3–6 and Load any hit before checking whether a blueprint exists; preserve identity and use Conflict for replacement before Save. Local mode keeps `docs/blueprint.md` under the current checkout's git toplevel. Retain the printed mode, main-checkout slug and absolute path across tool calls.
@@ -244,7 +244,7 @@ Ask:
 If `--dry-run`, render the spec preview to the user and skip writing. Otherwise, in linear mode apply the Linear call gate before `--ensure`:
 
 ```bash
-OUT="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=blueprint --slug=<slug>)"
+OUT="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=blueprint --slug=<slug>)"
 mkdir -p "$(dirname "$OUT")"
 ```
 

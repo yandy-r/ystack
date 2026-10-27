@@ -21,7 +21,6 @@ SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 # plugin-root install path; fall back to the source-tree relative path.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 FORGE_LIB="${SCRIPT_DIR}/../../../shared/scripts/lib/forge.sh"
-[[ -f "$FORGE_LIB" ]] || FORGE_LIB="${SCRIPT_DIR}/../../../shared/scripts/lib/forge.sh"
 # shellcheck source=/dev/null
 source "$FORGE_LIB"
 

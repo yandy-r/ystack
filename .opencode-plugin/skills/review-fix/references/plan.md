@@ -94,7 +94,7 @@ no per-severity child worktrees and no fan-in merge.
 `$PARENT_PATH` needs creation; skip if already ensured by `/code-review`):
 
 ```bash
-PARENT_PATH=$(bash "~/.config/opencode/shared/scripts/setup-worktree.sh" \
+PARENT_PATH=$(bash "${HOME}/.config/opencode/shared/scripts/setup-worktree.sh" \
   parent "${REPO}" "${SLUG}" --base-ref "${PARENT_BRANCH}")
 WORKTREE_ACTIVE=true
 ```
