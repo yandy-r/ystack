@@ -61,6 +61,21 @@ EOF
 expected_parse=$'WT_PARENT_PATH=/tmp/repo-example/\nWT_FEATURE_SLUG=repo-example\n1.1|First|none\n1.2|Second|1.1\nT0|Third|none'
 assert_eq 'plain dependency output unchanged' "$expected_parse" "$("$BASH_BIN" "$PARSE" "${SCRATCH}/body.md")"
 assert_eq 'tasks identity cannot emit headers or tasks' "$expected_parse" "$("$BASH_BIN" "$PARSE" "${SCRATCH}/frontmatter.md")"
+cat >"${SCRATCH}/thematic-break.md" <<'EOF'
+---
+# Example plan
+## Worktree Setup
+- **Parent**: /tmp/repo-example/ (branch: feat/example)
+## Implementation Plan
+### Phase 1: Build
+#### Task 1.1: First Depends on [none]
+#### Task 1.2: Second Depends on [1.1]
+---
+### Batch 2: Wire
+#### Task T0: Third
+- **Dependencies**: None
+EOF
+assert_eq 'leading thematic break preserves dependency tasks' "$expected_parse" "$("$BASH_BIN" "$PARSE" "${SCRATCH}/thematic-break.md")"
 if [[ "$(id -u)" != 0 ]]; then
   cp "${SCRATCH}/body.md" "${SCRATCH}/unreadable.md"
   chmod 000 "${SCRATCH}/unreadable.md"
@@ -82,6 +97,9 @@ expected_local="Prerequisites satisfied
   Independent tasks: 2"
 assert_eq 'local prerequisite output unchanged' "$expected_local" "$(run_check example)"
 assert_eq 'explicit local store output unchanged' "$expected_local" "$(run_check example --store=local)"
+cp "${SCRATCH}/thematic-break.md" "${local_dir}/parallel-plan.md"
+assert_eq 'local thematic break preserves prerequisite task counts' "$expected_local" "$(run_check example --store=local)"
+cp "${SCRATCH}/body.md" "${local_dir}/parallel-plan.md"
 cp "${SCRATCH}/frontmatter.md" "${linear_dir}/parallel-plan.md"
 printf '# Shared\n' >"${linear_dir}/shared.md"
 expected_linear="Prerequisites satisfied

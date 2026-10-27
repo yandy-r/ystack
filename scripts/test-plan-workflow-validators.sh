@@ -386,7 +386,7 @@ fmdir="${TMP}/feat-fm-heading"
 mkdir -p "$fmdir"
 for lens in architecture patterns integration docs; do make_research "$fmdir" "$lens"; done
 {
-  printf -- '---\n## System Overview\n## Integration Points\n---\n'
+  printf -- '---\ntitle: Research architecture\n## System Overview\n## Integration Points\n---\n'
   printf '# Research architecture\n\nBody without the required headings.\n'
   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do printf 'filler line %s to get past the size warning in this fixture.\n' "$i"; done
 } >"${fmdir}/research-architecture.md"
