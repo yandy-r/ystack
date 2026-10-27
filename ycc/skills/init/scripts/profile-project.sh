@@ -398,6 +398,31 @@ fi
 has_releasing_md=false
 file_exists "RELEASING.md" && has_releasing_md=true
 
+# Artifact-store pointer: parse the first root store key like the resolver:
+# strip comments, trim spaces/tabs, then one matching quote pair. Preserve CR
+# so a CRLF value is invalid rather than disagreeing with store resolution.
+artifact_store=none
+if file_exists ".plans-config"; then
+    _as_re='^store[[:space:]]*[:=]'
+    while IFS= read -r _as_line || [[ -n "$_as_line" ]]; do
+	if [[ "$_as_line" =~ $_as_re ]]; then
+	    _as_value=${_as_line#*[:=]}
+	    _as_value=${_as_value%%#*}
+	    _as_value="${_as_value#"${_as_value%%[!$' \t']*}"}"
+	    _as_value="${_as_value%"${_as_value##*[!$' \t']}"}"
+	    case "$_as_value" in
+		\"*\") _as_value=${_as_value#\"}; _as_value=${_as_value%\"} ;;
+		\'*\') _as_value=${_as_value#\'}; _as_value=${_as_value%\'} ;;
+	    esac
+	    case "$_as_value" in
+		linear) artifact_store=linear ;;
+		local) artifact_store=local ;;
+	    esac
+	    break
+	fi
+    done < "${project_root}/.plans-config"
+fi
+
 # ---------------------------------------------------------------------------
 # CI provider detection
 # ---------------------------------------------------------------------------
@@ -449,5 +474,6 @@ echo "has_gitignore=${has_gitignore}"
 echo "has_commitlint_config=${has_commitlint_config}"
 echo "has_lefthook_config=${has_lefthook_config}"
 echo "has_releasing_md=${has_releasing_md}"
+echo "artifact_store=${artifact_store}"
 echo "ci_provider=${ci_provider}"
 echo "project_name=${project_name}"

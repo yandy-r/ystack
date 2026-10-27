@@ -6,6 +6,7 @@
 - Capability Matrix
 - Native vs install.sh Fallback
 - Notes
+- Artifact store
 - How to Update This Document
 
 As of 2026-10-19
@@ -515,6 +516,16 @@ No native-parity claim. Source: ADR 0002; `worktree-strategy.md` §1.
 **MODS:omp**
 Unsupported. The Claude Code mod API differs from OMP's `ExtensionAPI`; the status-bar mod is
 not ported. Source: ADR 0002.
+
+---
+
+## Artifact store
+
+Descriptive only; this is not a parsed capability row. The artifact store (`ycc/skills/_shared/references/artifact-store.md`) is skill-level and identical on claude, cursor, codex, opencode and omp: store resolution, the `.ycc/artifacts/` cache and the `.plans-config` pointer are plain files and Bash helpers, so no target needs extra support for `store: local`.
+
+- **Linear mode needs a Linear MCP in the running runtime.** ycc ships the `linear` / `linear-personal` servers from `ycc-mcp` where the MCP row is supported (claude, cursor, opencode). On codex and omp the MCP row is `partial`: the servers install, but a user's runtime may lack, shadow or not yet have authorized them (see the MCP:codex and MCP:omp notes), so linear mode can be unavailable there until a Linear MCP is configured by hand.
+- Without a reachable, authorized Linear MCP, skills stop at the Linear call gate before any local write and suggest `store: local`. Local mode never calls Linear.
+- Every generator emits `.ycc/artifacts/` and `.plans-config` paths verbatim; no target rewrites them. `scripts/validate-artifact-store.sh` checks the occurrence counts of each generated skills tree against `ycc/skills` and that a committed `store: linear` pointer is tracked and not ignored.
 
 ---
 

@@ -41,7 +41,7 @@ Planning artifacts default to their existing local paths. Linear storage is opt-
 | Planning skills and validators              | YAN-1154 | Migrated (opt-in) |
 | Implementation skills and validators        | YAN-1155 | Migrated (opt-in) |
 | Review and report skills                    | YAN-1156 | Not migrated      |
-| Generators, capability matrix, `init`   | YAN-1157 | Not migrated      |
+| Generators, capability matrix, `init`   | YAN-1157 | Shipped           |
 | Existing `docs/plans` and `docs/prps` trees | YAN-1158 | Leave in place    |
 
 ## Kinds
@@ -320,7 +320,7 @@ Skills run these procedures; the helper never calls Linear.
 ### Save
 
 1. Resolve the store and check `${ARTIFACT_STORE:-}`.
-2. In linear mode, apply the Linear call gate, then call `ensure_artifact_dir` before any cache write or pull and read cached identity. If the cache file is absent or has no `linear.document` identity (or, for a plan, no `tasks` identity), run Lookup steps 3–6 before creating anything; reuse its Document, status update, parent, and task issues rather than duplicating them. On a hit, Load first, preserve that identity, and use Conflict before replacing its body when no prior sync state exists.
+2. In linear mode, apply the Linear call gate. Offer pointer setup when the repo-root `.plans-config` lacks an effective `store: linear` or is not tracked (`git --literal-pathspecs -C <repo-root> ls-files --error-unmatch -- .plans-config` fails), independently of `ARTIFACT_STORE_SOURCE`. Gather missing values like init: workspace slug from Linear MCP `get_workspace`, team from `ARTIFACT_LINEAR_TEAM` or `list_teams` (use the sole team, ask when several), and label `repo:<repo-name>` from the `origin` remote basename minus `.git`, falling back to the main checkout directory name (parent of `git rev-parse --path-format=absolute --git-common-dir`). Existing `ARTIFACT_LINEAR_*` hints override these defaults; a project hint replaces the label. Ask once whether to run `artifact-store-pointer.sh --store=linear --linear-workspace=… --linear-team=… (--linear-label=… | --linear-project=…)` so fresh clones find Linear. Headless runs, no answer, unresolved values, declining, or helper failure produce a one-line notice and continue; this offer never blocks Save. Then call `ensure_artifact_dir` before any cache write or pull and read cached identity. If the cache file is absent or has no `linear.document` identity (or, for a plan, no `tasks` identity), run Lookup steps 3–6 before creating anything; reuse its Document, status update, parent, and task issues rather than duplicating them. On a hit, Load first, preserve that identity, and use Conflict before replacing its body when no prior sync state exists.
 3. Write the new body. Local mode writes today's path without identity frontmatter and **stops here**. Linear mode preserves existing identity frontmatter, including `tasks`, and all non-identity keys; only the body is replaced.
 4. Before updating an existing object, fetch its `updatedAt`. If it differs from `syncedAt`, run Conflict and do not push until answered. A discovered existing object with no prior `syncedAt` also requires Conflict before its body is replaced.
 5. Create or update the object using the Kinds and naming rules. For plans, apply the task-issue rules above. On creation, record all returned ids.
@@ -363,7 +363,7 @@ If the MCP fails during step 4 or 5, keep the local file and follow Offline.
 
 An invalid value at the selected level does not fall through. An explicit resolve prints an error and returns 1; sourced auto-resolution prints `WARNING`, unsets every `ARTIFACT_*` variable, and does not fail the caller.
 
-The default is intentionally `local` while `init` wiring (YAN-1157) remains unfinished. Linear mode is opt-in through `--store=linear` or `store: linear`; a later default-store flip issue changes step 4. Local resolution and writes do not require a Linear MCP.
+The default is intentionally `local` until the default-store flip (YAN-1618). Linear mode is opt-in through `--store=linear` or `store: linear`; set it up for a repo with `init --artifact-store=linear` or `artifact-store-pointer.sh` (see Fresh clone). Local resolution and writes do not require a Linear MCP.
 
 The `store` and `linear_*` walks compare physical paths (`pwd -P`) and stop after the start directory's physical Git toplevel, or physical `PLANS_ROOT` without Git. Symlinked paths therefore cannot escape the boundary. The original start directory still goes to `resolve_plans_dir`, whose upward/topmost `PLANS_*` behavior is unchanged.
 
@@ -408,6 +408,14 @@ In linear mode, `ARTIFACT_ROOT` is `PLANS_ROOT` unless `PLANS_ROOT` lies outside
 | `get_artifact_path <kind> <slug>`                            | Print the kind's absolute local or linear path. Validate the slug like `get_feature_artifact_dir` and research/analysis suffixes as lowercase kebab-case. No writes. |
 | `ensure_artifact_gitignore`                                  | Linear: ensure the repository gitignore rule. Local: return 0 without writing.                                                                                       |
 | `ensure_artifact_dir`                                        | Create `ARTIFACT_DIR`, then run `ensure_artifact_gitignore`; the write-on-first-save entry point.                                                                    |
+
+Pointer writer (not sourced; see Fresh clone for the CLI and exit codes):
+
+```bash
+bash "${HOME}/.agents/ycc-shared/scripts/artifact-store-pointer.sh" --store=linear|local [--linear-workspace=<slug>] [--linear-team=<KEY>] [--linear-label=<label> | --linear-project=<id-or-slug>] [--dry-run] [--no-commit] [--force] [<dir>]
+```
+
+It sources `resolve-artifact-store.sh` for `ensure_artifact_gitignore` and writes only `.plans-config`, `.gitignore`, and a pathspec commit of those paths.
 
 Executed form; default output is `ARTIFACT_DIR` only:
 
@@ -468,7 +476,7 @@ The linear gitignore check returns without editing when either condition holds:
 - `git check-ignore -v --no-index` ignores `.ycc/artifacts/probe` and the reported source is a `.gitignore` inside this repository. Global excludes and `.git/info/exclude` do not count.
 - `${ARTIFACT_ROOT}/.gitignore` already contains `.ycc/artifacts/`, `/.ycc/artifacts/`, `.ycc/artifacts`, or `/.ycc/artifacts`.
 
-Otherwise append `.ycc/artifacts/`, creating `.gitignore` if needed and adding a missing trailing newline before the entry. Skills call `--ensure` after the Linear gate and before the first cache write or pull; `init` handles setup up front (YAN-1157).
+Otherwise append `.ycc/artifacts/`, creating `.gitignore` if needed and adding a missing trailing newline before the entry. Skills call `--ensure` after the Linear gate and before the first cache write or pull; `artifact-store-pointer.sh` (run by `init --artifact-store=linear`) applies the same rule when it writes the committed pointer.
 
 ## Fresh clone
 
@@ -484,11 +492,26 @@ linear_label: repo:ystack
 
 A fixed-Project repo uses `linear_project: <id-or-slug>` instead of `linear_label`. No `scope: local` is needed: a nested worktree uses its own Git toplevel for the linear cache even when a higher config determines `PLANS_ROOT`.
 
-`AGENTS.md` and `AGENTS.md` carry this line (owned by `init`, YAN-1157):
+The generated `AGENTS.md` carries this section, rendered by `init` from the `IF_ARTIFACT_STORE` block of its `AGENTS.md.tmpl` when Phase 5.6 succeeds with a linear pointer (or the root pointer is already linear and tracked):
 
 ```text
+## Planning artifacts
+
 Planning artifacts live in Linear (see `.plans-config`); `.ycc/artifacts/` is a gitignored local cache. If it's missing, pull from Linear.
 ```
+
+The pointer is written and committed by `artifact-store-pointer.sh`, which `init --artifact-store=linear` runs once and Save offers when no committed pointer exists:
+
+```bash
+bash "${HOME}/.agents/ycc-shared/scripts/artifact-store-pointer.sh" --store=linear|local [--linear-workspace=<slug>] [--linear-team=<KEY>] [--linear-label=<label> | --linear-project=<id-or-slug>] [--dry-run] [--no-commit] [--force] [<dir>]
+```
+
+- `<dir>` defaults to `.`; the target is its physical git toplevel. `--store=linear` requires `--linear-workspace`, `--linear-team`, and one of `--linear-label` or `--linear-project`. Workspace, label, and project values must match `^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$`; team keys must match `^[A-Z][A-Z0-9]{0,9}$`.
+- Sets `store:` and each provided `linear_*` key in the root `.plans-config` in place, preserving every other line, comment, and key order; new keys are appended. A differing existing value, or switching from an existing `linear_project` to `--linear-label` (or vice versa), exits `3` unless `--force`; forcing a mapping switch removes the other key's line. Identical values without a final newline remain `pointer_change=unchanged`, without a rewrite or commit.
+- All refusal checks happen before any write: invalid or unsafe values/paths, symlinks, conflicts, CRLF pointer files, and an ignored `.plans-config` (for either store). CRLF exits `2` with `convert .plans-config to LF line endings`. For linear it also ensures the `.ycc/artifacts/` gitignore rule (`ensure_artifact_gitignore`).
+- Commits only the pointer paths with `chore(ycc): configure Linear artifact store` (`configure local artifact store` for local); `.gitignore` joins the commit only when its sole diff is the added rule. Other staged changes stay staged. Pre-existing unstaged or staged `.plans-config` changes versus HEAD cause a warning and `commit=skipped`: files are still written and the helper exits `0`, preserving the user's commit boundary. `--no-commit` also skips the commit; `--dry-run` writes nothing and prints the planned `.plans-config`.
+- Exit codes: `2` usage, invalid/unsafe value, not a git work tree, symlinked target, or CRLF pointer; `3` existing value or label/project mapping conflicts (use `--force`); `4` `.plans-config` is gitignored; `5` commit failed (files stay written, but the paths staged by the helper are unstaged, including on an unborn branch).
+- Stdout ends with `pointer=<abs path>`, `pointer_change=created|updated|unchanged`, `gitignore=added|present|skipped`, `commit=<short sha>|skipped|none`.
 
 A user-level store override uses the same key format:
 

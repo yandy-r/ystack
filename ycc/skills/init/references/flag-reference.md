@@ -12,22 +12,24 @@ Detailed reference for every flag accepted by `ycc:init`. See also `SKILL.md` fo
 
 ## Flag Matrix
 
-| Flag                        | Default     | Affects phases | Writes to                                                                                                                                                                                         | Example                                    |
-| --------------------------- | ----------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `--dry-run`                 | off         | 5 (halt)       | nothing                                                                                                                                                                                           | `ycc:init --dry-run`                       |
-| `--docs-only`               | off         | 2, 4 (skip)    | `AGENTS.md`, optional `CLAUDE.md`                                                                                                                                                                 | `ycc:init --docs-only`                     |
-| `--templates`               | off         | 3 (extend)     | `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md`, `.github/labels.md`, `.github/copilot-instructions.md`, `.github/workflows/pr-title.yml`, `.github/workflows/pr-title-autofix.yml` | `ycc:init --templates`                     |
-| `--git`                     | off         | 3 (extend)     | `.gitignore`, `.gitmessage`, `commitlint.config.cjs` (JS/TS only), `lefthook.yml`, `scripts/install-lefthook.sh`, `docs/lefthook-usage.md`                                                        | `ycc:init --git`                           |
-| `--vendor-neutral`          | off         | 3 (extend)     | `.ai/rules/project.md` (pointer to `AGENTS.md`)                                                                                                                                                   | `ycc:init --vendor-neutral`                |
-| `--formatters`              | off         | 6.5 (delegate) | (delegates to `ycc:formatters` — see its flag matrix)                                                                                                                                             | `ycc:init --formatters`                    |
-| `--release-model[=<model>]` | off (offer) | 5.5 (delegate) | `RELEASING.md` (via `ycc:release-model`)                                                                                                                                                          | `ycc:init --release-model=trunk-only`      |
-| `--no-release-model`        | off         | 5.5 (skip)     | nothing                                                                                                                                                                                           | `ycc:init --no-release-model`              |
-| `--migrate-rules`           | off         | 5.7 (migrate)  | `AGENTS.md` (moved content), `CLAUDE.md` (pointer) — preview only with `--dry-run`                                                                                                                | `ycc:init --migrate-rules --dry-run`       |
-| `--allow-non-git`           | off         | 5.7            | timestamped backups of the rules files before migrating outside git                                                                                                                               | `ycc:init --migrate-rules --allow-non-git` |
-| `--no-claude-md`            | off         | 3              | skips the `@AGENTS.md` CLAUDE.md shim (needs Claude Code 2.1.277+)                                                                                                                                | `ycc:init --no-claude-md`                  |
-| `--update`                  | off         | 6 (merge)      | existing targets only                                                                                                                                                                             | `ycc:init --update`                        |
-| `--force`                   | off         | 6 (overwrite)  | all target files                                                                                                                                                                                  | `ycc:init --force`                         |
-| `--profile=<name>`          | auto-detect | 1 (skip)       | (drives template variables)                                                                                                                                                                       | `ycc:init --profile=rust`                  |
+| Flag                         | Default     | Affects phases | Writes to                                                                                                                                                                                         | Example                                    |
+| ---------------------------- | ----------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `--dry-run`                  | off         | 5 (halt)       | nothing                                                                                                                                                                                           | `ycc:init --dry-run`                       |
+| `--docs-only`                | off         | 2, 4 (skip)    | `AGENTS.md`, optional `CLAUDE.md`                                                                                                                                                                 | `ycc:init --docs-only`                     |
+| `--templates`                | off         | 3 (extend)     | `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md`, `.github/labels.md`, `.github/copilot-instructions.md`, `.github/workflows/pr-title.yml`, `.github/workflows/pr-title-autofix.yml` | `ycc:init --templates`                     |
+| `--git`                      | off         | 3 (extend)     | `.gitignore`, `.gitmessage`, `commitlint.config.cjs` (JS/TS only), `lefthook.yml`, `scripts/install-lefthook.sh`, `docs/lefthook-usage.md`                                                        | `ycc:init --git`                           |
+| `--vendor-neutral`           | off         | 3 (extend)     | `.ai/rules/project.md` (pointer to `AGENTS.md`)                                                                                                                                                   | `ycc:init --vendor-neutral`                |
+| `--formatters`               | off         | 6.5 (delegate) | (delegates to `ycc:formatters` — see its flag matrix)                                                                                                                                             | `ycc:init --formatters`                    |
+| `--release-model[=<model>]`  | off (offer) | 5.5 (delegate) | `RELEASING.md` (via `ycc:release-model`)                                                                                                                                                          | `ycc:init --release-model=trunk-only`      |
+| `--no-release-model`         | off         | 5.5 (skip)     | nothing                                                                                                                                                                                           | `ycc:init --no-release-model`              |
+| `--artifact-store[=<store>]` | off (offer) | 5.6 (delegate) | `.plans-config`, `.gitignore` (via `artifact-store-pointer.sh`), `AGENTS.md` `## Planning artifacts`                                                                                              | `ycc:init --artifact-store=linear`         |
+| `--no-artifact-store`        | off         | 5.6 (skip)     | nothing                                                                                                                                                                                           | `ycc:init --no-artifact-store`             |
+| `--migrate-rules`            | off         | 5.7 (migrate)  | `AGENTS.md` (moved content), `CLAUDE.md` (pointer) — preview only with `--dry-run`                                                                                                                | `ycc:init --migrate-rules --dry-run`       |
+| `--allow-non-git`            | off         | 5.7            | timestamped backups of the rules files before migrating outside git                                                                                                                               | `ycc:init --migrate-rules --allow-non-git` |
+| `--no-claude-md`             | off         | 3              | skips the `@AGENTS.md` CLAUDE.md shim (needs Claude Code 2.1.277+)                                                                                                                                | `ycc:init --no-claude-md`                  |
+| `--update`                   | off         | 6 (merge)      | existing targets only                                                                                                                                                                             | `ycc:init --update`                        |
+| `--force`                    | off         | 6 (overwrite)  | all target files                                                                                                                                                                                  | `ycc:init --force`                         |
+| `--profile=<name>`           | auto-detect | 1 (skip)       | (drives template variables)                                                                                                                                                                       | `ycc:init --profile=rust`                  |
 
 ### `--profile` accepted values
 
@@ -156,6 +158,27 @@ from `{{#IF_RELEASE_MODEL}}` blocks — see `template-library.md`.
 /ycc:init --no-release-model
 ```
 
+### `--artifact-store[=<store>]` / `--no-artifact-store`
+
+Phase 5.6 sets up the planning-artifact store pointer: the repo-root `.plans-config` that tells a fresh clone where planning artifacts live (see `_shared/references/artifact-store.md`). `local` stays the default store, so by default init only **offers** Linear setup, and only when a Linear MCP is available. Profile key: `artifact_store=linear|local|none`, read from the root `.plans-config` `store:` value.
+
+First match wins:
+
+- Root pointer has effective `store: linear` and is tracked (`git --literal-pathspecs -C <repo-root> ls-files --error-unmatch -- .plans-config`) → skip unless `--artifact-store=local` was passed. An untracked linear pointer must rerun the helper, reusing its existing values.
+- `--no-artifact-store` → skip. Conflicts with `--artifact-store` (error).
+- `--artifact-store=local` → run `artifact-store-pointer.sh --store=local`.
+- `--artifact-store` / `--artifact-store=linear` → run Linear setup without asking. Existing `ARTIFACT_LINEAR_*` hints override defaults: workspace from Linear MCP `get_workspace`, team from `ARTIFACT_LINEAR_TEAM` or `list_teams` (ask when several), and label `repo:<repo-name>` from the `origin` remote basename minus `.git`, falling back to the main checkout directory name (parent of `git rev-parse --path-format=absolute --git-common-dir`). A fixed project uses `--linear-project` instead of `--linear-label`; the other helper flags are `--linear-workspace` and `--linear-team`. Headless multi-team ambiguity without a team hint skips setup and is reported. The helper writes/commits `.plans-config` and ensures `.ycc/artifacts/` is gitignored. On success with linear (or an already linear, tracked pointer), keep `IF_ARTIFACT_STORE`. Explicit `--artifact-store=linear` (also bare `--artifact-store`) appends a missing `## Planning artifacts` section to an existing canonical `AGENTS.md`, like `--update`, preserving all other content even with `--force`; existing rules-layout safeguards still apply.
+- `--docs-only` without the flag → skip. Headless without the flag → skip.
+- Otherwise → offer, default no.
+
+`--dry-run` performs read-only Gather first, then passes the full resolved command with `--dry-run` to the helper (nothing written). If required values remain unresolved, print the command with placeholders and say it was not run. Keep `IF_ARTIFACT_STORE` only for the effective linear choice, never for explicit local. All helper refusal checks precede writes. Exit `3` includes label/project mapping switches: ask once about `--force` interactively, otherwise skip and report. Dirty staged or unstaged `.plans-config` changes produce a warning and `commit=skipped` while files are written and exit is `0`. A helper failure drops the block, is recorded in Phase 7, and never aborts init. A `.gitignore` created/edited by Phase 5.6 is merged with the rendered template in Phase 6, never skipped or clobbered (including with `--force`).
+
+```
+/ycc:init --artifact-store=linear
+/ycc:init --artifact-store=local
+/ycc:init --no-artifact-store
+```
+
 ### `--migrate-rules`
 
 Rules-only migration: profile, show the full unified diff and content-loss list, then ask
@@ -177,7 +200,7 @@ per-section routing, content-loss list and diff before approving.
 
 Structured refresh of existing artifacts. Never clobbers user content — merges instead.
 
-- `AGENTS.md`: append template sections that are missing; preserve everything else verbatim. A legacy pointer-style `AGENTS.md` (short, names `CLAUDE.md`) triggers the `--migrate-rules` offer instead.
+- `AGENTS.md`: append missing template sections (including `## Planning artifacts` when Phase 5.6 keeps `IF_ARTIFACT_STORE`); preserve everything else verbatim. A legacy pointer-style `AGENTS.md` (short, names `CLAUDE.md`) triggers the `--migrate-rules` offer instead.
 - `CLAUDE.md`: never rewritten by `--update`. A long one triggers the `--migrate-rules` offer; an `@AGENTS.md` one is left as is.
 - `.cursorrules` (legacy): fold project-specific lines into `AGENTS.md`; leaves the old file for you to delete.
 - `.github/ISSUE_TEMPLATE/*.yml`: create missing templates; skip existing ones with a diff (pair with `--force` to overwrite).
@@ -220,6 +243,7 @@ Flags are independent and composable. Any combination is valid:
 - `--force` applies to every output flag in the same invocation.
 - `--profile=` and detection are mutually exclusive; `--profile=` wins.
 - `--release-model` and `--no-release-model` are mutually exclusive (error).
+- `--artifact-store` and `--no-artifact-store` are mutually exclusive (error). `--artifact-store=<value>` accepts only `linear` or `local`; any other value is an error before any phase runs.
 - Unrecognised flags are reported as errors before any phase runs.
 
 ### Common combinations
