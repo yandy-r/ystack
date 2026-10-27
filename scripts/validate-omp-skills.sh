@@ -70,4 +70,7 @@ for finding in findings:
 sys.exit(1 if findings else 0)
 PY
 
+echo "== Generated shell helper paths =="
+python3 "${REPO_ROOT}/scripts/validate_generated_shell_paths.py" --root "${REPO_ROOT}/packages/omp"
+
 echo "OK: packages/omp/ycc/skills is in sync and passes content and semantics policy."

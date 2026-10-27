@@ -84,14 +84,14 @@ Planning skills resolve artifact paths with the helper rather than constructing 
 1. Resolve and **print** the mode; read `ARTIFACT_STORE=` from stdout:
 
    ```bash
-   bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
    ```
 
 2. In linear mode only, apply the **Linear call gate** below before any write or `--ensure`. Dry runs stop before this step and only resolve paths without `--ensure`.
 3. Once writing is permitted, resolve the destination:
 
    ```bash
-   OUT="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=<kind> --slug=<slug>)"
+   OUT="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=<kind> --slug=<slug>)"
    ```
 
 In local mode (the default), write `$OUT` at the existing local path, without identity frontmatter or Linear calls. In linear mode, prepare identity as described below before writing, then Save.
@@ -412,7 +412,7 @@ In linear mode, `ARTIFACT_ROOT` is `PLANS_ROOT` unless `PLANS_ROOT` lies outside
 Pointer writer (not sourced; see Fresh clone for the CLI and exit codes):
 
 ```bash
-bash "~/.config/opencode/shared/scripts/artifact-store-pointer.sh" --store=linear|local [--linear-workspace=<slug>] [--linear-team=<KEY>] [--linear-label=<label> | --linear-project=<id-or-slug>] [--dry-run] [--no-commit] [--force] [<dir>]
+bash "${HOME}/.config/opencode/shared/scripts/artifact-store-pointer.sh" --store=linear|local [--linear-workspace=<slug>] [--linear-team=<KEY>] [--linear-label=<label> | --linear-project=<id-or-slug>] [--dry-run] [--no-commit] [--force] [<dir>]
 ```
 
 It sources `resolve-artifact-store.sh` for `ensure_artifact_gitignore` and writes only `.plans-config`, `.gitignore`, and a pathspec commit of those paths.
@@ -420,7 +420,7 @@ It sources `resolve-artifact-store.sh` for `ensure_artifact_gitignore` and write
 Executed form; default output is `ARTIFACT_DIR` only:
 
 ```bash
-bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" [--store=linear|local] [--debug] [--shell] [--kind=<kind> --slug=<slug>] [--ensure] [start-dir]
+bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" [--store=linear|local] [--debug] [--shell] [--kind=<kind> --slug=<slug>] [--ensure] [start-dir]
 ```
 
 - `--shell` prints every existing `ARTIFACT_*` mode/config variable using Bash `printf %q`; planning skills print it and read `ARTIFACT_STORE` from stdout rather than silently evaluating it. `ARTIFACT_REPO_ROOT` is used by sourced local path resolution but is not added to `--shell` output.
@@ -431,16 +431,16 @@ bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" [--store=line
 
 ```bash
 # shellcheck source=/dev/null
-source "~/.config/opencode/shared/scripts/resolve-artifact-store.sh"
+source "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh"
 ```
 
 For body-only validation, source or execute `artifact-body.sh`. It removes only a leading block that qualifies as frontmatter under rule 1 of Body, hash, and push bytes; CRLF delimiters are accepted. A leading thematic break, an unterminated block, and every other file are printed unchanged. Body bytes after the block are not normalized.
 
 ```bash
 # shellcheck source=/dev/null
-source "~/.config/opencode/shared/scripts/artifact-body.sh"
+source "${HOME}/.config/opencode/shared/scripts/artifact-body.sh"
 artifact_body path/to/artifact.md
-bash "~/.config/opencode/shared/scripts/artifact-body.sh" path/to/artifact.md
+bash "${HOME}/.config/opencode/shared/scripts/artifact-body.sh" path/to/artifact.md
 ```
 
 For PR-linking candidates, run the read-only collector (it never calls Linear):
@@ -499,7 +499,7 @@ Planning artifacts live in Linear (see `.plans-config`); `.ycc/artifacts/` is a 
 The pointer is written and committed by `artifact-store-pointer.sh`, which `init --artifact-store=linear` runs once and Save offers when no committed pointer exists:
 
 ```bash
-bash "~/.config/opencode/shared/scripts/artifact-store-pointer.sh" --store=linear|local [--linear-workspace=<slug>] [--linear-team=<KEY>] [--linear-label=<label> | --linear-project=<id-or-slug>] [--dry-run] [--no-commit] [--force] [<dir>]
+bash "${HOME}/.config/opencode/shared/scripts/artifact-store-pointer.sh" --store=linear|local [--linear-workspace=<slug>] [--linear-team=<KEY>] [--linear-label=<label> | --linear-project=<id-or-slug>] [--dry-run] [--no-commit] [--force] [<dir>]
 ```
 
 - `<dir>` defaults to `.`; the target is its physical git toplevel. `--store=linear` requires `--linear-workspace`, `--linear-team`, and one of `--linear-label` or `--linear-project`. Workspace, label, and project values must match `^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$`; team keys must match `^[A-Z][A-Z0-9]{0,9}$`.

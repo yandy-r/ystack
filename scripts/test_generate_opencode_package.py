@@ -433,6 +433,7 @@ class OpencodeNpmPackageTests(unittest.TestCase):
         self.assertGreater(checked, 0)
         script = (moved / "skills/git-workflow/scripts/create-pr.sh").read_text(encoding="utf-8")
         self.assertIn('FORGE_LIB="${SCRIPT_DIR}/../../../shared/scripts/lib/forge.sh"', script)
+        self.assertNotIn("|| FORGE_LIB=", script)
 
     def test_concrete_legacy_bundle_references_are_relocated(self) -> None:
         cases = (

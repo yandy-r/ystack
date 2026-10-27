@@ -21,8 +21,24 @@ from generate_codex_common import (  # noqa: E402
     PLUGIN_ROOT,
     SRC_SKILLS_DIR,
     VERBATIM_SKILL_FILES,
+    drop_self_fallbacks,
     parse_frontmatter,
+    self_fallbacks,
 )
+
+
+def without_dropped_fallbacks(rel: Path, legacy: str) -> str:
+    """Remove from the legacy baseline exactly the fallback lines native rendering drops.
+
+    Native shell rendering is line-for-line, so the indices self_fallbacks() reports on the
+    undropped native render are the legacy lines that native output no longer carries.
+    """
+    if rel.suffix not in skills.NATIVE_SHELL_SUFFIXES:
+        return legacy
+    with patch.object(skills, "drop_self_fallbacks", lambda text: text):
+        undropped = skills.rewrite_native_paths(legacy, rel)
+    dead = {index for index, _ in self_fallbacks(undropped)}
+    return "".join(line for index, line in enumerate(legacy.splitlines(keepends=True)) if index not in dead)
 
 
 class NativeResourceTestCase(unittest.TestCase):
@@ -122,9 +138,8 @@ class NativeResourceTestCase(unittest.TestCase):
             if rel.as_posix() == "shared/references/target-capability-matrix.md":
                 continue
             with self.subTest(document=rel):
-                checked += self.assert_resource_paths(
-                    rel, legacy.read_text(), (self.root / rel).read_text(encoding="utf-8")
-                )
+                content = (self.root / rel).read_text(encoding="utf-8")
+                checked += self.assert_resource_paths(rel, without_dropped_fallbacks(rel, legacy.read_text()), content)
         self.assertGreater(checked, 200)
 
     def test_resource_invariant_rejects_extra_parent_traversal(self) -> None:
@@ -259,6 +274,50 @@ class SharedReferenceRelocationTestCase(unittest.TestCase):
         self.assertIn("../../shared/references/forge-detection.md#gitlab.", rendered)
         self.assertIn("~/.codex/plugins/ycc/shared/scripts/pr-guard.sh.", rendered)
         self.assertIn("~/.codex/plugins/ycc/skills/git-workflow/templates/commit-types.md.", rendered)
+
+
+class SelfFallbackTestCase(unittest.TestCase):
+    def test_fallback_identical_to_its_primary_is_dropped_but_real_alternatives_stay(self) -> None:
+        script = (
+            'LIB="${SCRIPT_DIR}/../lib.sh"\n'
+            '[[ -f "$LIB" ]] || LIB="${SCRIPT_DIR}/../lib.sh"\n'
+            'OTHER="${SCRIPT_DIR}/../other.sh"\n'
+            '[[ -f "$OTHER" ]] || OTHER="${HOME}/.agents/ycc-shared/other.sh"\n'
+            'LIB="${SCRIPT_DIR}/../moved.sh"\n'
+            '[[ -f "$LIB" ]] || LIB="${SCRIPT_DIR}/../lib.sh"\n'
+        )
+        self.assertEqual(
+            drop_self_fallbacks(script),
+            'LIB="${SCRIPT_DIR}/../lib.sh"\n'
+            'OTHER="${SCRIPT_DIR}/../other.sh"\n'
+            '[[ -f "$OTHER" ]] || OTHER="${HOME}/.agents/ycc-shared/other.sh"\n'
+            'LIB="${SCRIPT_DIR}/../moved.sh"\n'
+            '[[ -f "$LIB" ]] || LIB="${SCRIPT_DIR}/../lib.sh"\n',
+        )
+
+    def test_only_the_adjacent_primary_makes_a_fallback_dead(self) -> None:
+        branch = (
+            'if [[ -n "$X" ]]; then\n'
+            '  LIB="${HOME}/b.sh"\n'
+            "else\n"
+            '  LIB="${SCRIPT_DIR}/a.sh"\n'
+            "fi\n"
+            '[[ -f "$LIB" ]] || LIB="${SCRIPT_DIR}/a.sh"\n'
+        )
+        heredoc = 'cat <<EOF\nLIB="${SCRIPT_DIR}/a.sh"\nEOF\n[[ -f "$LIB" ]] || LIB="${SCRIPT_DIR}/a.sh"\n'
+        self.assertEqual(drop_self_fallbacks(branch), branch)
+        self.assertEqual(drop_self_fallbacks(heredoc), heredoc)
+        prefixed = 'local LIB="${SCRIPT_DIR}/a.sh"\n\n# note\n[[ -f "$LIB" ]] || LIB="${SCRIPT_DIR}/a.sh"\n'
+        self.assertEqual(drop_self_fallbacks(prefixed), 'local LIB="${SCRIPT_DIR}/a.sh"\n\n# note\n')
+
+    def test_native_scripts_carry_no_dead_fallback(self) -> None:
+        rel = Path("skills/research-to-issues/scripts/validate-prerequisites.sh")
+        source = (SRC_SKILLS_DIR / "research-to-issues/scripts/validate-prerequisites.sh").read_text(encoding="utf-8")
+        rendered = skills.rewrite_native_paths(
+            skills.apply_codex_text_transforms(skills.rewrite_plugin_paths(source), {}), rel
+        )
+        self.assertIn('FORGE_LIB="${SCRIPT_DIR}/../../../shared/scripts/lib/forge.sh"\n# shellcheck', rendered)
+        self.assertNotIn("|| FORGE_LIB=", rendered)
 
 
 class LegacyCompatibilityTestCase(unittest.TestCase):

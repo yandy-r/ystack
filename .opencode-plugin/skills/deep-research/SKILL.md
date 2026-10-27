@@ -33,7 +33,7 @@ spaces with hyphens, remove characters other than alphanumerics and hyphens.
 Step 1: resolve and **print** the store with the executed helper; read `ARTIFACT_STORE=` from stdout:
 
 ```bash
-bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
 ```
 
 Use the sanitized subject as `<slug>`; if empty, request a focused subject instead of choosing a directory. Without `--output-dir`, local mode keeps `research/<slug>`; linear mode obtains `OUTPUT_DIR` from the helper's `--kind=deep-research --slug=<slug>` (without `--ensure` during dry-run). Explicit `--output-dir` always wins for working files. Retain the absolute output path across tool calls; shell state does not persist. The entire working tree is local-only; in linear mode only the final report is saved as research lens `deep-research`.
@@ -58,7 +58,7 @@ Step 2: before any write in linear mode, apply the **Linear call gate** from `~/
 Step 3: in linear mode without explicit `--output-dir`, resolve the working directory with `--ensure` after the gate:
 
 ```bash
-OUTPUT_DIR="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=deep-research --slug=<slug>)"
+OUTPUT_DIR="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=deep-research --slug=<slug>)"
 ```
 
 Then create `"$OUTPUT_DIR/persona-findings"`, `"$OUTPUT_DIR/synthesis"`, and `"$OUTPUT_DIR/evidence"` in either mode. Do not redirect an explicit `--output-dir` to the cache.
@@ -213,7 +213,7 @@ actual validation result and any remaining gaps; do not call a failed run comple
 After validation, local mode keeps `FINAL_REPORT="$OUTPUT_DIR/report.md"` with no identity frontmatter or Linear calls. In linear mode, resolve the published report separately:
 
 ```bash
-OUT="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=research-deep-research --slug=<slug>)"
+OUT="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=research-deep-research --slug=<slug>)"
 mkdir -p "$(dirname "$OUT")"
 ```
 

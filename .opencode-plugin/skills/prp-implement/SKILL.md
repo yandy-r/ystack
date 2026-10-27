@@ -157,7 +157,7 @@ Local mode (unchanged):
 3. Archive canonical `$PLAN_PATH` to its sibling `completed/` inside the execution tree (fallback to stripped `$ARGUMENTS` under `--no-worktree`).
 4. If `WORKTREE_ACTIVE=true`, capture `list-worktrees.sh` output after archive; include full table and cleanup commands under `## Worktree Summary` in the report.
 
-Linear mode: resolve the report with `bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=prp-report --slug=<slug>` (`<slug>` = cache parent directory name), write it there, and complete per `references/linear-sync.md` instead of the archive move.
+Linear mode: resolve the report with `bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=prp-report --slug=<slug>` (`<slug>` = cache parent directory name), write it there, and complete per `references/linear-sync.md` instead of the archive move.
 
 **CHECKPOINT**: Report created. PRD updated. Plan archived (local) or Linear completion applied (linear). Worktree summary captured (if applicable).
 

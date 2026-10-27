@@ -87,18 +87,18 @@ Parse and strip `--store=local|linear` before selecting the feature name. Set `S
 1. Print the mode and read `ARTIFACT_STORE=` from stdout; resolve paths without writes:
 
    ```bash
-   bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
-   feature_dir="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=feature-dir --slug="[feature-name]")"
-   research_dir="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=research-dir --slug="[feature-name]")"
-   shared_file="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=shared --slug="[feature-name]")"
-   parallel_plan_file="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=parallel-plan --slug="[feature-name]")"
+   bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   feature_dir="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=feature-dir --slug="[feature-name]")"
+   research_dir="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=research-dir --slug="[feature-name]")"
+   shared_file="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=shared --slug="[feature-name]")"
+   parallel_plan_file="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=parallel-plan --slug="[feature-name]")"
    ```
 
 2. For a non-dry linear run only, apply the **Linear call gate** in `~/.config/opencode/shared/references/artifact-store.md` before any write or pull.
 3. Before Lookup/Load in that linear run, ensure the cache and gitignore rule:
 
    ```bash
-   feature_dir="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=feature-dir --slug="[feature-name]")"
+   feature_dir="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=feature-dir --slug="[feature-name]")"
    ```
 
 Then use Lookup/Load to populate missing cached inputs before state detection. For each document that will be written (research, shared, plan), if document identity is missing (or the plan has no task identity), follow **Planning skills** Lookup steps 3–6 and Load any hit before dispatch or writing; preserve identity and resolve Conflict on replacement. Local mode keeps `PLANS_DIR/<feature>/`; linear mode uses `.ycc/artifacts/<feature>/` with research in `research/`. Dry runs only resolve paths, never ensure or Load. Retain the printed mode and absolute paths across tool calls. See "Monorepo Support" below.
@@ -147,8 +147,8 @@ Run `scripts/check-prerequisites.sh "[feature-name]" ${STORE_FLAG}` per gate 5. 
 Only when `--dry-run` is not set: in linear mode apply the Linear call gate from artifact-store.md before `--ensure`, then run:
 
 ```bash
-feature_dir="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=feature-dir --slug="[feature-name]")"
-research_dir="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=research-dir --slug="[feature-name]")"
+feature_dir="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=feature-dir --slug="[feature-name]")"
+research_dir="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=research-dir --slug="[feature-name]")"
 mkdir -p "$feature_dir" "$research_dir"
 ```
 

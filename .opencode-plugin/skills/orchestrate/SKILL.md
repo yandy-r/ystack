@@ -64,7 +64,7 @@ Strip flags from `$ARGUMENTS` and set ``, `DRY_RUN=true|false`, `PLAN_ONLY=true|
 **Step 6**: validate each subtask: clear specific scope, single responsibility, completable in one focused session, dependencies stated, success criteria clear, agent assignment justified. Optionally run:
 
 ```bash
-if [[ -f "~/.config/opencode/skills/orchestrate/scripts/validate-agents.sh" ]]; then
+if [[ -f "${HOME}/.config/opencode/skills/orchestrate/scripts/validate-agents.sh" ]]; then
   ~/.config/opencode/skills/orchestrate/scripts/validate-agents.sh
 fi
 ```

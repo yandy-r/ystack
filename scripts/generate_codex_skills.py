@@ -23,6 +23,7 @@ from generate_codex_common import (
     VERBATIM_SKILL_FILES,
     apply_codex_text_transforms,
     compress_skill_description,
+    drop_self_fallbacks,
     dump_frontmatter,
     load_agent_aliases,
     model_invocation_disabled,
@@ -103,6 +104,7 @@ def rewrite_native_paths(text: str, output_path: Path) -> str:
 
     Shell code gets ``${SCRIPT_DIR}``-anchored paths so helpers never depend on cwd;
     every caller defines SCRIPT_DIR. Comments and documents get plain relative paths.
+    A plugin-root fallback then repeats its script-relative primary, so it is dropped.
     """
     is_shell = output_path.suffix in NATIVE_SHELL_SUFFIXES
 
@@ -162,8 +164,8 @@ def rewrite_native_paths(text: str, output_path: Path) -> str:
                 count=1,
             )
         return rendered
-    return "".join(
-        rewrite(line, executable=not line.lstrip().startswith("#")) for line in text.splitlines(keepends=True)
+    return drop_self_fallbacks(
+        "".join(rewrite(line, executable=not line.lstrip().startswith("#")) for line in text.splitlines(keepends=True))
     )
 
 
@@ -281,6 +283,14 @@ def prune_orphans(dest_root: Path, expected_files: set[Path]) -> None:
 
 
 def write_tree(dest_root: Path, dry_run: bool, *, native_paths: bool = False) -> set[Path]:
+    """Render the Codex skill tree under dest_root; return the relative paths written.
+
+    ``native_paths=False`` is the pre-listing legacy render. It keeps the bytes old
+    releases installed (including their quoted ``"~/.codex/`` helper fallbacks) because
+    install_migrate.py proves ownership of installed copies by byte equality with it;
+    rewriting them would leave every legacy install unretirable. That render is never
+    committed while the Codex catalog is listed, and the shell-path validator skips it.
+    """
     aliases = load_agent_aliases()
     written: set[Path] = set()
     manual_skills: list[Path] = []

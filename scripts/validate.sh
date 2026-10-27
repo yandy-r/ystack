@@ -31,7 +31,8 @@
 #                checks both the legacy checkout profile and a disposable native export
 #   - config     tests the managed-config merge helper and install.sh sync CLI
 #   - packages   validates the package manifest (ycc/settings/packages.json) against its schema
-#                and invariants, package graph closures, manifest/tree/catalog parity, install doc IDs, and tests
+#                and invariants, package graph closures, manifest/tree/catalog parity, install doc IDs,
+#                generated shell helper paths across every bundle, and tests
 #   - release    runs every scripts/test-release-*.sh (release-model state scripts,
 #                RELEASING.md template, signal collector)
 #   - mods       validates the Claude Code mods under ycc/mods and their marketplace
@@ -393,6 +394,9 @@ run_target() {
 		echo "== validate: install document package IDs =="
 		python3 "${REPO_ROOT}/scripts/validate_install_doc_ids.py" || fail "validate_install_doc_ids.py"
 		python3 "${REPO_ROOT}/scripts/test_validate_install_doc_ids.py" || fail "test_validate_install_doc_ids.py"
+		echo "== validate: generated shell helper paths (quoted ~, dead fallbacks) =="
+		python3 "${REPO_ROOT}/scripts/test_validate_generated_shell_paths.py" || fail "test_validate_generated_shell_paths.py"
+		python3 "${REPO_ROOT}/scripts/validate_generated_shell_paths.py" || fail "validate_generated_shell_paths.py"
 		echo "== validate: target capability matrix =="
 		python3 "${REPO_ROOT}/scripts/test_validate_capability_matrix.py" || fail "test_validate_capability_matrix.py"
 		python3 "${REPO_ROOT}/scripts/validate_capability_matrix.py" || fail "validate_capability_matrix.py"

@@ -49,6 +49,7 @@ __all__ = [
     "OPENCODE_CONFIG_PATH",
     "OPENCODE_AGENTS_MD_PATH",
     "HOME_INSTALL_OPENCODE_ROOT",
+    "SHELL_SUFFIXES",
     "VERBATIM_SKILL_FILES",
     "MODEL_ALIASES_PATH",
     "MODEL_ALIASES_LOCAL_PATH",
@@ -97,6 +98,7 @@ OPENCODE_AGENTS_MD_PATH = OPENCODE_PLUGIN_ROOT / "AGENTS.md"
 # Install-time location on the user's machine. opencode has no ${PLUGIN_ROOT}
 # variable, so any absolute path inside generated content rewrites to here.
 HOME_INSTALL_OPENCODE_ROOT = "~/.config/opencode"
+SHELL_SUFFIXES = frozenset({".sh", ".bash"})
 
 # Path to the committed model-alias table and the optional user override file.
 MODEL_ALIASES_PATH = REPO_ROOT / "scripts" / "opencode_model_aliases.json"
@@ -332,6 +334,8 @@ def apply_opencode_text_transforms(
     output = output.replace("/.claude/", "/.config/opencode/")
     output = output.replace("../../_shared/scripts", "../../../shared/scripts")
     output = rewrite_plugin_paths(output)
+    # Tilde does not expand inside double quotes (SC2088); use ${HOME} there.
+    output = output.replace('"~/.config/opencode/', '"${HOME}/.config/opencode/')
 
     # Product wording (opencode is the product's own lowercase branding).
     #

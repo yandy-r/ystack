@@ -114,7 +114,7 @@ At the end of REPORT, append to the fix report:
 Populate the `<output of list-worktrees.sh>` block by running:
 
 ```bash
-bash "~/.config/opencode/shared/scripts/list-worktrees.sh" \
+bash "${HOME}/.config/opencode/shared/scripts/list-worktrees.sh" \
   "${REPO}" "${SLUG}"
 ```
 

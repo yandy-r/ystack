@@ -91,17 +91,17 @@ Validate the feature name: must be kebab-case, no special characters except hyph
 1. Print the mode and read `ARTIFACT_STORE=` from stdout; resolve paths without writes:
 
    ```bash
-   bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
-   feature_dir="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=feature-dir --slug="[feature-name]")"
-   research_dir="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=research-dir --slug="[feature-name]")"
-   spec_file="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=feature-spec --slug="[feature-name]")"
+   bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   feature_dir="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=feature-dir --slug="[feature-name]")"
+   research_dir="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=research-dir --slug="[feature-name]")"
+   spec_file="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=feature-spec --slug="[feature-name]")"
    ```
 
 2. For a non-dry linear run only, apply the **Linear call gate** from `~/.config/opencode/shared/references/artifact-store.md` before any write or pull.
 3. Once writing is permitted, establish the safe cache and gitignore rule before Lookup/Load:
 
    ```bash
-   feature_dir="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=feature-dir --slug="[feature-name]")"
+   feature_dir="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=feature-dir --slug="[feature-name]")"
    mkdir -p "$feature_dir" "$research_dir"
    ```
 

@@ -101,13 +101,13 @@ exact tag names, required fields, and prop shapes.
 1. **Read the source plan.** Read the given path (read-only). Step 1: print the resolved store and read `ARTIFACT_STORE=` from stdout:
 
    ```bash
-   bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
    ```
 
    In local mode, capture `OUT` from the unchanged sibling-directory helper:
 
    ```bash
-   OUT="$(bash "~/.config/opencode/skills/visual-plan/scripts/derive-visual-dir.sh" <plan> --mkdir)"
+   OUT="$(bash "${HOME}/.config/opencode/skills/visual-plan/scripts/derive-visual-dir.sh" <plan> --mkdir)"
    ```
 
    In linear mode, identify the source feature slug from its cache directory or
@@ -115,7 +115,7 @@ exact tag names, required fields, and prop shapes.
    Step 2: apply the **Linear call gate** before any write or `--ensure`. Step 3: resolve the feature root after the gate:
 
    ```bash
-   FEATURE_DIR="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=feature-dir --slug=<slug>)"
+   FEATURE_DIR="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=feature-dir --slug=<slug>)"
    OUT="$FEATURE_DIR/visual"
    mkdir -p "$OUT"
    ```

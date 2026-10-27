@@ -16,6 +16,13 @@ python3 "${REPO_ROOT}/scripts/test_generate_opencode_dispatch.py"
 echo "== Skill-derived command regressions =="
 python3 "${REPO_ROOT}/scripts/test_generate_opencode_commands.py"
 
+echo "== Skill shell plugin-root regressions =="
+python3 "${REPO_ROOT}/scripts/test_generate_opencode_skills.py"
+
+echo "== Generated shell helper paths =="
+python3 "${REPO_ROOT}/scripts/validate_generated_shell_paths.py" --root "${BUNDLE_ROOT}" \
+  --root "${REPO_ROOT}/packages/opencode"
+
 echo "== Frontmatter lint =="
 python3 - <<'PY' "${SKILLS_DIR}" "${REPO_ROOT}"
 import re

@@ -42,7 +42,7 @@ VERSION="1.0.0"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 FORGE_LIB="${SCRIPT_DIR}/../../../shared/scripts/lib/forge.sh"
-[[ -f "$FORGE_LIB" ]] || FORGE_LIB="~/.config/opencode/shared/scripts/lib/forge.sh"
+[[ -f "$FORGE_LIB" ]] || FORGE_LIB="${HOME}/.config/opencode/shared/scripts/lib/forge.sh"
 # shellcheck source=/dev/null
 source "$FORGE_LIB"
 

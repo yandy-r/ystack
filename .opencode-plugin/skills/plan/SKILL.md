@@ -130,14 +130,14 @@ Runs only after Step 4 confirmation, last; never substitutes for earlier phases.
 1. Print the mode and read `ARTIFACT_STORE=` from stdout:
 
    ```bash
-   bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+   bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
    ```
 
 2. In linear mode only, apply the **Linear call gate** in `~/.config/opencode/shared/references/artifact-store.md` before any write or `--ensure`.
 3. Resolve the destination once writing is permitted:
 
    ```bash
-   OUT="$(bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=prp-plan --slug=<slug>)"
+   OUT="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=prp-plan --slug=<slug>)"
    mkdir -p "$(dirname "$OUT")"
    ```
 

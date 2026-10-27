@@ -237,6 +237,46 @@ def restore_codex_runtime_terms(text: str) -> str:
     return output.replace(RUNTIME_LIST_SENTINEL, RUNTIME_LIST_TEXT)
 
 
+_SHELL_ASSIGNMENT = re.compile(
+    r"^\s*(?:(?:local|export|readonly|declare)\s+)?(?P<var>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>\S.*?)\s*$"
+)
+_SHELL_FILE_FALLBACK = re.compile(
+    r"^\s*\[\[\s+-f\s+\"\$\{?(?P<var>[A-Za-z_][A-Za-z0-9_]*)\}?\"\s+\]\]\s+\|\|\s+(?P=var)=(?P<value>\S.*?)\s*$"
+)
+
+
+def self_fallbacks(text: str) -> list[tuple[int, str]]:
+    """Return ``(line index, variable)`` for every dead shell fallback in ``text``.
+
+    A fallback ``[[ -f "$VAR" ]] || VAR="X"`` is dead when the nearest preceding
+    non-blank, non-comment line is exactly ``VAR="X"`` (optionally prefixed by
+    ``local``/``export``/``readonly``/``declare``): both branches name the same
+    path. Only that adjacent form counts, so an assignment in another branch,
+    function or heredoc never makes a fallback look dead.
+    """
+    previous: str | None = None
+    found: list[tuple[int, str]] = []
+    for index, line in enumerate(text.splitlines()):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        fallback = _SHELL_FILE_FALLBACK.match(line)
+        if fallback and previous is not None:
+            assignment = _SHELL_ASSIGNMENT.match(previous)
+            if assignment and (assignment["var"], assignment["value"]) == (fallback["var"], fallback["value"]):
+                found.append((index, fallback["var"]))
+        previous = line
+    return found
+
+
+def drop_self_fallbacks(text: str) -> str:
+    """Delete dead shell fallbacks (see ``self_fallbacks``) left by path rewrites."""
+    dead = {index for index, _ in self_fallbacks(text)}
+    if not dead:
+        return text
+    return "".join(line for index, line in enumerate(text.splitlines(keepends=True)) if index not in dead)
+
+
 def load_agent_aliases() -> dict[str, str]:
     aliases: dict[str, str] = {}
     for path in sorted(SRC_AGENTS_DIR.glob("*.md")):

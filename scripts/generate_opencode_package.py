@@ -18,7 +18,8 @@ Sources of truth (never a second convention):
 - agent models: ycc/settings/models.json via generate_opencode_plugin
 - version: model.version_source (ycc/.claude-plugin/plugin.json, lockstep)
 
-Path policy. The file-copy transform bakes `~/.config/opencode/<unit>/...` (and
+Path policy. The file-copy transform bakes `~/.config/opencode/<unit>/...`
+(`${HOME}/.config/opencode/<unit>/...` inside double quotes, and
 `${CLAUDE_PLUGIN_ROOT}/skills/...` in verbatim-free text) because opencode has no
 plugin-root variable. In the package the units that ship (skills, shared,
 agents, commands) are rewritten by the kind of file that holds the reference:
@@ -29,7 +30,8 @@ agents, commands) are rewritten by the kind of file that holds the reference:
   tree and replaces the token with that tree's absolute root in every Markdown
   file; link targets stay relative because nothing executes them.
 - Shell scripts: `${SCRIPT_DIR}/` plus the relative climb, which is
-  cwd-independent by construction.
+  cwd-independent by construction. A helper fallback that then repeats its
+  primary path is dropped as dead code.
 - Agent prompts (no base directory): the same `{{package-root}}` token,
   resolved against the rendered tree at setup.
 
@@ -62,6 +64,8 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from generate_codex_common import drop_self_fallbacks  # noqa: E402
+from generate_opencode_common import SHELL_SUFFIXES  # noqa: E402
 from opencode_sensitive_policy import GUARD_DIRNAME, guard_payloads  # noqa: E402
 from package_model import Package, PackageModel, RuntimePackage, load_package_model  # noqa: E402
 
@@ -224,7 +228,7 @@ def asset_prefix(rel: Path) -> str:
     package-root token (expanded to an absolute rendered path at setup); shell
     scripts anchor on their own `${SCRIPT_DIR}`, which is cwd-independent.
     """
-    if rel.suffix == ".sh":
+    if rel.suffix in SHELL_SUFFIXES:
         return "${SCRIPT_DIR}/" + climb(rel)
     if rel.suffix == ".md":
         return PACKAGE_ROOT_TOKEN + "/"
@@ -293,11 +297,14 @@ def skills_payloads(root: Path) -> dict[Path, Payload]:
                 content = raw
             else:
                 try:
-                    content = finalize_markdown(
-                        make_package_relative(raw.decode("utf-8"), asset_prefix(rel)), rel, names
-                    ).encode("utf-8")
+                    text = make_package_relative(raw.decode("utf-8"), asset_prefix(rel))
                 except UnicodeDecodeError:
                     content = raw
+                else:
+                    if rel.suffix in SHELL_SUFFIXES:
+                        # The ${HOME} fallback now names the script-relative primary path.
+                        text = drop_self_fallbacks(text)
+                    content = finalize_markdown(text, rel, names).encode("utf-8")
             output[root / rel] = Payload(content, bool(path.stat().st_mode & stat.S_IXUSR))
         return output
 
