@@ -300,7 +300,7 @@ pending: false
 
 ### Body, hash, and push bytes
 
-1. Frontmatter exists only as a block starting with `---` at byte 0 and closed by a later `---` line (ignoring CR on delimiter lines), whose first non-blank line is a top-level YAML key: it matches `^[A-Za-z_][A-Za-z0-9_.-]*:([[:space:]]|$)`. Blank-only blocks also qualify. Otherwise the whole file is body, including a local artifact that opens with a thematic break, a comment, or a URL; a `---` anywhere else is body content.
+1. Frontmatter exists only as a block starting with `---` at byte 0 and closed by a later `---` line (ignoring CR on delimiter lines), whose first non-blank line is a top-level YAML key: it matches `^[A-Za-z_][A-Za-z0-9_.-]*:([[:space:]]|$)`. Blank-only blocks also qualify. Leading `#` comment lines may precede that key only when the block also has a top-level identity key (`linear`, `syncedAt`, `contentHash`, `pending`, or `tasks`), so a hand-annotated cache keeps its identity. Otherwise the whole file is body, including a local artifact that opens with a thematic break, a heading, or a URL; a `---` anywhere else is body content.
 2. Start with the exact file bytes. Remove only the complete top-level `linear`, `syncedAt`, `contentHash`, `pending`, and `tasks` entries from that block. Do not re-serialize YAML or remove other keys.
 3. Normalize CRLF and CR line endings to LF. Do not trim the result or add/remove its trailing newline; preserve every other byte, including non-identity frontmatter.
 4. SHA-256 those bytes for `contentHash`. Push the same identity-stripped content to Linear: identity values are never pushed, while non-identity frontmatter remains in the pushed and hashed body. Apply the same procedure after pulls.
