@@ -14,7 +14,7 @@ Read once before parallel or agent-team dispatch. Substitute complete task detai
 ```text
 Implement {{TASK_ID}}: {{TASK_TITLE}}
 
-Plan: {{PLAN_PATH}}
+Plan: {{PLAN_PATH}} (absolute, read-only)
 Patterns to Mirror:
 {{PATTERNS_TO_MIRROR}}
 
@@ -26,6 +26,8 @@ apply GOTCHA warnings and use specified IMPORTS. Implement only this task.
 Run your own type-check on modified files before reporting complete.
 Report files created/modified, validation results, issues and deviations
 verbatim (what changed and why).
+Never edit the plan or its frontmatter, and never call Linear MCP or other
+external tracker tools; report status only to the orchestrator.
 
 {{WORKING_DIRECTORY_LINES}}
 {{TEAM_COMPLETION_DIRECTIVE}}
@@ -33,6 +35,7 @@ verbatim (what changed and why).
 
 `WORKING_DIRECTORY_LINES`: use shared execution-directory prompt contract, for
 both parallel and sequential tasks. Treat that directory as repo root for all
-Read / Write / Edit / Bash calls; no per-agent worktree isolation.
+writes and for reads of files not supplied by absolute path (the plan path may
+lie outside it); no per-agent worktree isolation.
 `TEAM_COMPLETION_DIRECTIVE`: empty for standalone; when `--team`, require agent
 to call `todo` to mark its own registered task complete.

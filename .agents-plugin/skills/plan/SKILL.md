@@ -133,7 +133,7 @@ Runs only after Step 4 confirmation, last; never substitutes for earlier phases.
    mkdir -p "$(dirname "$OUT")"
    ```
 
-Shell state does not persist across tool calls; retain the printed mode and absolute path. Local mode keeps `docs/prps/plans/<slug>.plan.md` under the current checkout's git toplevel without identity frontmatter. Before writing in linear mode, follow artifact-store.md **Planning skills**: when document or task identity is missing, Lookup steps 3–6 and Load any hit, preserve identity and use Conflict before replacement, then Save with task sub-issues. Pass `$OUT` and `${STORE_FLAG}` to visual-plan. Linear-mode plans are not yet consumable by `implement-plan` or `prp-implement` (YAN-1155); print this caveat instead of an implementation command and recommend `--store=local` for plans to implement now.
+Shell state does not persist across tool calls; retain the printed mode and absolute path. Local mode keeps `docs/prps/plans/<slug>.plan.md` under the current checkout's git toplevel without identity frontmatter. Before writing in linear mode, follow artifact-store.md **Planning skills**: when document or task identity is missing, Lookup steps 3–6 and Load any hit, preserve identity and use Conflict before replacement, then Save with task sub-issues. Pass `$OUT` and `${STORE_FLAG}` to visual-plan. In linear mode print `/prp-implement --store=linear {resolved cached plan path or Linear Document URL}` as the next step.
 
 Read `~/.agents/ycc-shared/references/visual-mode.md` only when visual requested, for force-write-first terminal decorator contract.
 

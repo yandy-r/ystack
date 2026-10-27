@@ -108,7 +108,7 @@ resolve_artifact_store() {
 
   export ARTIFACT_STORE="$store" ARTIFACT_STORE_SOURCE="$source_name"
   # Current checkout for repo-level kinds (prd, spec, prp-plan, prp-research,
-  # blueprint) in local mode; not part of the --shell output.
+  # prp-report, blueprint) in local mode; not part of the --shell output.
   export ARTIFACT_REPO_ROOT="${git_root:-$phys_start}"
   export ARTIFACT_ROOT="$PLANS_ROOT"
   if [[ "$store" == linear ]]; then
@@ -159,8 +159,15 @@ get_artifact_path() {
         esac
       fi
       ;;
-    feature-spec|parallel-plan|shared)
+    feature-spec|parallel-plan|shared|report)
       printf '%s/%s.md\n' "$base" "$kind"
+      ;;
+    prp-report)
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/report.md\n' "$base"
+      else
+        printf '%s/docs/prps/reports/%s-report.md\n' "$repo" "$slug"
+      fi
       ;;
     research-dir)
       if [[ "$ARTIFACT_STORE" == linear ]]; then

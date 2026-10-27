@@ -7,6 +7,8 @@ description: Creates GitHub PRs from already-committed branches without commit o
 
 # Create Pull Request
 
+> **OpenCode V2 compatibility:** `--team` is unsupported. If it is supplied, abort before setup or dispatch and ask the caller to rerun without it. This target uses native standalone `subagent` calls only.
+
 > Adapted from PRPs-agentic-eng by Wirasm. Part of the PRP workflow series.
 
 **Input**: `$ARGUMENTS` — optional, may contain a base branch name and/or flags (e.g., `--draft`).
@@ -110,7 +112,18 @@ Check for related PRP artifacts:
 - `docs/prps/plans/` — Plans that were executed (including the `completed/` subfolder)
 - `docs/prps/prds/` — Related PRDs
 
-Reference these in the PR body if they exist.
+Reference these in the PR body if they exist. When the resolved store is `linear` (`bash "~/.config/opencode/shared/scripts/resolve-artifact-store.sh" --shell`, reading `ARTIFACT_STORE=`; default `local`), list the Linear Project and plan Document URLs from the artifact cache identity instead of `docs/prps` paths, per artifact-store.md **PR linking**.
+
+### Linear Issue Links
+
+Link issues in the Related Issues section per `~/.config/opencode/shared/references/artifact-store.md` **PR linking** (collection, verification, `Closes` vs `Refs`, skip message):
+
+```bash
+bash "~/.config/opencode/shared/scripts/collect-linear-keys.sh" --base "origin/<base>"
+```
+
+- Also add the `linear.issue` from the cached plan's frontmatter as a `closes` candidate: use the cache path known in the session, else `.ycc/artifacts/<slug>/{parallel-plan,prp-plan}.md` where `<slug>` is the branch name without a leading `feat/`. Check the current checkout, then the main checkout (parent of `git rev-parse --path-format=absolute --git-common-dir`), per the contract's step 1.
+- Emit `Closes <KEY>` for `closes` keys and `Refs <KEY>` for `refs`-only keys, plus `Closes #<n>` for linked GitHub issues, without duplicating lines already in the body or template.
 
 ---
 

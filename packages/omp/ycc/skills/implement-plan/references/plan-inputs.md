@@ -10,10 +10,10 @@
 
 ## Usage block
 
-Print when no feature name remains after stripping flags:
+Print when no input remains after stripping flags:
 
 ```
-Usage: /implement-plan [--team] [--dry-run] [--worktree] [--no-worktree] <feature-name>
+Usage: /implement-plan [--team] [--dry-run] [--worktree] [--no-worktree] [--store=local|linear] <feature-name | plan-path | Linear-reference>
 
 Examples:
   /implement-plan user-authentication
@@ -30,7 +30,26 @@ Examples:
 
   /implement-plan --team --no-worktree my-feature
     # agent-team dispatch on the current-checkout feature branch
+
+  /implement-plan --store=local user-authentication
+    # explicit local mode; existing paths and no Linear calls
+
+  /implement-plan --store=linear user-authentication
+  /implement-plan YAN-123
+  /implement-plan https://linear.app/workspace/issue/YAN-123/feature
+  /implement-plan https://linear.app/workspace/project/feature-slug
+  /implement-plan --store=linear feature-project-slug
+  /implement-plan https://linear.app/workspace/document/plan-document-id
+  /implement-plan --store=linear <document-id>
+  /implement-plan .ycc/artifacts/user-authentication/parallel-plan.md
+    # issue, Project, Document, or cached plan; hydrate before prerequisites
 ```
+
+### Store and input resolution
+
+Read `skill://ycc-shared/references/artifact-store.md` **Implementation skills > Inputs**, **Resolve and hydrate**, and **Store resolution**; Inputs defines what counts as an issue key, a Linear reference and a linear plan path, and that an existing local `${PLANS_DIR}/<name>/` wins over reference parsing. Strip `--store=local|linear` into `STORE_FLAG` and forward it on every resolver call. A Linear reference or linear plan path sets `STORE_FLAG=--store=linear`; combined with explicit `--store=local`, abort with: `A Linear plan reference requires linear mode; drop --store=local.` Anything else (including feature names such as `oauth-2`) follows normal store resolution; default local behavior is unchanged. A bare Project slug or Document id is a reference only with `--store=linear`; it is resolved through Lookup, not guessed from a missing local file.
+
+Resolve and print the mode, then in linear mode apply the Linear call gate and Lookup → Load for `parallel-plan` and available `shared`; use their absolute cache paths. Derive the feature slug from the selected Document/Project using the canonical contract. A missing `shared` Document warns; it does not block a plan. Rebuild a missing task map in memory from existing sub-issues; untracked tasks still run. Never create task issues during implementation. A dry run follows the contract's `--dry-run` rule (no `--ensure`, no cache write, no Linear writes). An explicit local plan path uses its absolute path and companion `shared.md`, retaining local behavior.
 
 ## Task parser output
 
@@ -86,7 +105,7 @@ todo: taskId="<1.2 returned ID>", addBlockedBy=["<1.1 returned ID>"]
 
 ## Monorepo Support
 
-The skill detects and uses the correct plans directory in monorepo setups.
+In local mode, the skill detects and uses the correct plans directory in monorepo setups. Linear mode resolves `parallel-plan` and `shared` under `.ycc/artifacts/<slug>/` in the invoking checkout, independent of a package's local `docs/plans/`; see artifact-store.md **Worktrees**. The examples below retain local-mode behavior.
 
 Default behavior:
 

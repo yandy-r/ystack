@@ -223,7 +223,7 @@ Format exactly as defined in
 All tasks — parallel and sequential — share this single feature worktree. Do **not**
 add a `**Children**:` list. Do **not** add per-task `**Worktree**:` lines.
 
-> **Plan-file handoff**: in local mode (default), leave `parallel-plan.md` and `shared.md` at their resolved paths in the current checkout (default `docs/plans/<feature-slug>/`). The implementor (`implement-plan` / `prp-implement`) will **move** them into the feature worktree once created — never copied or synced. Linear-mode plans are not yet consumable by these implementation skills (YAN-1155); use `--store=local` for plans you will implement now. Do not move the cache or claim an implementer loads from Linear. See `worktree-strategy.md` §7 and artifact-store.md "Worktrees".
+> **Plan-file handoff**: in local mode (default), leave `parallel-plan.md` and `shared.md` at their resolved paths in the current checkout (default `docs/plans/<feature-slug>/`). The implementor (`implement-plan` / `prp-implement`) will **move** them into the feature worktree once created — never copied or synced. In linear mode, never move the cache; print `/implement-plan --store=linear <feature-slug>` as the next step (the implementor loads the plan from the cache). See `worktree-strategy.md` §7 and artifact-store.md "Worktrees".
 
 **Plan-generation agent prompt** (both standalone Path A and `--team` Path B): by default (`WORKTREE_MODE=true`), append the following directive to the plan-generation prompt. Omit when `--no-worktree` was passed (`WORKTREE_MODE=false`):
 

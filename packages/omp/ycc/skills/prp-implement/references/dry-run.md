@@ -20,3 +20,4 @@ Per-batch teammate roster:
 ```
 
 Do **not** call any team/task/agent tools. Exit the skill.
+Linear mode: a dry run follows the artifact-store.md Implementation skills `--dry-run` rule: no `--ensure`, no cache write, no Linear writes. It may run Lookup and read an existing cache file.

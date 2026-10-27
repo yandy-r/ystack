@@ -355,7 +355,7 @@ Use the feature slug resolved in Phase 1 for `<feature-slug>` (never derive it f
 
 All tasks — parallel and sequential — share this one feature worktree path. No `**Children**:` list and no per-task `**Worktree**:` annotation lines are emitted.
 
-> **Plan-file handoff**: in local mode, leave `$OUT` in the current checkout; the implementor (`ycc:prp-implement`) will **move** it into the feature worktree once created — do not pre-write or copy it there (see `worktree-strategy.md` §7). Linear-mode plans are not yet consumable by `ycc:prp-implement` or `ycc:implement-plan` (YAN-1155); use `--store=local` for plans you will implement now. Do not move the linear cache or print an implementation command for it.
+> **Plan-file handoff**: in local mode, leave `$OUT` in the current checkout; the implementor (`ycc:prp-implement`) will **move** it into the feature worktree once created — do not pre-write or copy it there (see `worktree-strategy.md` §7). In linear mode, never move the cache; the implementor loads the plan from it via `/ycc:prp-implement --store=linear {resolved cached plan path or Linear Document URL}`.
 
 Follow `${CLAUDE_PLUGIN_ROOT}/skills/_shared/references/worktree-strategy.md` for the full naming scheme and annotation contract.
 
@@ -441,7 +441,7 @@ Update the phase status from `pending` to `in-progress` and add the actual resol
 - **Visual Link**: [hosted URL | http://127.0.0.1:PORT/... | local files only | n/a (--visual not set)]
 
 > Next step (local mode only): Run `/ycc:prp-implement {resolved absolute OUT path}` to execute this plan.
-> In linear mode replace that command with: Linear-mode plans are not yet consumable by ycc:prp-implement or ycc:implement-plan (YAN-1155); use --store=local for plans you will implement now.
+> In linear mode replace that command with: Run `/ycc:prp-implement --store=linear {resolved cached plan path or Linear Document URL}` to execute this plan.
 ```
 
 ---
@@ -472,7 +472,7 @@ The `validate-prp-plan.sh` script The script checks:
 
 ## Next Steps
 
-- Local mode: run `/ycc:prp-implement <plan-path>` to execute this plan. Linear mode: print the YAN-1155 caveat above instead; use `--store=local` for implementation now.
+- Local mode: run `/ycc:prp-implement <plan-path>` to execute this plan. Linear mode: run `/ycc:prp-implement --store=linear <cached plan path or Linear Document URL>`.
 - Run `/ycc:plan` for quick conversational planning without artifacts
 - Run `/ycc:plan-workflow` for the heavyweight parallel-agent planning track
 

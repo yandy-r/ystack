@@ -252,8 +252,11 @@ In local mode only, print:
 
 This will execute the plan with parallel agents where dependencies allow.
 
-In linear mode, replace that command and explanation with:
-Linear-mode plans are not yet consumable by implement-plan or prp-implement (YAN-1155); use --store=local for plans you will implement now.
+In linear mode, replace that command with:
+
+/implement-plan --store=linear {{FEATURE_NAME}}
+
+This loads the plan from the Linear artifact-store cache and executes it with parallel agents where dependencies allow.
 
 To review the plan:
 

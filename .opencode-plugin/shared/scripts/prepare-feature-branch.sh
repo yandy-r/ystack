@@ -9,7 +9,7 @@
 # Behavior:
 #   - Rejects an unrelated dirty checkout (only plan-artifact paths allowed:
 #     docs/plans/<slug>/*, docs/orchestration/<slug>*,
-#     docs/prps/{plans,specs,prds}/<slug>*).
+#     docs/prps/{plans,specs,prds}/<slug>*, plus cache-only .gitignore additions).
 #   - On feat/<slug>: idempotent no-op.
 #   - On trunk (main/master/trunk/develop, plus the RELEASING.md trunk) and
 #     feat/<slug> exists: switch to it.
@@ -162,6 +162,22 @@ fi
 #
 # Allow plan-artifact paths; reject anything else.
 
+is_artifact_gitignore() {
+  local path="$1" root file head='' work rule='^/?\.ycc/artifacts/?$'
+  root=$(git rev-parse --show-toplevel)
+  file="$root/$path"
+  [[ -f "$file" && ! -L "$file" ]] || return 1
+  grep -qE "$rule" "$file" || return 1
+  if git -C "$root" cat-file -e "HEAD:$path" 2>/dev/null; then
+    head=$(git -C "$root" show "HEAD:$path") || return 1
+    if grep -qE "$rule" <<<"$head"; then return 1; fi
+  fi
+  # Compare all non-rule content, including staged changes; command
+  # substitution ignores trailing newlines added before the cache rule.
+  work=$(grep -vE "$rule" "$file" || true)
+  [[ "$work" == "$head" ]]
+}
+
 is_plan_artifact() {
   local path="$1"
   case "$path" in
@@ -170,6 +186,7 @@ is_plan_artifact() {
     docs/prps/plans/"${FEATURE_SLUG}"*) return 0 ;;
     docs/prps/specs/"${FEATURE_SLUG}"*) return 0 ;;
     docs/prps/prds/"${FEATURE_SLUG}"*) return 0 ;;
+    .gitignore|*/.gitignore) is_artifact_gitignore "$path"; return $? ;;
     *) return 1 ;;
   esac
 }

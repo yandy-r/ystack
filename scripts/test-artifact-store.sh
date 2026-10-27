@@ -279,6 +279,8 @@ for pair in \
   "feature-spec|${linear_base}/feature-spec.md|${local_base}/feature-spec.md" \
   "parallel-plan|${linear_base}/parallel-plan.md|${local_base}/parallel-plan.md" \
   "shared|${linear_base}/shared.md|${local_base}/shared.md" \
+  "report|${linear_base}/report.md|${local_base}/report.md" \
+  "prp-report|${linear_base}/report.md|${path_repo}/docs/prps/reports/Feature_1-report.md" \
   "research-external|${linear_base}/research/research-external.md|${local_base}/research-external.md" \
   "research-deep-research|${linear_base}/research/research-deep-research.md|${local_base}/research-deep-research.md" \
   "analysis-context|${linear_base}/analysis-context.md|${local_base}/analysis-context.md" \
@@ -321,7 +323,7 @@ rm -rf "${path_repo}/custom plans"
 "$BASH_BIN" "$HELPER" --store=local --kind=feature-dir --slug=Feature_1 "$path_repo" >/dev/null
 assert_ok 'CLI path without ensure creates no feature directory' test ! -e "${path_repo}/custom plans"
 # Local --ensure creates only the parent of the resolved file, never PLANS_DIR.
-for kind in prd spec prp-plan blueprint; do
+for kind in prd spec prp-plan prp-report blueprint; do
   "$BASH_BIN" "$HELPER" --store=local --ensure --kind="$kind" --slug=Feature_1 "$path_repo" >/dev/null
 done
 assert_ok 'local ensure prd leaves plans dir absent' test ! -e "${path_repo}/custom plans"
@@ -329,6 +331,15 @@ assert_ok 'local ensure prd creates docs/prps/prds' test -d "${path_repo}/docs/p
 assert_ok 'local ensure prp-plan creates docs/prps/plans' test -d "${path_repo}/docs/prps/plans"
 assert_ok 'local ensure blueprint creates docs' test -d "${path_repo}/docs"
 assert_ok 'local ensure creates no prd file' test ! -e "${path_repo}/docs/prps/prds/Feature_1.prd.md"
+assert_ok 'local ensure prp-report creates reports parent' test -d "${path_repo}/docs/prps/reports"
+assert_ok 'local ensure prp-report creates no file' test ! -e "${path_repo}/docs/prps/reports/Feature_1-report.md"
+"$BASH_BIN" "$HELPER" --store=local --ensure --kind=report --slug=Feature_1 "$path_repo" >/dev/null
+assert_ok 'local ensure report creates feature parent' test -d "$local_base"
+assert_ok 'local ensure report creates no file' test ! -e "${local_base}/report.md"
+for kind in report prp-report; do
+  assert_eq "linear ensure ${kind} returns report path" "${linear_base}/report.md" "$("$BASH_BIN" "$HELPER" --store=linear --ensure --kind="$kind" --slug=Feature_1 "$path_repo")"
+  assert_ok "linear ensure ${kind} creates no file" test ! -e "${linear_base}/report.md"
+done
 "$BASH_BIN" "$HELPER" --store=local --ensure --kind=shared --slug=Feature_1 "$path_repo" >/dev/null
 assert_ok 'local ensure shared creates feature dir' test -d "$local_base"
 assert_ok 'local ensure shared creates no file' test ! -e "${local_base}/shared.md"
@@ -340,11 +351,12 @@ git -C "$wt_parent" add .plans-config; git -C "$wt_parent" commit -q -m cfg
 wt_child="${wt_parent}/.worktrees/feat"
 git -C "$wt_parent" worktree add -q -b wt-feat "$wt_child"
 mkdir -p "${wt_child}/sub/dir"
-for kind in prd spec prp-plan blueprint; do
+for kind in prd spec prp-plan prp-report blueprint; do
   case "$kind" in
     prd) wt_rel="docs/prps/prds/foo.prd.md" ;;
     spec) wt_rel="docs/prps/specs/foo.spec.md" ;;
     prp-plan) wt_rel="docs/prps/plans/foo.plan.md" ;;
+    prp-report) wt_rel="docs/prps/reports/foo-report.md" ;;
     blueprint) wt_rel="docs/blueprint.md" ;;
   esac
   assert_eq "worktree ${kind} resolves under worktree toplevel" "${wt_child}/${wt_rel}" "$("$BASH_BIN" "$HELPER" --store=local --kind="$kind" --slug=foo "${wt_child}/sub/dir")"

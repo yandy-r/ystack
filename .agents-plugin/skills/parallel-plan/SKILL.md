@@ -67,7 +67,7 @@ shared-context (step 1) -> parallel-plan (this skill) -> implement-plan (step 3)
 
 This skill requires `${feature_dir}/shared.md` and ends after producing
 analysis artifacts and `parallel-plan.md`. The user manually runs
-`/implement-plan` when ready in local mode. Linear-mode plans are not yet consumable by implement-plan or prp-implement (YAN-1155); use `--store=local` for plans you will implement now.
+`/implement-plan` when ready in local mode; in linear mode, `/implement-plan --store=linear <feature>` loads the plan from the artifact-store cache.
 
 **If shared.md doesn't exist**: canonical `plan-workflow/scripts/check-prerequisites.sh`
 fails fast in plan-only mode. Stop and tell the user to run
@@ -141,7 +141,7 @@ ${parallel_plan_file}
 Local mode only: /implement-plan [feature-name]
 
 In linear mode replace that command with:
-Linear-mode plans are not yet consumable by implement-plan or prp-implement (YAN-1155); use --store=local for plans you will implement now.
+/implement-plan --store=linear [feature-name]
 ```
 
 **STOP**: Do not execute implement-plan. Do not write any more files. Do not modify any code. This skill is complete.

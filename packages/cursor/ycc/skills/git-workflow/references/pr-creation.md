@@ -7,6 +7,7 @@
 - Step 22b: base, sync guard, backport
 - Steps 23–24: template and context
 - Step 25: PR title
+- Step 26a: link Linear and GitHub issues
 - Step 26: PR description
 - Step 27: draft vs ready
 - Step 28: create the PR (MCP, then CLI)
@@ -91,6 +92,16 @@ fix(api): resolve multiple payment processing issues
 docs: update API documentation and examples
 refactor(database): migrate to new query builder pattern
 ```
+
+## Step 26a: Link Linear and GitHub issues
+
+Contract (collection, verification, keywords, skip message): `${CURSOR_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md` § PR linking. Applies in both store modes.
+
+1. Collect: `bash "${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/collect-linear-keys.sh" --base "origin/$BASE"` (no `--team` flag; it defaults to the configured team). Rows are `<KEY>\t<source>\t<closes|refs>`; it exits 0 even when empty.
+2. Add the `linear.issue` from the leading frontmatter of the cached plan implemented on this branch as a `closes` candidate: use the cache path known in the session, else `.ycc/artifacts/<slug>/{parallel-plan,prp-plan}.md` where `<slug>` is the branch name without a leading `feat/`. Check the current checkout, then the main checkout (parent of `git rev-parse --path-format=absolute --git-common-dir`), per the contract's step 1.
+3. Verify, then emit `Closes` for `closes` keys and `Refs` for `refs`-only keys, plus `Closes #<n>` for linked GitHub issues, under `## Related Issues`; never duplicate a line already present in the body or repository template (Step 31). Use the contract's skip message when no team or MCP can verify.
+
+`create-pr.sh --create` applies the same team filter without MCP verification and keeps the bare `Closes #` placeholder when nothing qualifies.
 
 ## Step 26: PR description
 
