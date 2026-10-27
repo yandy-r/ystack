@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Frontmatter body regressions (YAN-1154). No generated bundles required.
+# Frontmatter body regressions (YAN-1154, YAN-1631). No generated bundles required.
 # shellcheck disable=SC2016 # Inner-shell programs must stay literal.
 set -euo pipefail
 export BASH_BIN=${BASH_BIN:-bash}
@@ -60,6 +60,28 @@ check_both_forms 'spaced delimiter is body text' "${SCRATCH}/spaced-closing" "${
 printf -- '---\nkey: value\n---\n---\n' >"${SCRATCH}/empty-body-marker"
 printf -- '---\n' >"${SCRATCH}/empty-body-marker-expected"
 check_both_forms 'second delimiter remains body' "${SCRATCH}/empty-body-marker" "${SCRATCH}/empty-body-marker-expected"
+printf -- '---\n# Plan\n### Task 1.1: First task\n---\n### Task 1.2: Second task\n' >"${SCRATCH}/thematic-break"
+check_both_forms 'leading thematic break unchanged' "${SCRATCH}/thematic-break" "${SCRATCH}/thematic-break"
+printf -- '---\r\n# Plan\r\n### Task 1.1: First task\r\n---\r\n### Task 1.2: Second task\r\n' >"${SCRATCH}/thematic-break-crlf"
+check_both_forms 'leading CRLF thematic break unchanged' "${SCRATCH}/thematic-break-crlf" "${SCRATCH}/thematic-break-crlf"
+printf -- '---\n\n \t\nkey: value\n---\nbody\n' >"${SCRATCH}/blank-before-key"
+printf 'body\n' >"${SCRATCH}/body-expected"
+check_both_forms 'blank lines before top-level key stripped' "${SCRATCH}/blank-before-key" "${SCRATCH}/body-expected"
+printf -- '---\n  key: value\n---\nbody\n' >"${SCRATCH}/indented-key"
+check_both_forms 'indented first key unchanged' "${SCRATCH}/indented-key" "${SCRATCH}/indented-key"
+printf -- '---\n\n---\nbody\n' >"${SCRATCH}/blank-block"
+check_both_forms 'blank-only frontmatter stripped' "${SCRATCH}/blank-block" "${SCRATCH}/body-expected"
+printf -- '---\n---\nbody\n' >"${SCRATCH}/adjacent-delimiters"
+check_both_forms 'adjacent delimiters are an empty block' "${SCRATCH}/adjacent-delimiters" "${SCRATCH}/body-expected"
+printf -- '---\n# note\nlinear: x\n---\nbody\n' >"${SCRATCH}/leading-comment"
+check_both_forms 'leading comment line keeps the file as body' "${SCRATCH}/leading-comment" "${SCRATCH}/leading-comment"
+printf -- '---\nhttps://example.test/plan\n---\nbody\n' >"${SCRATCH}/leading-url"
+check_both_forms 'leading URL is not a key' "${SCRATCH}/leading-url" "${SCRATCH}/leading-url"
+printf -- '---\r\nkey:\r\n---\r\nbody' >"${SCRATCH}/bare-key-crlf"
+printf 'body' >"${SCRATCH}/bare-key-crlf-expected"
+check_both_forms 'CRLF key with empty value stripped' "${SCRATCH}/bare-key-crlf" "${SCRATCH}/bare-key-crlf-expected"
+printf -- '---\n# T' >"${SCRATCH}/non-key-no-newline"
+check_both_forms 'non-key line without newline unchanged' "${SCRATCH}/non-key-no-newline" "${SCRATCH}/non-key-no-newline"
 assert_bad 'missing file fails' "$BASH_BIN" "$HELPER" "${SCRATCH}/missing"
 assert_bad 'directory fails' "$BASH_BIN" "$HELPER" "$SCRATCH"
 assert_bad 'missing argument fails' "$BASH_BIN" "$HELPER"
