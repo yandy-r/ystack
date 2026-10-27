@@ -314,6 +314,94 @@ else
     fail "validate-prerequisites (smoke): detection missed (rc=$RC, out=$OUT)"
 fi
 
+# --- 6b. research-to-issues validate-prerequisites.sh (body-only reads) -------
+# Regression (YAN-1674 / GH #491): plans are judged by artifact_body. Lines
+# inside identity frontmatter (a leading block whose first key is a top-level
+# YAML key) must neither satisfy headings/task counts nor drive content-based
+# type detection; a plan opening with a `---` thematic break is all body.
+# vp_run <file> [args...] — run the validator in the scratch git repo (no
+# origin remote, so it exits 1 on the forge check; the checks under test
+# print their own lines regardless).
+vp_run() {
+    local name="$1"; shift
+    run_capture "vp-${name}" -- bash -c "cd '$VP_DIR' && '$VP_NEW' $*"
+}
+
+# Frontmatter carries the headings and task markers; the body has none.
+# prp-plan
+printf '%s\n' '---' 'linear:' '  document: d' '## Summary' '## Batches' '### Task 1: fake' '---' '# Body' 'Nothing here.' >"${VP_DIR}/fm.plan.md"
+vp_run fm-prp fm.plan.md
+if [[ "$OUT" == *'WARNING: Missing expected PRP plan headers'* ]] \
+    && [[ "$OUT" == *'Sequential mode detected'* ]] \
+    && [[ "$OUT" == *'Found approximately 0 tasks'* ]]; then
+    pass "validate-prerequisites: prp-plan frontmatter does not satisfy headings, batches or tasks"
+else
+    fail "validate-prerequisites: prp-plan read frontmatter (rc=$RC, out=$OUT)"
+fi
+# parallel-plan
+printf '%s\n' '---' 'linear:' '  document: d' '## Critically Relevant Files' '#### Task 1.1: fake' '---' '# Body' >"${VP_DIR}/parallel-plan.md"
+vp_run fm-par parallel-plan.md
+if [[ "$OUT" == *'WARNING: Missing expected parallel-plan headers'* ]] \
+    && [[ "$OUT" == *'Found approximately 0 tasks'* ]]; then
+    pass "validate-prerequisites: parallel-plan frontmatter does not satisfy headers or tasks"
+else
+    fail "validate-prerequisites: parallel-plan read frontmatter (rc=$RC, out=$OUT)"
+fi
+# feature-spec
+printf '%s\n' '---' 'linear:' '  document: d' '## Executive Summary' '## Recommendations' '---' '# Body' >"${VP_DIR}/feature-spec.md"
+vp_run fm-spec feature-spec.md
+if [[ "$OUT" == *'WARNING: Missing ## Executive Summary header'* ]] \
+    && [[ "$OUT" == *'WARNING: Missing task breakdown or recommendations section'* ]]; then
+    pass "validate-prerequisites: feature-spec frontmatter does not satisfy sections"
+else
+    fail "validate-prerequisites: feature-spec read frontmatter (rc=$RC, out=$OUT)"
+fi
+# prd
+printf '%s\n' '---' 'linear:' '  document: d' '## Problem Statement' '## Implementation Phases' '| 1 | fake |' '## Success Metrics' '---' '# Body' >"${VP_DIR}/x.prd.md"
+vp_run fm-prd x.prd.md
+if [[ "$OUT" == *'WARNING: Missing ## Problem Statement header'* ]] \
+    && [[ "$OUT" == *'WARNING: Missing ## Implementation Phases section'* ]] \
+    && [[ "$OUT" == *'WARNING: Missing success metrics or hypothesis section'* ]]; then
+    pass "validate-prerequisites: prd frontmatter does not satisfy sections"
+else
+    fail "validate-prerequisites: prd read frontmatter (rc=$RC, out=$OUT)"
+fi
+# Content-based type detection ignores frontmatter headings.
+printf '%s\n' '---' 'linear:' '  document: d' '## Critically Relevant Files' '---' '# Body' >"${VP_DIR}/fm-notes.md"
+vp_run fm-detect fm-notes.md
+if [[ "$OUT" != *'DETECTED_TYPE:'* ]] && [[ "$OUT" == *'Could not detect source type'* ]]; then
+    pass "validate-prerequisites: content detection ignores frontmatter headings"
+else
+    fail "validate-prerequisites: detection read frontmatter (rc=$RC, out=$OUT)"
+fi
+
+# A local plan opening with a `---` thematic break keeps every task.
+printf '%s\n' '---' '### Task 1: first' '---' '## Summary' '### Task 2: second' >"${VP_DIR}/break.plan.md"
+vp_run break-prp break.plan.md
+if [[ "$OUT" == *'Contains expected PRP plan structure'* ]] \
+    && [[ "$OUT" == *'Found approximately 2 tasks'* ]]; then
+    pass "validate-prerequisites: thematic-break prp-plan keeps all tasks"
+else
+    fail "validate-prerequisites: thematic-break prp-plan (rc=$RC, out=$OUT)"
+fi
+mkdir -p "${VP_DIR}/break"
+printf '%s\n' '---' '#### Task 1.1: first' '---' '## Implementation Plan' '#### Task 1.2: second' >"${VP_DIR}/break/parallel-plan.md"
+vp_run break-par break/parallel-plan.md
+if [[ "$OUT" == *'Contains expected parallel-plan structure'* ]] \
+    && [[ "$OUT" == *'Found approximately 2 tasks'* ]]; then
+    pass "validate-prerequisites: thematic-break parallel-plan keeps all tasks"
+else
+    fail "validate-prerequisites: thematic-break parallel-plan (rc=$RC, out=$OUT)"
+fi
+# Content detection also sees a leading thematic-break file whole.
+printf '%s\n' '---' '## Executive Summary' '---' 'text' >"${VP_DIR}/break-notes.md"
+vp_run break-detect break-notes.md
+if [[ "$OUT" == *'DETECTED_TYPE: feature-spec'* ]]; then
+    pass "validate-prerequisites: thematic-break file detected from its content"
+else
+    fail "validate-prerequisites: thematic-break detection (rc=$RC, out=$OUT)"
+fi
+
 # --- 7. _shared lib/ci-classify.sh (sourced) ----------------------------------
 # The signature line leads the log; the old `printf | grep -qiE` SIGPIPEs on
 # the matching category probe and classify_failure falls through to 'unknown'.

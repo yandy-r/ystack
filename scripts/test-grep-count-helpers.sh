@@ -130,6 +130,32 @@ body
 body
 EOF
 
+# Identity frontmatter is metadata, not body content: lines inside the block
+# must not satisfy heading checks or add to task counts (YAN-1674 / GH #491).
+PLAN_FM="${SCRATCH}/plan-frontmatter.md"
+cat >"$PLAN_FM" <<'EOF'
+---
+linear:
+  document: docs/plans/feat
+#### Task fm-only
+---
+# Plan
+
+No task headings in the body.
+EOF
+
+# A local plan opening with a Markdown `---` thematic break is all body:
+# tasks before and after the break all count.
+PLAN_BREAK="${SCRATCH}/plan-thematic-break.md"
+cat >"$PLAN_BREAK" <<'EOF'
+---
+#### Task one
+---
+# Plan
+
+#### Task two
+EOF
+
 # plan_check <script> <plan-file> — runs a check-prerequisites.sh against a
 # scratch docs/plans/<feature>/ layout containing the given plan file. The
 # scratch root gets a local-scope .plans-config so resolve-plans-dir.sh never
@@ -157,6 +183,12 @@ assert_no_bare_zero "code-report" "$OUT"
 
 plan_check "$CR_SCRIPT" "$PLAN_SOME"
 assert_count_line "code-report: two matches -> 2" "$OUT" 'Tasks in plan: *' "2"
+
+# Frontmatter lines never count as tasks; a thematic-break plan keeps all tasks.
+plan_check "$CR_SCRIPT" "$PLAN_FM"
+assert_count_line "code-report: frontmatter task line ignored -> 0" "$OUT" 'Tasks in plan: *' "0"
+plan_check "$CR_SCRIPT" "$PLAN_BREAK"
+assert_count_line "code-report: thematic-break plan keeps all tasks -> 2" "$OUT" 'Tasks in plan: *' "2"
 
 # Unreadable plan file: grep exit 2 must surface, not be swallowed into 0.
 if [[ "$CAN_CHMOD" -eq 1 ]]; then
