@@ -378,6 +378,19 @@ if [[ "$OUT" != *'DETECTED_TYPE:'* ]] && [[ "$OUT" == *'Could not detect source 
 else
     fail "validate-prerequisites: detection read frontmatter (rc=$RC, out=$OUT)"
 fi
+# Detection reads the first 40 *body* lines: a signature pushed past raw line
+# 40 by long frontmatter is still found.
+{
+    printf '%s\n' '---' 'linear:' '  document: d' 'tasks:'
+    for i in $(seq 1 45); do printf '  - t%s\n' "$i"; done
+    printf '%s\n' '---' '## Critically Relevant Files'
+} >"${VP_DIR}/fm-long.md"
+vp_run fm-long fm-long.md
+if [[ "$OUT" == *'DETECTED_TYPE: parallel-plan'* ]]; then
+    pass "validate-prerequisites: detection window starts at the body"
+else
+    fail "validate-prerequisites: detection missed body after long frontmatter (rc=$RC, out=$OUT)"
+fi
 
 # A local plan opening with a `---` thematic break keeps every task.
 printf '%s\n' '---' '### Task 1: first' '---' '## Summary' '### Task 2: second' >"${VP_DIR}/break.plan.md"

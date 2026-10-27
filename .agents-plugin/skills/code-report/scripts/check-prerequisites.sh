@@ -56,14 +56,15 @@ if [[ -f "${PLAN_DIR}/parallel-plan.md" ]]; then
 
   # Count tasks in the plan body (identity frontmatter is metadata, not
   # content). grep -c prints the count itself; exit 1 only means zero matches.
-  # Any other non-zero status is a real read failure. Read through process
-  # substitution, never `artifact_body | grep`, so pipefail cannot SIGPIPE.
+  # Any other non-zero status is a real read failure. The body is captured
+  # first so an artifact_body failure is seen (a process substitution would
+  # hide it), then matched with a here-string, never `artifact_body | grep`.
   TASK_COUNT_STATUS=0
-  if [[ ! -r "${PLAN_DIR}/parallel-plan.md" ]]; then
+  if [[ ! -r "${PLAN_DIR}/parallel-plan.md" ]] || ! PLAN_BODY=$(artifact_body "${PLAN_DIR}/parallel-plan.md"); then
     echo "ERROR: Failed to read ${PLAN_DIR}/parallel-plan.md" >&2
     exit 2
   fi
-  TASK_COUNT=$(grep -c "^#### Task" < <(artifact_body "${PLAN_DIR}/parallel-plan.md") 2>/dev/null) || TASK_COUNT_STATUS=$?
+  TASK_COUNT=$(grep -c "^#### Task" <<<"$PLAN_BODY") || TASK_COUNT_STATUS=$?
   if [[ "$TASK_COUNT_STATUS" -gt 1 ]]; then
     echo "ERROR: Failed to read ${PLAN_DIR}/parallel-plan.md" >&2
     exit "$TASK_COUNT_STATUS"
