@@ -30,6 +30,13 @@ FORGE_LIB="${SCRIPT_DIR}/../../_shared/scripts/lib/forge.sh"
 # shellcheck source=/dev/null
 source "$FORGE_LIB"
 
+# Plans are judged by their body: leading identity frontmatter (linear:, tasks:)
+# is metadata and must never satisfy or hide headings and task markers.
+ARTIFACT_BODY_LIB="${SCRIPT_DIR}/../../_shared/scripts/artifact-body.sh"
+[[ -f "$ARTIFACT_BODY_LIB" ]] || ARTIFACT_BODY_LIB="${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/artifact-body.sh"
+# shellcheck source=/dev/null
+source "$ARTIFACT_BODY_LIB"
+
 SOURCE_PATH="${1:-}"
 EXPLICIT_TYPE=""
 DETECTED_TYPE=""
@@ -135,11 +142,15 @@ else
     elif [[ "$BASENAME" == *.prd.md ]]; then
       DETECTED_TYPE="prd"
     else
-      # Content-based fallback: check first 40 lines for signature headers
-      # HEAD_CONTENT comes from `head -40 <file>` (no pipe writer); match it
-      # with here-strings, not `echo | grep -q`, so pipefail cannot SIGPIPE
-      # the writer and misread a present header (YAN-1587).
-      HEAD_CONTENT=$(head -40 "$SOURCE_PATH" 2>/dev/null || echo "")
+      # Content-based fallback: check the first 40 body lines (frontmatter
+      # skipped) for signature headers. HEAD_CONTENT is matched with
+      # here-strings, not `echo | grep -q`, so pipefail cannot SIGPIPE the
+      # writer and misread a present header (YAN-1587).
+      if SOURCE_BODY=$(artifact_body "$SOURCE_PATH" 2>/dev/null); then
+        HEAD_CONTENT=$(head -40 <<<"$SOURCE_BODY")
+      else
+        HEAD_CONTENT=""
+      fi
       if grep -q "## Critically Relevant Files" <<<"$HEAD_CONTENT"; then
         DETECTED_TYPE="parallel-plan"
       elif grep -q "## Mandatory Reading\|## Step-by-Step Tasks" <<<"$HEAD_CONTENT"; then
@@ -160,6 +171,15 @@ else
   if [[ -n "$DETECTED_TYPE" ]]; then
     echo "DETECTED_TYPE: $DETECTED_TYPE"
 
+    # Read the plan body once for the type-specific checks below (frontmatter
+    # skipped). Matched with here-strings, never `artifact_body | grep -q`.
+    SOURCE_BODY=""
+    if [[ "$DETECTED_TYPE" != "deep-research" && -f "$SOURCE_PATH" ]]; then
+      if ! SOURCE_BODY=$(artifact_body "$SOURCE_PATH" 2>/dev/null); then
+        ERRORS+=("ERROR: Failed to read source file: $SOURCE_PATH")
+        SOURCE_BODY=""
+      fi
+    fi
     case "$DETECTED_TYPE" in
       deep-research)
         if [[ ! -d "$SOURCE_PATH" ]]; then
@@ -197,12 +217,12 @@ else
           ERRORS+=("ERROR: feature-spec source must be a file: $SOURCE_PATH")
         else
           echo "OK: Source file exists: $SOURCE_PATH"
-          if grep -q "## Executive Summary" "$SOURCE_PATH" 2>/dev/null; then
+          if grep -q "## Executive Summary" <<<"$SOURCE_BODY"; then
             echo "OK: Contains expected ## Executive Summary header"
           else
             ERRORS+=("WARNING: Missing ## Executive Summary header -- file may not be a valid feature-spec")
           fi
-          if grep -q "## Task Breakdown Preview\|## Recommendations" "$SOURCE_PATH" 2>/dev/null; then
+          if grep -q "## Task Breakdown Preview\|## Recommendations" <<<"$SOURCE_BODY"; then
             echo "OK: Contains task/recommendation structure"
           else
             ERRORS+=("WARNING: Missing task breakdown or recommendations section")
@@ -214,12 +234,12 @@ else
           ERRORS+=("ERROR: parallel-plan source must be a file: $SOURCE_PATH")
         else
           echo "OK: Source file exists: $SOURCE_PATH"
-          if grep -q "## Critically Relevant Files\|## Implementation Plan" "$SOURCE_PATH" 2>/dev/null; then
+          if grep -q "## Critically Relevant Files\|## Implementation Plan" <<<"$SOURCE_BODY"; then
             echo "OK: Contains expected parallel-plan structure"
           else
             ERRORS+=("WARNING: Missing expected parallel-plan headers")
           fi
-          TASK_COUNT=$(grep -c "^####.*Task" "$SOURCE_PATH" 2>/dev/null) || TASK_COUNT=0
+          TASK_COUNT=$(grep -c "^####.*Task" <<<"$SOURCE_BODY") || TASK_COUNT=0
           echo "INFO: Found approximately $TASK_COUNT tasks"
         fi
         ;;
@@ -228,23 +248,23 @@ else
           ERRORS+=("ERROR: prp-plan source must be a file: $SOURCE_PATH")
         else
           echo "OK: Source file exists: $SOURCE_PATH"
-          if grep -q "## Step-by-Step Tasks\|## Tasks\|## Summary" "$SOURCE_PATH" 2>/dev/null; then
+          if grep -q "## Step-by-Step Tasks\|## Tasks\|## Summary" <<<"$SOURCE_BODY"; then
             echo "OK: Contains expected PRP plan structure"
           else
             ERRORS+=("WARNING: Missing expected PRP plan headers")
           fi
-          if grep -q "## Batches" "$SOURCE_PATH" 2>/dev/null; then
+          if grep -q "## Batches" <<<"$SOURCE_BODY"; then
             echo "INFO: Parallel/batch mode detected"
           else
             echo "INFO: Sequential mode detected"
           fi
           # Detect format variant: standard (### Task N:) or narrative (**TN —)
-          if grep -q "^### Task [0-9]" "$SOURCE_PATH" 2>/dev/null; then
+          if grep -q "^### Task [0-9]" <<<"$SOURCE_BODY"; then
             echo "INFO: Standard format detected (### Task N: headings)"
-            TASK_COUNT=$(grep -c "^### Task [0-9]" "$SOURCE_PATH" 2>/dev/null) || TASK_COUNT=0
-          elif grep -q '^\*\*T[0-9]' "$SOURCE_PATH" 2>/dev/null; then
+            TASK_COUNT=$(grep -c "^### Task [0-9]" <<<"$SOURCE_BODY") || TASK_COUNT=0
+          elif grep -q '^\*\*T[0-9]' <<<"$SOURCE_BODY"; then
             echo "INFO: Narrative format detected (**TN bold markers)"
-            TASK_COUNT=$(grep -c '^\*\*T[0-9]' "$SOURCE_PATH" 2>/dev/null) || TASK_COUNT=0
+            TASK_COUNT=$(grep -c '^\*\*T[0-9]' <<<"$SOURCE_BODY") || TASK_COUNT=0
           else
             TASK_COUNT=0
           fi
@@ -256,19 +276,19 @@ else
           ERRORS+=("ERROR: prd source must be a file: $SOURCE_PATH")
         else
           echo "OK: Source file exists: $SOURCE_PATH"
-          if grep -q "## Problem Statement" "$SOURCE_PATH" 2>/dev/null; then
+          if grep -q "## Problem Statement" <<<"$SOURCE_BODY"; then
             echo "OK: Contains expected ## Problem Statement header"
           else
             ERRORS+=("WARNING: Missing ## Problem Statement header -- file may not be a valid PRD")
           fi
-          if grep -q "## Implementation Phases" "$SOURCE_PATH" 2>/dev/null; then
+          if grep -q "## Implementation Phases" <<<"$SOURCE_BODY"; then
             echo "OK: Contains Implementation Phases section"
-            PHASE_COUNT=$(grep -c "^| [0-9]" "$SOURCE_PATH" 2>/dev/null) || PHASE_COUNT=0
+            PHASE_COUNT=$(grep -c "^| [0-9]" <<<"$SOURCE_BODY") || PHASE_COUNT=0
             echo "INFO: Found approximately $PHASE_COUNT phases"
           else
             ERRORS+=("WARNING: Missing ## Implementation Phases section")
           fi
-          if grep -q "## Success Metrics\|## Key Hypothesis" "$SOURCE_PATH" 2>/dev/null; then
+          if grep -q "## Success Metrics\|## Key Hypothesis" <<<"$SOURCE_BODY"; then
             echo "OK: Contains success/hypothesis structure"
           else
             ERRORS+=("WARNING: Missing success metrics or hypothesis section")
