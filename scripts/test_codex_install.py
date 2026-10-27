@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import codex_install as installer
+import merge_managed_config as managed_config
 
 MERGE_CONFIG = installer.merge_config
 SHIPPED = (
@@ -185,6 +186,51 @@ class NativeInstallSafetyTests(unittest.TestCase):
             installer.write_verified_toml(config, "[broken")
         self.assertEqual(config.read_text(), "model = 'mine'\n")
 
+    def test_remove_dry_run_previews_owned_caches_and_marketplace_without_writes(self) -> None:
+        installer.install("local", False)
+        before = self.snapshot()
+        paths = set(self.home.rglob("*"))
+        out = io.StringIO()
+        with (
+            patch.object(installer, "cli") as cli,
+            patch.object(installer, "merge_config") as merge,
+            redirect_stdout(out),
+        ):
+            installer.remove(True, dry_run=True)
+        cli.assert_not_called()
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(set(self.home.rglob("*")), paths)
+        for package in installer.MIGRATION_PACKAGES:
+            cache = self.home / ".codex/plugins/cache/ycc" / package / "1.0.0"
+            self.assertIn(f"would remove native cache {cache}", out.getvalue())
+        self.assertIn("would remove /marketplaces/ycc", out.getvalue())
+        self.assertIn("would remove ownership state", out.getvalue())
+        self.assertTrue(merge.call_args.kwargs["dry_run"])
+
+    def test_remove_dry_run_retains_edited_and_foreign_snapshots(self) -> None:
+        installer.install("local", False)
+        cache_root = self.home / ".codex/plugins/cache/ycc"
+        (cache_root / "ycc/1.0.0/payload").write_text("my edit")
+        foreign = cache_root / "ycc-mcp/9.9.9"
+        foreign.mkdir()
+        (foreign / "payload").write_text("foreign")
+        before = self.snapshot()
+        out = io.StringIO()
+        with patch.object(installer, "merge_config") as merge, redirect_stdout(out):
+            installer.remove(False, dry_run=True)
+        self.assertEqual(self.snapshot(), before)
+        self.assertIn("edited or foreign native snapshot", out.getvalue())
+        self.assertIn("kept marketplace ycc", out.getvalue())
+        self.assertNotIn("would remove /marketplaces/ycc", out.getvalue())
+        merge.assert_not_called()
+
+    def test_remove_dry_run_without_state_creates_nothing(self) -> None:
+        with patch.object(installer, "merge_config") as merge, patch.object(installer, "cli") as cli:
+            installer.remove(True, dry_run=True)
+        merge.assert_not_called()
+        cli.assert_not_called()
+        self.assertEqual(list(self.home.iterdir()), [])
+
 
 class NativeSettingsSelectionTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -226,6 +272,64 @@ class NativeSettingsSelectionTests(unittest.TestCase):
         self.assertEqual(command[command.index("--entry-groups") + 1], "plugins")
         self.assertEqual(command[command.index("--entries") + 1], "cloudflare@openai-curated")
         self.assertIn("--remove", command)
+
+    def test_settings_dry_run_forwards_selection_and_removal(self) -> None:
+        for remove in (False, True):
+            with self.subTest(remove=remove), patch.object(installer.subprocess, "run") as run:
+                with patch.object(installer, "merge_config", MERGE_CONFIG):
+                    args = ["settings", "--groups", "plugins", "--entries", "ycc@ycc", "--dry-run"]
+                    if remove:
+                        args.append("--remove")
+                    code, _, err = self.run_main(*args)
+                self.assertEqual(code, 0, err)
+                command = run.call_args.args[0]
+                self.assertIn("--dry-run", command)
+                self.assertEqual("--remove" in command, remove)
+                self.assertEqual(command[command.index("--entries") + 1], "ycc@ycc")
+
+    def test_settings_dry_run_reports_changes_without_config_state_or_backups(self) -> None:
+        home = self.root / "home"
+        home.mkdir()
+        destination = home / ".codex/config.toml"
+        state = home / ".config/ycc/managed-config-state.json"
+
+        def merge_in_process(command: list[str], *, check: bool) -> None:
+            with patch.object(sys, "argv", command[1:]), patch.object(managed_config, "STATE_PATH", state):
+                self.assertEqual(managed_config.main(), 0)
+
+        with (
+            patch.object(Path, "home", return_value=home),
+            patch.object(installer, "merge_config", MERGE_CONFIG),
+            patch.object(installer.subprocess, "run", side_effect=merge_in_process),
+        ):
+            code, out, err = self.run_main("settings", "--groups", "settings", "--dry-run")
+            self.assertEqual(code, 0, err)
+            self.assertIn("would set /model", out)
+            self.assertEqual(list(home.iterdir()), [])
+            code, _, err = self.run_main("settings", "--groups", "settings")
+            self.assertEqual(code, 0, err)
+            before = {path: path.read_bytes() for path in home.rglob("*") if path.is_file()}
+            paths = set(home.rglob("*"))
+            code, out, err = self.run_main("settings", "--groups", "settings", "--remove", "--dry-run")
+            self.assertEqual(code, 0, err)
+            self.assertIn("would remove /model", out)
+        self.assertTrue(destination.is_file())
+        self.assertTrue(state.is_file())
+        self.assertEqual({path: path.read_bytes() for path in home.rglob("*") if path.is_file()}, before)
+        self.assertEqual(set(home.rglob("*")), paths)
+
+    def test_native_install_dry_run_is_rejected_before_installing(self) -> None:
+        with patch.object(installer, "install") as install:
+            code, _, err = self.run_main("install", "--dry-run")
+        self.assertEqual(code, 2)
+        self.assertIn("does not support --dry-run", err)
+        install.assert_not_called()
+
+    def test_remove_dry_run_is_forwarded(self) -> None:
+        with patch.object(installer, "remove") as remove:
+            code, _, err = self.run_main("remove", "--dry-run")
+        self.assertEqual(code, 0, err)
+        remove.assert_called_once_with(False, dry_run=True)
 
     def test_without_entries_all_native_keys_are_selected(self) -> None:
         with patch.object(installer, "merge_config") as merge:

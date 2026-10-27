@@ -23,8 +23,12 @@ cursor_unit_src_root() {
 # cursor_valid_steps — comma-separated steps Cursor accepts for --only.
 cursor_valid_steps() { echo "base,skills,agents,commands,settings,rules,mcp,hooks"; }
 
-# cursor_dry_run_steps — steps --dry-run can preview (merge helper only).
-cursor_dry_run_steps() { echo "mcp"; }
+# Base installation builds bundles; removal is a read-only entry preview.
+cursor_dry_run_steps() {
+    printf 'mcp,settings,rules,hooks'
+    [[ "${COMMAND}" != remove ]] || printf ',base'
+    echo
+}
 
 # cursor_intent_steps <intent> — steps <intent> maps to; empty means no-op.
 cursor_intent_steps() {

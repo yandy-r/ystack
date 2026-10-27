@@ -9,11 +9,12 @@ The installer drives everything through this CLI:
     names                                        catalog names, one per line
     validate                                     check the catalog; exit 1 on errors
     source --names CSV --out FILE                merge-helper source for the entries
-    companions sync|remove --names CSV --dest-dir DIR [--force]
-    purge-cache --names CSV [--cache-dir DIR]    delete cached package copies
+    companions sync|remove --names CSV --dest-dir DIR [--force] [--dry-run]
+    purge-cache --names CSV [--cache-dir DIR] [--dry-run]
     notes --names CSV [--remove]                 print the entries' manual steps
 
 Every subcommand accepts ``--catalog PATH``. Unknown names exit 2.
+Companion and cache dry runs report their changes without writing files or state.
 
 Companion files are owned by hash in ``opencode-plugin-files.json`` beside the
 managed-config state: ycc replaces or deletes a companion only when it is
@@ -276,10 +277,13 @@ def sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def sync_companion(source: bytes, dest: Path, hashes: dict[str, str], force: bool) -> None:
+def sync_companion(source: bytes, dest: Path, hashes: dict[str, str], force: bool, dry_run: bool) -> None:
     key = str(dest)
     wanted = sha256(source)
     if not dest.exists() and not dest.is_symlink():
+        if dry_run:
+            print(f"  would copy {dest}")
+            return
         atomic_write(dest, source)
         hashes[key] = wanted
         print(f"  [ok] wrote {dest}")
@@ -287,11 +291,15 @@ def sync_companion(source: bytes, dest: Path, hashes: dict[str, str], force: boo
     # A symlink or non-file is the user's: compare only a regular file's bytes.
     current = sha256(dest.read_bytes()) if dest.is_file() and not dest.is_symlink() else None
     if current == wanted:
-        hashes[key] = wanted
+        if not dry_run:
+            hashes[key] = wanted
         print(f"  [ok] up to date: {dest}")
     elif (current is not None and current == hashes.get(key)) or force:
         if dest.is_dir() and not dest.is_symlink():
             print(f"  [!!] kept {dest}: a directory is in the way")
+            return
+        if dry_run:
+            print(f"  would copy {dest}")
             return
         atomic_write(dest, source)
         hashes[key] = wanted
@@ -300,10 +308,11 @@ def sync_companion(source: bytes, dest: Path, hashes: dict[str, str], force: boo
         print(f"  [!!] kept {dest}: local edits (re-run with --force to replace it)")
 
 
-def remove_companion(source: bytes, dest: Path, hashes: dict[str, str], force: bool) -> None:
+def remove_companion(source: bytes, dest: Path, hashes: dict[str, str], force: bool, dry_run: bool) -> None:
     key = str(dest)
     if not dest.exists() and not dest.is_symlink():
-        hashes.pop(key, None)
+        if not dry_run:
+            hashes.pop(key, None)
         return
     current = sha256(dest.read_bytes()) if dest.is_file() and not dest.is_symlink() else None
     # Only a recorded hash proves ycc wrote it: a file that merely equals the
@@ -312,6 +321,9 @@ def remove_companion(source: bytes, dest: Path, hashes: dict[str, str], force: b
     if dest.is_dir() and not dest.is_symlink():
         print(f"  [!!] kept {dest}: not a file")
     elif owned or force:
+        if dry_run:
+            print(f"  would remove {dest}")
+            return
         dest.unlink()
         hashes.pop(key, None)
         print(f"  [ok] removed {dest}")
@@ -330,8 +342,8 @@ def run_companions(catalog: Catalog, catalog_path: Path, args: argparse.Namespac
             source = (catalog_path.parent / item["source"]).read_bytes()
             dest = dest_dir / item["destination"]
             action = sync_companion if args.action == "sync" else remove_companion
-            action(source, dest, hashes, args.force)
-    if hashes != before:
+            action(source, dest, hashes, args.force, args.dry_run)
+    if not args.dry_run and hashes != before:
         save_hashes(path, hashes)
     return 0
 
@@ -358,7 +370,7 @@ def contained(path: Path, layout_dir: Path, root: Path) -> bool:
     return real != root and real.is_relative_to(root)
 
 
-def purge_package(package: str, cache: Path, root: Path) -> int:
+def purge_package(package: str, cache: Path, root: Path, dry_run: bool) -> int:
     """Remove one package's cached copies; returns 1 when something was refused."""
     if not NPM_NAME.fullmatch(package):
         print(f"  [!!] refused {package!r}: not a valid npm package name")
@@ -383,8 +395,13 @@ def purge_package(package: str, cache: Path, root: Path) -> int:
             print(f"  [!!] refused {path}: resolves outside {root}")
             refused = 1
         elif path.is_symlink() or not path.is_dir():
-            path.unlink()  # a symlink is removed itself, never followed
-            print(f"  [ok] removed {path}")
+            if dry_run:
+                print(f"  would remove {path}")
+            else:
+                path.unlink()  # a symlink is removed itself, never followed
+                print(f"  [ok] removed {path}")
+        elif dry_run:
+            print(f"  would remove {path}")
         else:
             shutil.rmtree(path)
             print(f"  [ok] removed {path}")
@@ -404,7 +421,7 @@ def run_purge(catalog: Catalog, args: argparse.Namespace) -> int:
     refused = 0
     for name in names:
         package = item_key(PACKAGE_RULE, catalog[name]["package"]) or name
-        refused |= purge_package(package, cache, root)
+        refused |= purge_package(package, cache, root, args.dry_run)
     return refused
 
 
@@ -428,6 +445,43 @@ def run_notes(catalog: Catalog, args: argparse.Namespace) -> int:
     return 0
 
 
+# --- projected removal --------------------------------------------------------
+
+
+def run_loads_after_remove(args: argparse.Namespace) -> int:
+    """Whether a name remains after the same removal the merge helper would apply."""
+    from managed_config_entries import expand_leaf_rules
+    from merge_managed_config import PROFILES, MergeError, load_source, load_state, parse_pointer, remove_json
+
+    destination = args.destination.expanduser()
+    profile = PROFILES[args.profile]
+    groups = [group.strip() for group in args.groups.split(",") if group.strip()]
+    valid_scope = args.state_scope is None or re.fullmatch(r"[A-Za-z0-9@/._-]+", args.state_scope)
+    if not groups or profile["format"] != "json" or not valid_scope:
+        return 0
+    try:
+        source = load_source(args.source, profile)
+        state = load_state()
+        scope = f"[{args.state_scope}]" if args.state_scope is not None else ""
+        state_entry = state.get(f"{args.profile}{scope}:{destination}", {})
+        if not isinstance(state_entry, dict):
+            state_entry = {}
+        profile = expand_leaf_rules(profile, source, [parse_pointer(key) for key in state_entry if key.startswith("/")])
+        rendered, _, _, _, _, _ = remove_json(source, destination, profile, groups, state_entry, args.force)
+        projected = destination if rendered is None else json.loads(rendered)
+        if not isinstance(projected, dict):
+            return 0
+        plugins = projected.get("plugins", [])
+        if not isinstance(plugins, list):
+            return 0
+        specs = [
+            item if isinstance(item, str) else item.get("package") for item in plugins if isinstance(item, (str, dict))
+        ]
+        return 0 if args.name in {item_key(PACKAGE_RULE, spec) for spec in specs if isinstance(spec, str)} else 1
+    except (MergeError, OSError, ValueError, KeyError, TypeError, AttributeError):
+        return 0
+
+
 # --- CLI ----------------------------------------------------------------------
 
 
@@ -446,9 +500,21 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     companions.add_argument("--names", required=True)
     companions.add_argument("--dest-dir", required=True, type=Path)
     companions.add_argument("--force", action="store_true")
+    companions.add_argument("--dry-run", action="store_true", help="Preview companion changes without writing")
     purge = sub.add_parser("purge-cache", parents=[common], help="Delete cached package copies")
     purge.add_argument("--names", required=True)
     purge.add_argument("--cache-dir", type=Path)
+    purge.add_argument("--dry-run", action="store_true", help="Preview cache removal without writing")
+    loads = sub.add_parser(
+        "loads-after-remove", parents=[common], help="Query plugin membership after a read-only removal projection"
+    )
+    loads.add_argument("--destination", required=True, type=Path)
+    loads.add_argument("--name", required=True)
+    loads.add_argument("--source", required=True, type=Path)
+    loads.add_argument("--profile", required=True, choices=("opencode-config", "opencode-catalog"))
+    loads.add_argument("--groups", required=True)
+    loads.add_argument("--state-scope")
+    loads.add_argument("--force", action="store_true")
     notes = sub.add_parser("notes", parents=[common], help="Print manual follow-up notes")
     notes.add_argument("--names", required=True)
     notes.add_argument("--remove", action="store_true", help="Print what the user may undo after removal")
@@ -457,6 +523,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.command == "loads-after-remove":
+        return run_loads_after_remove(args)
     catalog_path: Path = args.catalog
     if args.command == "validate":
         errors = validate_catalog(catalog_path)

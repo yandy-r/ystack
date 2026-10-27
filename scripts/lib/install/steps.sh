@@ -241,8 +241,8 @@ run_target() {
 }
 
 # skip_dry_run_steps <target> — with --dry-run, keep only the steps <target>
-# can preview (<target>_dry_run_steps; none when undefined) and say so for
-# every other selected step instead of running it. Rewrites ONLY_STEPS
+# can preview (<target>_dry_run_steps, which may depend on COMMAND; none when
+# undefined) and say so for every other selected step. Rewrites ONLY_STEPS
 # (exclusive mode), like skip_unselectable_steps.
 skip_dry_run_steps() {
     local target="$1" step previewable=""

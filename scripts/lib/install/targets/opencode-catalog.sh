@@ -91,7 +91,7 @@ opencode_catalog_sync() {
     names="$(opencode_catalog_run_names sync)"
     [[ -n "${names}" ]] || return 0
     info "Catalog plugins: ${names//,/, }"
-    mkdir -p "${OPENCODE_COMPANION_DIR}"
+    [[ "${DRY_RUN:-0}" == "1" ]] || mkdir -p "${OPENCODE_COMPANION_DIR}"
     tmp="$(mktemp -d)"
     for name in ${names//,/ }; do
         opencode_catalog_sync_one "${name}" "${tmp}/source.json" || { rc=$?; break; }
@@ -103,13 +103,14 @@ opencode_catalog_sync() {
 # opencode_catalog_sync_one <name> <tmp source.json>
 opencode_catalog_sync_one() {
     local name="$1" src="$2"
-    local -a force=()
+    local -a force=() dry_run=()
     [[ "${FORCE:-0}" == "1" ]] && force=(--force)
+    [[ "${DRY_RUN:-0}" == "1" ]] && dry_run=(--dry-run)
     opencode_catalog source --names "${name}" --out "${src}" || return $?
     merge_settings_config opencode-catalog "${src}" "${OPENCODE_SETTINGS_FILE}" plugins,agents \
         --state-scope "${name}" || return $?
     opencode_catalog companions sync --names "${name}" --dest-dir "${OPENCODE_COMPANION_DIR}" \
-        "${force[@]}" || return $?
+        "${force[@]}" "${dry_run[@]}" || return $?
     opencode_catalog notes --names "${name}"
 }
 
@@ -135,7 +136,8 @@ opencode_catalog_remove() {
 # run took out of opencode.json.
 opencode_catalog_remove_one() {
     local name="$1" src="$2" loaded=0
-    local -a force=()
+    local -a force=() dry_run=()
+    [[ "${DRY_RUN:-0}" == "1" ]] && dry_run=(--dry-run)
     if [[ ",${PLUGINS_CATALOG_SELECT}," != *",${name},"* ]] \
         && ! opencode_catalog_has_state "${name}" "${OPENCODE_SETTINGS_FILE}"; then
         return 0
@@ -145,18 +147,42 @@ opencode_catalog_remove_one() {
     opencode_catalog source --names "${name}" --out "${src}" || return $?
     remove_settings opencode-catalog "${src}" "${OPENCODE_SETTINGS_FILE}" plugins,agents \
         --state-scope "${name}" || return $?
-    if opencode_config_loads "${OPENCODE_SETTINGS_FILE}" "${name}"; then
+    if [[ "${DRY_RUN:-0}" == "1" ]]; then
+        if opencode_config_loads_after_remove "${OPENCODE_SETTINGS_FILE}" "${name}" "${src}" \
+            opencode-catalog plugins,agents "${name}"; then
+            info "kept the ${name} companion config: ${OPENCODE_SETTINGS_FILE} would still load it"
+            [[ "${PURGE_CACHE:-0}" == "1" ]] && info "kept the ${name} package cache: ${OPENCODE_SETTINGS_FILE} would still load it"
+            return 0
+        fi
+    elif opencode_config_loads "${OPENCODE_SETTINGS_FILE}" "${name}"; then
         info "kept the ${name} companion config: ${OPENCODE_SETTINGS_FILE} still loads it"
         [[ "${PURGE_CACHE:-0}" == "1" ]] && info "kept the ${name} package cache: ${OPENCODE_SETTINGS_FILE} still loads it"
         return 0
     fi
     opencode_catalog companions remove --names "${name}" --dest-dir "${OPENCODE_COMPANION_DIR}" \
-        "${force[@]}" || return $?
+        "${force[@]}" "${dry_run[@]}" || return $?
     [[ ${loaded} -eq 1 || ",${PLUGINS_CATALOG_SELECT}," == *",${name},"* ]] || return 0
     if [[ "${PURGE_CACHE:-0}" == "1" ]]; then
-        opencode_catalog purge-cache --names "${name}" || return $?
+        opencode_catalog purge-cache --names "${name}" "${dry_run[@]}" || return $?
     fi
     opencode_catalog notes --names "${name}" --remove
+}
+
+# opencode_config_loads_after_remove <opencode.json> <name> <src> <profile>
+# <groups> [state-scope] — query the real removal plan without writing config
+# or state. Planning failures conservatively report that the name still loads.
+opencode_config_loads_after_remove() {
+    local -a command=(
+        loads-after-remove
+        --destination "$1"
+        --name "$2"
+        --source "$3"
+        --profile "$4"
+        --groups "$5"
+    )
+    [[ $# -lt 6 ]] || command+=(--state-scope "$6")
+    [[ "${FORCE:-0}" == "1" ]] && command+=(--force)
+    opencode_catalog "${command[@]}"
 }
 
 # opencode_catalog_has_state <name> <opencode.json> — true when the managed

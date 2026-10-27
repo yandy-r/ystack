@@ -13,8 +13,14 @@ CODEX_AGENTS_DIR="${SCRIPT_DIR}/.codex-plugin/agents"
 # codex_valid_steps — comma-separated steps Codex accepts for --only.
 codex_valid_steps() { echo "base,skills,agents,settings,rules,mcp"; }
 
-# codex_dry_run_steps — steps --dry-run can preview (merge helper only).
-codex_dry_run_steps() { echo "mcp"; }
+# codex_dry_run_steps — base preview is removal-only; installs need native builds/CLI.
+codex_dry_run_steps() {
+    if [[ "${COMMAND:-}" == remove ]]; then
+        echo "base,settings,rules,mcp"
+    else
+        echo "settings,rules,mcp"
+    fi
+}
 
 # codex_intent_steps <intent> — steps <intent> maps to; empty means no-op.
 codex_intent_steps() {
@@ -74,11 +80,13 @@ codex_native_settings() {
     local -a command=(python3 "${SCRIPT_DIR}/scripts/codex_install.py" settings --groups "${CONFIG_GROUPS}" "$@")
     [[ -n "${CONFIG_GROUP_ENTRIES[plugins]:-}" ]] && command+=(--entries "${CONFIG_GROUP_ENTRIES[plugins]}")
     [[ "${FORCE:-0}" == 1 ]] && command+=(--force)
+    [[ "${DRY_RUN:-0}" == 1 ]] && command+=(--dry-run)
     "${command[@]}"
 }
 
 run_native_codex_install() {
     local -a command=(python3 "${SCRIPT_DIR}/scripts/codex_install.py" "$1" --mode "${MODE:-local}")
+    [[ "${DRY_RUN:-0}" == 1 ]] && command+=(--dry-run)
     codex_plugin_cli_supported && command+=(--cli)
     "${command[@]}"
 }
@@ -189,6 +197,10 @@ enable_local_codex_plugin_leaf() {
 uninstall_codex_plugin() {
     codex_plugin_cli_supported || return 0
     [[ -f "${CODEX_MARKETPLACE_JSON}" ]] || return 0
+    if [[ "${DRY_RUN:-0}" == 1 ]]; then
+        dry_run_note "run codex plugin remove" "ycc@$(codex_marketplace_name)"
+        return 0
+    fi
     local selector
     selector="ycc@$(codex_marketplace_name)"
     info "Running: codex plugin remove ${selector}"
@@ -497,6 +509,29 @@ sync_codex_target() {
 remove_codex_marketplace_entry() {
     local dest="${HOME}/.agents/plugins/marketplace.json"
     [[ -f "${dest}" ]] || { info "nothing to remove: ${dest}"; return 0; }
+    if [[ "${DRY_RUN:-0}" == 1 ]]; then
+        python3 - "${dest}" "${SCRIPT_DIR}/scripts" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, sys.argv[2])
+from codex_marketplace import SCAFFOLD, _is_ycc
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text(encoding="utf-8"))
+plugins = data.get("plugins") if isinstance(data, dict) else None
+if not isinstance(plugins, list) or not any(_is_ycc(p) for p in plugins):
+    print(f"  [ok] nothing to remove: {path}")
+else:
+    data["plugins"] = [p for p in plugins if not _is_ycc(p)]
+    if data == SCAFFOLD:
+        print(f"[dry-run] would remove {path} (only the ycc entry was left)")
+    else:
+        print(f"[dry-run] would remove marketplace entry ycc from {path}")
+PY
+        return 0
+    fi
     python3 "${SCRIPT_DIR}/scripts/codex_marketplace.py" remove "${dest}"
 }
 
@@ -543,10 +578,14 @@ remove_codex_target() {
         # Whatever cache is left (the legacy hand-written copy, or a snapshot
         # the CLI could not remove) belongs to this marketplace entry.
         if [[ -e "${CODEX_PLUGIN_CACHE}" || -L "${CODEX_PLUGIN_CACHE}" ]]; then
-            rm -rf "${CODEX_PLUGIN_CACHE}"
-            info "removed ${CODEX_PLUGIN_CACHE}"
+            if ! dry_run_note remove "${CODEX_PLUGIN_CACHE}"; then
+                rm -rf "${CODEX_PLUGIN_CACHE}"
+                info "removed ${CODEX_PLUGIN_CACHE}"
+            fi
         fi
-        rmdir "$(dirname "${CODEX_PLUGIN_CACHE}")" 2>/dev/null || true
+        if [[ "${DRY_RUN:-0}" != 1 ]]; then
+            rmdir "$(dirname "${CODEX_PLUGIN_CACHE}")" 2>/dev/null || true
+        fi
         # The tracked agents first (unless the agents step just removed all of
         # them; base is never narrowed by --agents),
         # then whatever an older untracked mirror left under shipped names.
