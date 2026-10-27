@@ -43,8 +43,8 @@ else
     while IFS= read -r -d '' file; do
       relative=${file#"${ROOT}/${tree}/"}
       [[ -f "${source_tree}/${relative}" ]] || continue
-      grep -qE '\.ycc/artifacts|\.plans-config' "${source_tree}/${relative}" "$file" || continue
-      for literal in .ycc/artifacts .plans-config; do
+      grep -I -qE '\.ycc/artifacts|\.plans-config|--linear-' "${source_tree}/${relative}" "$file" || continue
+      for literal in .ycc/artifacts .plans-config --linear-; do
         expected=$(count_literal "$literal" "${source_tree}/${relative}")
         actual=$(count_literal "$literal" "$file")
         if [[ "$expected" != "$actual" ]]; then fail "${tree}/${relative}: literal ${literal} count ${actual}, expected ${expected} from ycc/skills"; fi
@@ -57,8 +57,8 @@ else
       while IFS= read -r -d '' file; do
         relative=${file#"${ROOT}/${tree}/"}
         [[ -f "${shared_tree}/${relative}" ]] || continue
-        grep -qE '\.ycc/artifacts|\.plans-config' "${shared_tree}/${relative}" "$file" || continue
-        for literal in .ycc/artifacts .plans-config; do
+        grep -I -qE '\.ycc/artifacts|\.plans-config|--linear-' "${shared_tree}/${relative}" "$file" || continue
+        for literal in .ycc/artifacts .plans-config --linear-; do
           expected=$(count_literal "$literal" "${shared_tree}/${relative}")
           actual=$(count_literal "$literal" "$file")
           if [[ "$expected" != "$actual" ]]; then fail "${tree}/${relative}: literal ${literal} count ${actual}, expected ${expected} from ycc/skills/_shared"; fi
@@ -71,7 +71,8 @@ else
       source_pointer_linear=$(count_literal '--linear-' "$pointer_helper")
       for tree in .codex-plugin/ycc/shared .opencode-plugin/shared .agents-plugin/ycc-shared packages/cursor/ycc/skills/_shared packages/omp/ycc/skills/_shared packages/opencode/ycc-opencode/shared; do
         copy="${ROOT}/${tree}/scripts/artifact-store-pointer.sh"
-        [[ -f "$copy" ]] || { printf 'NOTE: %s absent; skipping pointer parity.\n' "${tree}/scripts/artifact-store-pointer.sh"; continue; }
+        if [[ ! -d "${ROOT}/${tree}" ]]; then printf 'NOTE: %s absent; skipping pointer parity.\n' "$tree"; continue; fi
+        if [[ ! -f "$copy" ]]; then fail "${tree}/scripts/artifact-store-pointer.sh: missing from generated tree"; continue; fi
         copy_linear=$(count_literal '--linear-' "$copy")
         if [[ "$copy_linear" != "$source_pointer_linear" ]]; then
           fail "${tree}/scripts/artifact-store-pointer.sh: --linear- occurrences ${copy_linear}, expected ${source_pointer_linear} from ycc/skills/_shared"

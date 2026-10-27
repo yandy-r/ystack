@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Write and optionally commit the portable repository artifact-store pointer.
+# workspace/label/project are read indirectly via ${!name} in the validation and merge loops.
+# shellcheck disable=SC2034
 set -euo pipefail
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd -P)"
 usage() {
@@ -94,6 +96,23 @@ if [[ -n "$other_key" && -f "$pointer" ]]; then
     fi
   fi
 fi
+# Creating a root pointer would make nested, non-local configs inherit its
+# plans_dir. Refuse before changing that resolution unless explicitly forced.
+if [[ ! -e "$pointer" && "$force" == 0 ]]; then
+  nested_configs=()
+  while IFS= read -r -d '' nested_config; do
+    scope=$(_artifact_config_value scope "${root}/${nested_config}") || scope=''
+    [[ "$scope" == local ]] || nested_configs+=("$nested_config")
+  done < <({
+    git -C "$root" ls-files -z --cached -- '*/.plans-config'
+    git -C "$root" ls-files -z --others --exclude-standard -- '*/.plans-config'
+  } | sort -zu)
+  if [[ ${#nested_configs[@]} -gt 0 ]]; then
+    printf 'ERROR: Creating a root .plans-config would change plan resolution for nested configs without scope: local:\n' >&2
+    printf '  %s\n' "${nested_configs[@]}" >&2
+    die 3 'Add scope: local to those configs or rerun with --force.'
+  fi
+fi
 # Every refusal runs before any write, for both stores.
 if git -C "$root" check-ignore -q --no-index -- .plans-config; then
   die 4 '.plans-config is ignored; a committed artifact-store pointer cannot be ignored. Remove the ignore rule and retry.'
@@ -103,6 +122,12 @@ ignore=skipped
 # The actual write always uses the canonical helper, including wider repo rules.
 if [[ "$store" == linear ]]; then
   export ARTIFACT_STORE=linear ARTIFACT_ROOT="$root" ARTIFACT_DIR="${root}/.ycc/artifacts"
+  _artifact_require_git_root || die 2 'Cannot ensure repository artifact-cache ignore rule'
+  if [[ -e "${root}/.gitignore" ]]; then
+    [[ -w "${root}/.gitignore" ]] || die 2 '.gitignore is not writable'
+  else
+    [[ -w "$root" ]] || die 2 'Repository root is not writable; cannot create .gitignore'
+  fi
   coverage=0
   _artifact_gitignore_present || coverage=$?
   case "$coverage" in
@@ -114,9 +139,17 @@ fi
 # Pre-existing uncommitted .plans-config edits (unstaged or staged-only) keep
 # the user's commit boundary: the pointer is written but never committed.
 pointer_dirty=0
-if [[ -f "$pointer" ]] && git -C "$root" rev-parse -q --verify HEAD >/dev/null 2>&1; then
-  if ! git -C "$root" diff --quiet HEAD -- .plans-config || ! git -C "$root" diff --cached --quiet -- .plans-config; then
-    pointer_dirty=1
+if [[ -f "$pointer" ]]; then
+  if git -C "$root" rev-parse -q --verify HEAD >/dev/null 2>&1; then
+    if ! git -C "$root" diff --quiet HEAD -- .plans-config || ! git -C "$root" diff --cached --quiet -- .plans-config; then
+      pointer_dirty=1
+    fi
+  fi
+  if [[ "$pointer_dirty" == 0 ]] && ! git --literal-pathspecs -C "$root" ls-files --error-unmatch -- .plans-config >/dev/null 2>&1; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
+      [[ "$line" =~ ^(store|linear_[A-Za-z0-9_]*)[[:space:]]*[:=] ]] || pointer_dirty=1
+    done <"$pointer"
   fi
 fi
 planned=''
@@ -165,13 +198,13 @@ if [[ "$dry_run" == 1 ]]; then
   printf '%s\n' '--- end ---' "Plan: ${change} .plans-config; gitignore=${ignore}; commit only eligible pointer paths."
   commit=skipped
 else
-  if [[ "$change" != unchanged ]]; then printf '%s' "$planned" >"$pointer"; fi
   if [[ "$store" == linear ]]; then
     before_ignore=$(if [[ -f "${root}/.gitignore" ]]; then cat "${root}/.gitignore"; fi; printf '\001')
     ensure_artifact_gitignore || die 2 'Cannot ensure repository artifact-cache ignore rule'
     after_ignore=$(cat "${root}/.gitignore" 2>/dev/null || :; printf '\001')
     if [[ "$before_ignore" != "$after_ignore" ]]; then ignore=added; else ignore=present; fi
   fi
+  if [[ "$change" != unchanged ]]; then printf '%s' "$planned" >"$pointer"; fi
   paths=()
   if ! git -C "$root" ls-files --error-unmatch -- .plans-config >/dev/null 2>&1 || ! git -C "$root" diff --quiet HEAD -- .plans-config; then paths+=(.plans-config); fi
   if [[ "$store" == linear && -f "${root}/.gitignore" ]]; then

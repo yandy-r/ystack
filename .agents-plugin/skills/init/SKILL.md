@@ -14,6 +14,7 @@ allowed-tools:
 - Bash(mkdir:*)
 - Bash(diff:*)
 - Bash(jq:*)
+- Bash(git:*)
 - Bash(${HOME}/.claude/mcp-library/generate-mcp-config.sh:*)
 - Bash(~/.agents/skills/init/scripts/*.sh:*)
 - Bash(~/.agents/ycc-shared/scripts/artifact-store-pointer.sh:*)
@@ -211,7 +212,7 @@ Decide whether to write the committed artifact-store pointer (the root `.plans-c
    ~/.agents/ycc-shared/scripts/artifact-store-pointer.sh --store=linear --linear-workspace=<slug> --linear-team=<KEY> --linear-label=<label> .
    ```
 
-   Use `--linear-project=<id-or-slug>` instead of `--linear-label`, and `--store=local` with no other options for the local case. Under `DRY_RUN=true`, Phase 5 performs read-only Gather and runs the same full command with `--dry-run` added; Phase 5.6 does not run. Read the `pointer_change=`, `gitignore=` and `commit=` lines for Phase 7. Exit `3` means an existing value or label/project mapping conflicts: show the message and ask once whether to rerun with `--force` (headless or no answer: skip and report). All refusal checks precede writes. Pre-existing staged or unstaged pointer changes cause a warning and `commit=skipped`, but the helper still writes the files and exits `0`; report that no commit was made.
+   Use `--linear-project=<id-or-slug>` instead of `--linear-label`, and `--store=local` with no other options for the local case. Under `DRY_RUN=true`, Phase 5 performs read-only Gather and runs the same full command with `--dry-run` added; Phase 5.6 does not run. Read the `pointer_change=`, `gitignore=` and `commit=` lines for Phase 7. Exit `3` for an existing value or label/project mapping conflict means show the message and ask once whether to rerun with `--force` (headless or no answer: skip and report). Exit `3` naming nested configs without `scope: local` means creating the root pointer would change their plans directory: skip setup and report the named paths; do not force this automatically. All refusal checks precede writes. Pre-existing staged or unstaged pointer changes, or an untracked pointer with unrelated keys, cause a warning and `commit=skipped`, but the helper still writes the files and exits `0`; report that no commit was made.
 
 4. **Resolve** every `IF_ARTIFACT_STORE` block rendered in Phase 3: keep it only when the helper exited `0` with the effective choice linear, or the root pointer was already linear and tracked; an explicit local choice drops it. A failed run never keeps the block merely because a linear pointer remains on disk. Under `DRY_RUN=true`, use Phase 5's effective-linear rule. `render-template` does not compute this block: pass `--keep IF_ARTIFACT_STORE` for both `AGENTS.md.tmpl` and `git/gitignore.tmpl` when kept. The generated `AGENTS.md` carries the section; no separate compatibility-shim section is needed.
 5. If the helper or MCP step fails, record the failure for the Phase 7 summary and continue — do not abort init. A failed run leaves the block dropped.
