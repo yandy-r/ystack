@@ -585,11 +585,8 @@ class CodexListedMigrationTransitionTests(unittest.TestCase):
         # cache must still be recognized and retired by migrate.
         pre_fix = self.home.parent / "pre-fix"
         write_tree(pre_fix, False, native_paths=False, expand_home=False)
-        for relative in (".codex-plugin/plugin.json",):
-            source = self.legacy / relative
-            target = pre_fix / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(source.read_bytes())
+        (pre_fix / ".codex-plugin").mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.legacy / ".codex-plugin/plugin.json", pre_fix / ".codex-plugin/plugin.json")
         shutil.copyfile(self.legacy / ".mcp.json", pre_fix / ".mcp.json")
         names = sorted(path.name for path in (pre_fix / "skills").iterdir())
         self.skills.mkdir(parents=True)

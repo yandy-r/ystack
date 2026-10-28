@@ -19,9 +19,10 @@ packages/; node_modules/ is skipped) and fail on:
 - in every ``.sh``/``.bash`` file, a dead fallback ``[[ -f "$VAR" ]] || VAR="X"``
   directly after ``VAR="X"`` (see generate_codex_common.self_fallbacks);
 - in any other generated ``.opencode-plugin/`` file, a ``${HOME}/.config/opencode``
-  path: the generators' quote-aware ``"${HOME}`` rewrite is limited to shell and
-  Markdown (see generate_codex_common.expand_quoted_home) and must never reach
-  JSON, YAML, Python or other non-shell text.
+  path. Only opencode output is checked here; the agents and Codex gates are
+  covered by their generator unit tests. The quote-aware ``"${HOME}`` rewrite is
+  limited to shell and Markdown (see generate_codex_common.expand_quoted_home)
+  and must never reach JSON, YAML, Python or other non-shell text.
 
 Exit 0 when clean, 1 on any finding (findings go to stderr).
 """

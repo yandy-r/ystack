@@ -68,7 +68,7 @@ class NativeResourceTestCase(unittest.TestCase):
                 if rel in verbatim_outputs:
                     self.assertEqual(output, (SRC_SKILLS_DIR / verbatim_outputs[rel]).read_bytes())
                 else:
-                    self.assertNotIn(b"~/.codex/plugins/ycc", output)
+                    self.assertIsNone(re.search(rb"(?:~|\$\{HOME\})/\.codex/plugins/ycc", output))
                     # A scaffold payload intentionally names the future authored skill.
                     logical = b"${CLAUDE_PLUGIN_ROOT}/skills/{{NAME}}/scripts/<name>.sh"
                     self.assertNotIn(b"CLAUDE_PLUGIN_ROOT", output.replace(logical, b""))

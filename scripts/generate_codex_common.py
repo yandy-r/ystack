@@ -226,11 +226,11 @@ def apply_literal_replacements(text: str, replacements: tuple[tuple[str, str], .
 QUOTED_HOME_SUFFIXES = frozenset({".sh", ".bash", ".md"})
 """File types whose quoted ``"~/`` paths are rewritten to ``"${HOME}/``.
 
-Shell code - and fenced shell blocks inside Markdown - never expands a quoted
-``~`` (SC2088), so those paths must use ``${HOME}``. Every other text format
-(Python, JSON, YAML, TOML, ...) can legitimately carry a literal ``"~/...``
-string, e.g. ``os.path.expanduser("~/.claude/x")``, where ``${HOME}`` would be
-wrong.
+Shell code never expands a quoted ``~`` (SC2088), so those paths must use
+``${HOME}``. Markdown is rewritten as a whole file, on the assumption that its
+quoted home paths are shell snippets. Every other text format (Python, JSON,
+YAML, TOML, ...) can legitimately carry a literal ``"~/...`` string, e.g.
+``os.path.expanduser("~/.claude/x")``, where ``${HOME}`` would be wrong.
 """
 
 
@@ -238,8 +238,8 @@ def expand_quoted_home(text: str, root: str, suffix: str) -> str:
     """Rewrite ``"~/<root>`` to ``"${HOME}/<root>`` for shell/Markdown files only.
 
     Bash never expands ``~`` inside double quotes (SC2088), so a quoted home
-    path in ``.sh``/``.bash`` output - or in a fenced shell snippet of a ``.md``
-    document - must use ``${HOME}`` instead. The rewrite applies only when
+    path in ``.sh``/``.bash`` output - and anywhere in a ``.md`` document, whose
+    quoted home paths are shell snippets - must use ``${HOME}`` instead. The rewrite applies only when
     ``suffix`` is in ``QUOTED_HOME_SUFFIXES``: other file types keep their
     literal ``"~/`` text because readers like Python's ``os.path.expanduser``
     expect the tilde there and would not expand ``${HOME}``.

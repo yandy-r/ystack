@@ -535,7 +535,6 @@ class Migration:
             staging = Path(tmp)
             if legacy is None:
                 legacy = legacy_codex_baselines(staging / "legacy")
-            legacy_srcs = tuple(legacy)
             gone: set[str] = set()
             rewrite_sets = codex_rewrite_sets(self.home)
             pattern = namespace_pattern("codex")
@@ -543,7 +542,7 @@ class Migration:
             def candidates(name: str, src: Path) -> tuple[Path, ...]:
                 leaf = "shared" if name == "_shared" else f"skills/{name}"
                 found: list[Path] = []
-                for base in (src, *(base_root / leaf for base_root in legacy_srcs)):
+                for base in (src, *(base_root / leaf for base_root in legacy)):
                     if not base.exists() or any(base == existing for existing in found):
                         continue
                     found.append(base)
