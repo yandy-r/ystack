@@ -579,6 +579,33 @@ class CodexListedMigrationTransitionTests(unittest.TestCase):
         self.assertTrue(trimmed.is_dir())
         self.assertFalse(current.exists())
 
+    def test_pre_fix_legacy_installs_retire_with_current_fixture(self) -> None:
+        # Releases before the SC2088 quoted-home fix installed the expand_home=False
+        # render (quoted "~/.codex/" fallbacks). Those standalone copies and the flat
+        # cache must still be recognized and retired by migrate.
+        pre_fix = self.home.parent / "pre-fix"
+        write_tree(pre_fix, False, native_paths=False, expand_home=False)
+        (pre_fix / ".codex-plugin").mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.legacy / ".codex-plugin/plugin.json", pre_fix / ".codex-plugin/plugin.json")
+        shutil.copyfile(self.legacy / ".mcp.json", pre_fix / ".mcp.json")
+        names = sorted(path.name for path in (pre_fix / "skills").iterdir())
+        self.skills.mkdir(parents=True)
+        # Older installers projected the plugin paths: alternate the current and the
+        # historical rewrite sets, as install_standalone does.
+        rewrite_sets = migrate.codex_rewrite_sets(self.home)
+        pattern = slices.namespace_pattern("codex")
+        for index, name in enumerate(names):
+            slices.stage(name, pre_fix / "skills" / name, self.skills, rewrite_sets[index % 2], pattern)
+        slices.stage("_shared", pre_fix / "shared", self.skills, rewrite_sets[0], pattern)
+        projected = (self.skills / "git-workflow/scripts/create-pr.sh").read_text(encoding="utf-8")
+        self.assertIn('"~/.codex/skills/_shared/scripts/lib/forge.sh"', projected)
+        self.cache.parent.mkdir(parents=True)
+        shutil.copytree(pre_fix, self.cache, symlinks=True)
+        out = self.migrate_codex()
+        self.assertNotIn("kept", out)
+        self.assertEqual(list(self.skills.iterdir()), [])
+        self.assertFalse(self.cache.exists())
+
     def test_edited_and_foreign_standalone_skills_are_kept_with_shared_helpers(self) -> None:
         names = self.install_standalone()
         edited = names[2]

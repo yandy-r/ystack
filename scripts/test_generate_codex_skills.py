@@ -17,6 +17,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import generate_codex_skills as skills  # noqa: E402
+import validate_generated_shell_paths  # noqa: E402
 from generate_codex_common import (  # noqa: E402
     PLUGIN_ROOT,
     SRC_SKILLS_DIR,
@@ -35,8 +36,11 @@ def without_dropped_fallbacks(rel: Path, legacy: str) -> str:
     """
     if rel.suffix not in skills.NATIVE_SHELL_SUFFIXES:
         return legacy
+    # Native rendering saw the quoted "~/" form (expand_quoted_home runs after
+    # rewrite_native_paths); replay that so dead-fallback detection still fires.
+    native_input = legacy.replace('"${HOME}/.codex/', '"~/.codex/')
     with patch.object(skills, "drop_self_fallbacks", lambda text: text):
-        undropped = skills.rewrite_native_paths(legacy, rel)
+        undropped = skills.rewrite_native_paths(native_input, rel)
     dead = {index for index, _ in self_fallbacks(undropped)}
     return "".join(line for index, line in enumerate(legacy.splitlines(keepends=True)) if index not in dead)
 
@@ -64,7 +68,7 @@ class NativeResourceTestCase(unittest.TestCase):
                 if rel in verbatim_outputs:
                     self.assertEqual(output, (SRC_SKILLS_DIR / verbatim_outputs[rel]).read_bytes())
                 else:
-                    self.assertNotIn(b"~/.codex/plugins/ycc", output)
+                    self.assertIsNone(re.search(rb"(?:~|\$\{HOME\})/\.codex/plugins/ycc", output))
                     # A scaffold payload intentionally names the future authored skill.
                     logical = b"${CLAUDE_PLUGIN_ROOT}/skills/{{NAME}}/scripts/<name>.sh"
                     self.assertNotIn(b"CLAUDE_PLUGIN_ROOT", output.replace(logical, b""))
@@ -76,7 +80,7 @@ class NativeResourceTestCase(unittest.TestCase):
                     self.assertIn("project as cwd", instruction)
 
     def assert_resource_paths(self, rel: Path, legacy: str, content: str) -> int:
-        references = re.findall(r"~/\.codex/plugins/ycc/([a-zA-Z0-9_./{},#-]+)", legacy)
+        references = re.findall(r"(?:~|\$\{HOME\})/\.codex/plugins/ycc/([a-zA-Z0-9_./{},#-]+)", legacy)
         references += ["shared/" + tail for tail in re.findall(r"(?:\.\./)+_shared/([a-zA-Z0-9_./{},#-]+)", legacy)]
         references += re.findall(r"(?:\.\./)+(shared/references/[a-zA-Z0-9_./{},#-]+)", legacy)
         counts = Counter(ref.split("#", 1)[0].rstrip(".,") for ref in references if "{{" not in ref)
@@ -330,6 +334,23 @@ class LegacyCompatibilityTestCase(unittest.TestCase):
             for rel in sorted(written):
                 with self.subTest(path=rel):
                     self.assertEqual((default / rel).read_bytes(), (explicit / rel).read_bytes())
+
+    def test_legacy_render_has_no_unexpanded_quoted_home(self) -> None:
+        # YAN-1698: bash never expands a quoted `~`, so the legacy render must use ${HOME}.
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / ".codex-plugin/ycc"
+            skills.write_tree(bundle, False, native_paths=False)
+            self.assertEqual(validate_generated_shell_paths.validate([bundle.parent]), [])
+            script = (bundle / "skills/git-workflow/scripts/create-pr.sh").read_text(encoding="utf-8")
+            self.assertIn('FORGE_LIB="${HOME}/.codex/plugins/ycc/shared/scripts/lib/forge.sh"', script)
+
+    def test_pre_fix_legacy_bytes_stay_reproducible_for_migrate(self) -> None:
+        # install_migrate proves ownership of older installs by byte equality with this render.
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "ycc"
+            skills.write_tree(bundle, False, native_paths=False, expand_home=False)
+            script = (bundle / "skills/git-workflow/scripts/create-pr.sh").read_text(encoding="utf-8")
+            self.assertIn('FORGE_LIB="~/.codex/plugins/ycc/shared/scripts/lib/forge.sh"', script)
 
     def test_repository_tree_matches_its_listing_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -26,6 +26,7 @@ from __future__ import annotations
 import re
 
 from generate_codex_common import (
+    expand_quoted_home,
     model_invocation_disabled,
     protect_marked_verbatim_blocks,
     restore_marked_verbatim_blocks,
@@ -113,11 +114,14 @@ def apply_agents_text_transforms(
     aliases: dict[str, str],
     *,
     rewrite_runtime_aliases: bool = True,
+    output_suffix: str = ".md",
 ) -> str:
     """Apply the agents-target rewrite pass (minimal, tool-neutral subset).
 
     Product names are deliberately left as-is: this bundle is read by many
     tools and renaming "Claude Code" prose to any single tool would be wrong.
+    ``output_suffix`` gates the quoted-home rewrite to shell and Markdown files
+    (see generate_codex_common.expand_quoted_home).
     """
     text, verbatim_blocks = protect_marked_verbatim_blocks(text)
     output = fix_mcp_malformed_tokens(text)
@@ -139,8 +143,9 @@ def apply_agents_text_transforms(
 
     # Plugin-root variable -> absolute install paths.
     output = rewrite_agents_plugin_paths(output)
-    # Tilde does not expand inside double quotes (SC2088); use ${HOME} there.
-    output = output.replace('"~/.agents/', '"${HOME}/.agents/')
+    # Tilde does not expand inside double quotes (SC2088); use ${HOME} there —
+    # shell and Markdown output only, never Python/JSON/YAML/... text.
+    output = expand_quoted_home(output, ".agents/", output_suffix)
 
     # Slash-command and agent namespace references (/ycc:foo -> /foo).
     if rewrite_runtime_aliases:

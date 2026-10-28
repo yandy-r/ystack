@@ -27,6 +27,7 @@ from typing import Any
 from generate_codex_common import (
     compress_skill_description,
     dump_frontmatter,
+    expand_quoted_home,
     fix_mcp_malformed_tokens,
     parse_frontmatter,
     protect_marked_verbatim_blocks,
@@ -305,12 +306,15 @@ def apply_opencode_text_transforms(
     *,
     rewrite_source_paths: bool = True,
     rewrite_runtime_aliases: bool = True,
+    output_suffix: str = ".md",
 ) -> str:
     """Apply the opencode-native rewrite pass.
 
     Targets: product names, config paths, plugin-root variable, slash-command
     namespace, Task-tool orchestration phrasing, and Claude-only tool names.
     The order mirrors the Codex transform so tests can compare outputs.
+    ``output_suffix`` gates the quoted-home rewrite to shell and Markdown files
+    (see generate_codex_common.expand_quoted_home).
     """
     text, verbatim_blocks = protect_marked_verbatim_blocks(text)
     output = fix_mcp_malformed_tokens(text)
@@ -334,8 +338,9 @@ def apply_opencode_text_transforms(
     output = output.replace("/.claude/", "/.config/opencode/")
     output = output.replace("../../_shared/scripts", "../../../shared/scripts")
     output = rewrite_plugin_paths(output)
-    # Tilde does not expand inside double quotes (SC2088); use ${HOME} there.
-    output = output.replace('"~/.config/opencode/', '"${HOME}/.config/opencode/')
+    # Tilde does not expand inside double quotes (SC2088); use ${HOME} there —
+    # shell and Markdown output only, never Python/JSON/YAML/... text.
+    output = expand_quoted_home(output, ".config/opencode/", output_suffix)
 
     # Product wording (opencode is the product's own lowercase branding).
     #

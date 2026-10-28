@@ -101,25 +101,35 @@ def owned_link(path: Path, source: Path) -> bool:
     return path.is_symlink() and path.resolve() == source.resolve()
 
 
-def legacy_codex_baseline(root: Path) -> Path:
-    """Return the pre-listing combined Codex bundle for ownership comparison.
-
-    Before listing the checkout already holds it. Once a listed row flips the
-    checkout to skills-only native, render the combined form (legacy-path
-    skills, combined manifest, original .mcp.json) into `root`; the checkout
-    itself is never modified.
-    """
-    live = ROOT / ".codex-plugin/ycc"
-    if (live / ".mcp.json").is_file():
-        return live
+def _render_combined_codex_bundle(root: Path, *, expand_home: bool) -> Path:
+    """Render the pre-listing combined bundle into ``root`` (legacy-path skills)."""
     from generate_codex_common import SOURCE_MCP_PATH
     from generate_codex_plugin import build_plugin_manifest, write_json
     from generate_codex_skills import write_tree
 
-    write_tree(root, dry_run=False, native_paths=False)
+    write_tree(root, dry_run=False, native_paths=False, expand_home=expand_home)
     write_json(root / ".codex-plugin/plugin.json", build_plugin_manifest())
     shutil.copyfile(SOURCE_MCP_PATH, root / ".mcp.json")
     return root
+
+
+def legacy_codex_baselines(root: Path) -> tuple[Path, ...]:
+    """Return combined Codex bundles (current and pre-fix) for ownership comparison.
+
+    Before listing the checkout already holds the current combined form.
+    Once a listed row flips the checkout to skills-only native, render it
+    (legacy-path skills, combined manifest, original .mcp.json) into
+    ``root / "current"``; the checkout itself is never modified. The second
+    entry is the pre-home-expansion render (quoted ``"~/.codex/`` fallbacks)
+    under ``root / "pre-home"``, matching what releases installed before the
+    SC2088 fix shipped.
+    """
+    live = ROOT / ".codex-plugin/ycc"
+    if (live / ".mcp.json").is_file():
+        current = live
+    else:
+        current = _render_combined_codex_bundle(root / "current", expand_home=True)
+    return (current, _render_combined_codex_bundle(root / "pre-home", expand_home=False))
 
 
 def git_tree_id(path: Path, algorithm: str) -> str | None:
@@ -501,12 +511,12 @@ class Migration:
 
         omp_install.apply_migrate(self.omp_plan, self.apply)
 
-    def codex_skills(self, legacy: Path | None = None) -> None:
+    def codex_skills(self, legacy: tuple[Path, ...] | None = None) -> None:
         """Retire exact standalone ~/.codex/skills copies; never ~/.codex/agents.
 
-        An entry is ours when it equals the canonical source or the rendered
-        pre-listing combined baseline (`legacy`), raw or projected with either
-        the current or the historical rewrite set.
+        An entry is ours when it equals the canonical source or any rendered
+        pre-listing combined baseline in `legacy` (current and pre-fix forms),
+        raw or projected with either the current or the historical rewrite set.
         """
         unit = SPECS[("codex", "skills")][0]
         dest = self.home / unit.dest
@@ -524,15 +534,15 @@ class Migration:
         with tempfile.TemporaryDirectory(prefix="ycc-migrate-") as tmp:
             staging = Path(tmp)
             if legacy is None:
-                legacy = legacy_codex_baseline(staging / "legacy")
+                legacy = legacy_codex_baselines(staging / "legacy")
             gone: set[str] = set()
             rewrite_sets = codex_rewrite_sets(self.home)
             pattern = namespace_pattern("codex")
 
             def candidates(name: str, src: Path) -> tuple[Path, ...]:
-                legacy_src = legacy / ("shared" if name == "_shared" else f"skills/{name}")
+                leaf = "shared" if name == "_shared" else f"skills/{name}"
                 found: list[Path] = []
-                for base in (src, legacy_src):
+                for base in (src, *(base_root / leaf for base_root in legacy)):
                     if not base.exists() or any(base == existing for existing in found):
                         continue
                     found.append(base)
@@ -609,9 +619,9 @@ class Migration:
         # they may reference.
         catalog_path, catalog, kept, retained = self.plan_codex_catalog()
         with tempfile.TemporaryDirectory(prefix="ycc-migrate-") as tmp:
-            legacy = legacy_codex_baseline(Path(tmp) / "legacy")
-            sources = (canonical, legacy)
-            self.codex_skills(legacy)
+            legacies = legacy_codex_baselines(Path(tmp) / "legacy")
+            sources = (canonical, *legacies)
+            self.codex_skills(legacies)
             for relative in (".codex/plugins/ycc", ".agents/plugins/ycc"):
                 link = self.home / relative
                 if link in retained:

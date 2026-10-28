@@ -102,6 +102,10 @@ def rewrites_for(target: str, home: Path) -> list[tuple[str, str]]:
         return [
             ("~/.codex/plugins/ycc/skills/", "~/.codex/skills/"),
             ("~/.codex/plugins/ycc/shared/", "~/.codex/skills/_shared/"),
+            # A restored legacy tree expands quoted fallbacks (SC2088), so its
+            # standalone projection needs the ${HOME} counterparts too.
+            ("${HOME}/.codex/plugins/ycc/skills/", "${HOME}/.codex/skills/"),
+            ("${HOME}/.codex/plugins/ycc/shared/", "${HOME}/.codex/skills/_shared/"),
             ("../../../shared/", "../../_shared/"),
             ("../../shared/", "../_shared/"),
             # Native prompt templates: expand the placeholder to the installed standalone location.

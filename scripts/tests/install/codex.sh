@@ -191,6 +191,10 @@ with tempfile.TemporaryDirectory() as tmp:
         assert "shared/references/" not in text.replace("_shared/references/", ""), rel
         prefix = "../_shared/references/" if rel.endswith("SKILL.md") else "../../_shared/references/"
         assert prefix in text and (doc.parent / prefix / "worktree-strategy.md").resolve().is_file(), rel
+    # A legacy render's quoted fallbacks use ${HOME} (SC2088) and must be re-pointed too.
+    create_pr = (skills / "git-workflow/scripts/create-pr.sh").read_text()
+    assert '"${HOME}/.codex/skills/_shared/scripts/lib/forge.sh"' in create_pr, create_pr
+    assert "${HOME}/.codex/plugins/ycc/" not in create_pr, create_pr
 PY
 then ok "codex slice resolves top-level, nested, and prompt-template shared references"; else ko "codex slice resolves top-level, nested, and prompt-template shared references"; fi
 
