@@ -311,7 +311,7 @@ if [[ -f "${home}/.codex/agents/${codex_first_agent}" && -L "${home}/.codex/AGEN
 # github/cloudflare enablement as managed; the later legacy-CLI package install
 # must add ycc without retiring those earlier managed entries.
 home="$(new_home)"
-install_must_succeed "${home}" install --target codex --only settings
+install_must_succeed "${home}" install --target codex --only settings --global
 out="$(cd "${home}/project" && HOME="${home}" PATH="${legacy_bin}:${STUB_BIN}:${PATH}" CLAUDE_STUB_LOG="${home}/claude-calls.log" \
     YCC_MANAGED_CONFIG_STATE="${home}/.config/ycc/managed-config-state.json" YCC_INSTALL_SKIP_BUILD=1 \
     bash "${INSTALL}" install --target codex --package ycc --mode local --skills-home native 2>&1)" && rc=0 || rc=$?
@@ -427,7 +427,7 @@ if [[ ${rc} -ne 0 ]]; then ok "--package with only unsupported targets fails"; e
 home="$(new_home)"
 install_must_succeed "${home}" sync --target claude --intent settings
 out="${INSTALL_OUT}"
-assert_contains "$(cat "${home}/.claude/settings.json" 2>/dev/null)" '"claude-fable-5-1"' "--intent path unchanged by --package support"
+assert_contains "$(cat "${home}/project/.claude/settings.json" 2>/dev/null)" '"claude-fable-5-1"' "--intent settings defaults to the project after --package support"
 assert_not_contains "${out}" "--package" "--intent sync prints no --package diagnostics"
 assert_not_contains "${out}" "package components" "--intent sync reports no package component skips"
 
@@ -481,9 +481,29 @@ assert_package_rejected "cli --package" "--package is only supported by the 'ins
 assert_package_rejected "completion --package" "--package is only supported by the 'install' subcommand" completion --shell bash --package ycc
 assert_package_rejected "list-mcps --package" "--package is only supported by the 'install' subcommand" list-mcps --package ycc
 
+# Package runs keep settings global even though unscoped settings default to the project.
+for target in claude codex cursor; do
+    home="$(new_home)"
+    install_must_succeed "${home}" install --target "${target}" --package ycc,ycc-mcp --skills-home native
+    case "${target}" in
+        claude) global_dest="${home}/.claude/settings.json"; project_dest="${home}/project/.claude/settings.json" ;;
+        codex) global_dest="${home}/.codex/config.toml"; project_dest="${home}/project/.codex/config.toml" ;;
+        # ycc-mcp still writes project MCP config; only the settings destination stays global.
+        cursor) global_dest="${home}/.cursor/cli-config.json"; project_dest="${home}/project/.cursor/cli-config.json" ;;
+    esac
+    if [[ -f "${global_dest}" ]]; then ok "${target} package run keeps settings global"; else ko "${target} package run keeps settings global" "${INSTALL_OUT}"; fi
+    if [[ "${target}" == codex ]]; then
+        assert_not_contains "$(cat "${project_dest}" 2>/dev/null)" 'model = "gpt-6-astra"' "codex package project MCP file carries no settings"
+    elif [[ ! -e "${project_dest}" ]]; then
+        ok "${target} package run writes no project settings"
+    else
+        ko "${target} package run writes no project settings"
+    fi
+done
+
 # Explicit failures leave a pre-existing environment untouched too (not only empty HOMEs).
 home="$(new_home)"
-install_must_succeed "${home}" sync --target claude --intent settings
+install_must_succeed "${home}" sync --target claude --intent settings --global
 before="$(tree_snapshot "${home}")"
 out="$(run_install "${home}" install --target claude,opencode --package ycc)" && rc=0 || rc=$?
 after="$(tree_snapshot "${home}")"

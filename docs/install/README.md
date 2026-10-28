@@ -50,13 +50,14 @@ actually supports, and reports (rather than silently substitutes) anything it
 cannot do.
 
 ```bash
-./install.sh sync --target claude --intent hooks,settings,mcp,plugins
-./install.sh sync --target all --intent settings,rules
+./install.sh sync --target claude --intent hooks,settings,mcp
+./install.sh sync --target all --intent settings,rules --global
 ./install.sh sync --target codex --intent settings,mcp --global
 ./install.sh remove --target all --only mcp --global
 ```
 
-`mcp` and Claude `hooks` default to project scope; see
+`mcp`, Claude `hooks`, and `settings` on Claude, Codex, and opencode default to
+project scope; Cursor and OMP settings run only with `--global`. See
 [Project Vs Global Scope](#project-vs-global-scope). To undo any of it, see
 [Removing Installed Config](#removing-installed-config).
 
@@ -168,11 +169,11 @@ or `source <(ycc completion --shell zsh)`.
 | `skills`   | Standalone skills, one entry each, in the tool's own skills dir (no plugin).                                                                                                                                     |
 | `agents`   | Standalone agents, one entry each, in the tool's own agents dir (no plugin).                                                                                                                                     |
 | `commands` | Slash commands. Claude aliases this to standalone skills. Cursor installs wrappers in `~/.cursor/commands/`. opencode installs generated commands.                                                               |
-| `settings` | Merge repo-managed config keys (models, effort levels, statusline, ...).                                                                                                                                         |
+| `settings` | Merge repo-managed config keys (models, effort levels, statusline, ...). Project scope by default on Claude, Codex, and opencode; `--global` for user config.                                                    |
 | `rules`    | Symlink the global rules file each runtime reads (Cursor: manual, see its page).                                                                                                                                 |
 | `mcp`      | Merge MCP server definitions into the target's MCP surface.                                                                                                                                                      |
 | `hooks`    | Install hook support. Claude defaults to the native `ycc-hooks` plugin at project scope; `--global` merges hook configuration and links the scripts directory. Cursor installs the optional `sessionStart` hook. |
-| `plugins`  | Merge plugin enablement and marketplace entries. Add `base` for CLI-side registration too.                                                                                                                       |
+| `plugins`  | Merge plugin enablement and marketplace entries. Global-only (pass `--global`), except opencode catalog plugins. Add `base` for CLI-side registration too.                                                       |
 | `mods`     | Install the Claude Code mods under `ycc/mods` (claude only for now).                                                                                                                                             |
 
 Per-target mapping (intents a target cannot execute are skipped with a notice):
@@ -344,7 +345,8 @@ ycc sync --target cursor --intent skills,commands --skills clean,plan --commands
 
 Structured config files (`~/.claude/settings.json`, `~/.claude.json`,
 `~/.codex/config.toml`, `~/.config/opencode/opencode.json`,
-`~/.cursor/cli-config.json`) are **merged**, not copied:
+`~/.cursor/cli-config.json`, and their project counterparts) are **merged**,
+not copied:
 
 - Only keys this repository declares as managed are written; every other key
   in your file is preserved.
@@ -353,27 +355,29 @@ Structured config files (`~/.claude/settings.json`, `~/.claude.json`,
 - A managed value **you** changed is preserved with a warning; `--force` takes
   the repo value instead.
 - Ownership is tracked by hash in `~/.config/ycc/managed-config-state.json`
-  (hashes only, never values, so tokens never leak into state).
+  (hashes only, never values, so tokens never leak into state), separately per
+  destination file, so a project file and the global file never share state.
 - Plugin list items (opencode `plugins`, claude `pluginMarketplaces`) are
   keyed by package name (version stripped) or `name`. When the repo bumps a
   version (`pkg@1.0.0` → `pkg@1.1.0`), the item the installer added is
   replaced in place, never duplicated. A same-name item you wrote yourself is
   kept with a warning; `--force` replaces it.
 
-This is what makes new-machine setup reliable: run the same `sync` command on
-any machine and repo-managed settings land without clobbering machine-local
-trusted projects, provider credentials, or CLI-written marketplace entries.
+This is what makes new-machine setup reliable: run the same
+`sync --global` command on any machine and repo-managed settings land without
+clobbering machine-local trusted projects, provider credentials, or CLI-written
+marketplace entries.
 
 ### Project Vs Global Scope
 
 `--project` and `--global` (mutually exclusive) work with `install`, `sync`,
 and `remove`. Without either flag, steps that support project scope use it and
 every other step stays global. The project is the git root of the current
-directory, else the current directory. Today the `mcp` step and Claude `hooks`
-are project-capable by default, the omp `base` step accepts an explicit
-`--project` (omp's own default stays user scope), and so does the opencode
-`settings` step for [third-party catalog plugins](opencode.md#third-party-plugins)
-only:
+directory, else the current directory. Today the `mcp` step, Claude `hooks`,
+and the `settings` step on Claude, Codex, and opencode are project-capable by
+default; the omp `base` step accepts an explicit `--project` (omp's own default
+stays user scope). `install --package` keeps Claude hooks and every target's
+settings global.
 
 | Target   | Step    | `--project`                                                                                                                                                                                                             | `--global`                              |
 | -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
@@ -381,8 +385,56 @@ only:
 | claude   | `hooks` | `claude plugin install ycc-hooks@ycc --scope project` (default; needs Claude Code >= 2.1.300). Marketplace declaration, when needed: `.claude/settings.local.json` (local mode) or `.claude/settings.json` (repo mode). | settings merge + `~/.claude/hooks` link |
 | cursor   | `mcp`   | `<project>/.cursor/mcp.json` (default)                                                                                                                                                                                  | `~/.cursor/mcp.json`                    |
 | codex    | `mcp`   | `<project>/.codex/config.toml` (default)                                                                                                                                                                                | `~/.codex/config.toml`                  |
-| opencode | `mcp`   | `<project>/opencode.json` (default); catalog plugins (`--intent plugins --plugins <catalog names> --project`): companions in `<project>/.opencode/`                                                                     | `~/.config/opencode/opencode.json`      |
+| opencode | `mcp`   | `<project>/opencode.json` (default)                                                                                                                                                                                     | `~/.config/opencode/opencode.json`      |
 | omp      | `base`  | `omp plugin install --scope project <package>@ycc` (`ycc`, `ycc-mcp`)                                                                                                                                                   | `--scope user` (default)                |
+
+The `settings` step writes a project file with preference keys only:
+
+| Target   | `settings --project` (default)                                                                                                        | `settings --global`                                                  | Project keys                                                                                                                                                                       |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| claude   | `<project>/.claude/settings.json`                                                                                                     | `~/.claude/settings.json` + copied `~/.claude/statusline-command.sh` | `env`, `attribution`, `model`, `modelSettings`, `alwaysThinkingEnabled`, `effortLevel`                                                                                             |
+| codex    | `<project>/.codex/config.toml` (loaded only for trusted projects)                                                                     | `~/.codex/config.toml`                                               | `personality`, `model`, `model_reasoning_effort`, `model_context_window`, `model_auto_compact_token_limit`, `plan_mode_reasoning_effort`, `service_tier`, `[agents]`, `[features]` |
+| opencode | `<project>/opencode.json`; [catalog plugins](opencode.md#third-party-plugins) also ship companions in `<project>/.opencode/`          | `~/.config/opencode/opencode.json`                                   | `$schema`, `model`, `agents`, `providers`, `experimental.subagent_depth`; catalog plugins                                                                                          |
+| cursor   | none: skipped with a notice unless `--global`; `--project` is rejected (Cursor's project `.cursor/cli.json` carries permissions only) | `~/.cursor/cli-config.json`                                          | —                                                                                                                                                                                  |
+| omp      | none: skipped with a notice unless `--global`; `--project` is rejected (ycc never writes `.omp/config.yml`)                           | `<agentDir>/config.yml`                                              | —                                                                                                                                                                                  |
+
+- **Global-only keys.** Claude `statusLine` (and the statusline script),
+  `permissions`, `skipAutoPermissionPrompt` and
+  `skipDangerousModePermissionPrompt`; Codex `approval_policy`,
+  `approvals_reviewer`, `sandbox_mode` and `[sandbox_workspace_write]`, so a
+  project file never widens the approval or sandbox posture. Codex provider,
+  auth, profile, `notify` and `otel` keys are ignored by Codex at project
+  level and never written there.
+- **Global-only groups.** The `plugins` and `hooks` config groups (Claude,
+  Codex, and opencode bundle plugins with `./ycc-sensitive-guard`). At default
+  scope a requested group is skipped with
+  `<target>: the <group> group is global-only — skipped at project scope. Pass --global to merge it.`;
+  an explicit `--project` with `--intent plugins` or `--plugins` is rejected
+  before anything runs (`--intent hooks` is the Claude native project path).
+  opencode catalog plugins are the exception and install per project. Claude
+  project hooks stay the native `ycc-hooks` plugin, and `--hooks <events>`
+  needs `--global`.
+- **Committed files.** `<project>/.claude/settings.json`,
+  `<project>/.codex/config.toml` and `<project>/opencode.json` are usually
+  committed and shared with everyone who works in the repository. Project
+  values also outrank each user's global ones there. Review the diff before
+  committing, or keep these preferences global with `--global`.
+- **Codex trust.** Codex loads `<project>/.codex/config.toml` only when the
+  project is trusted in `~/.codex/config.toml`; the installer warns when it
+  writes the file and never writes `[projects]` trust entries itself.
+- **`$HOME`.** Project settings need a project directory. From `$HOME`, a
+  default run skips the step with a notice, and an explicit `--project` is
+  rejected.
+- **Removal.** `remove --intent settings` takes managed keys back from the
+  project file, and only keys ycc recorded writing: a key you added yourself
+  stays even when its value matches the repo exactly. A file left empty is
+  deleted. Add `--global` to clean the user files.
+
+> **Behavior change:** the `settings` step used to write only user-global
+> files. Pass `--global` to keep that, on `install`, `sync`, and `remove`
+> alike. Cursor and OMP settings now run only with `--global`. A defaulted run
+> warns while the global file still holds ycc-managed keys:
+> `<target>: settings now default to project scope; <global dest> still holds ycc-managed keys from earlier syncs — pass --global to update or remove them.`
 
 Claude project hooks reuse a `ycc` marketplace this project already declares —
 in `<project>/.claude/settings.json` or `<project>/.claude/settings.local.json`
@@ -443,11 +495,12 @@ Codex loads a project `.codex/config.toml` only for trusted projects; the
 installer warns when it writes one. An OMP project install shadows the user
 install inside that project, and `--project` at `$HOME` is refused (see
 [`omp.md`](omp.md#project-scope)). An explicit `--project` combined with a step
-that has no project scope (for example `--only settings,mcp --project`) is
-rejected before anything runs: the error is about `settings`, not `mcp`. Drop
-`--project` to get project MCP plus global settings in one run. opencode
-project settings likewise reject bundle plugins, the `settings` group and a run
-without catalog `--plugins` (the bundle settings and the guard are global-only).
+that has no project scope (for example
+`./install.sh install --target claude --only rules,mcp --project`) is rejected
+before anything runs: the error is about `rules`, not `mcp`. Drop `--project`
+to get project MCP plus global rules in one run. The same applies to Cursor
+and OMP `settings`, and to an explicitly requested global-only group (opencode
+project plugins accept catalog `--plugins` names only).
 
 ### Selecting MCP Servers
 
@@ -517,13 +570,15 @@ ycc remove --target cursor --intent mcp --mcps stripe
 
 By default the `plugins` intent merges every plugin entry the repo manages for
 a target. `--plugins <names>` (comma-separated) narrows `install`, `sync`, and
-`remove` to just those entries:
+`remove` to just those entries. The `plugins` config group is global-only, so
+pass `--global`; only opencode catalog plugins also install per project:
 
 ```bash
-ycc sync   --target claude   --intent plugins --plugins superpowers@claude-plugins-official,context7@claude-plugins-official
-ycc remove --target codex    --intent plugins --plugins cloudflare@openai-curated
-ycc sync   --target opencode --intent plugins --plugins @prevalentware/opencode-goal-plugin
-ycc sync   --target opencode --intent plugins --plugins oh-my-opencode-slim
+ycc sync   --target claude   --intent plugins --plugins superpowers@claude-plugins-official,context7@claude-plugins-official --global
+ycc remove --target codex    --intent plugins --plugins cloudflare@openai-curated --global
+ycc sync   --target opencode --intent plugins --plugins @prevalentware/opencode-goal-plugin --global
+ycc sync   --target opencode --intent plugins --plugins oh-my-opencode-slim            # current project
+ycc sync   --target opencode --intent plugins --plugins oh-my-opencode-slim --global   # user config
 ycc list plugins --target claude
 ```
 
@@ -542,9 +597,13 @@ ycc list plugins --target claude
   (selective or full) keeps a marketplace while an enabled plugin in your
   `settings.json` still uses it, and says so.
 - `--plugins` requires the `plugins` config group: `--intent plugins` on
-  `sync`/`remove`, or `install --only settings`.
+  `sync`/`remove`, or `install --only settings --global`.
   `--intent settings --plugins x` and `install --package … --plugins x` are
   rejected before anything is written.
+- Without `--global`, the group is skipped with
+  `<target>: the plugins group is global-only — skipped at project scope. Pass --global to merge it.`,
+  and an explicit `--project` rejects it. opencode catalog names are the
+  exception: they install into the project at default scope or `--project`.
 - Each name must be managed for a selected target, else the run stops before
   writing anything. A target that manages none of the named entries skips its
   plugins group with a warning; cursor, agents and omp have no plugins group.
@@ -603,15 +662,19 @@ ycc remove  --target claude --intent hooks --hooks WorktreeCreate --global
 ```bash
 ./install.sh remove --target claude --only mcp                  # project scope
 ./install.sh remove --target all --intent mcp --global          # user-global
-./install.sh remove --target codex --intent settings,plugins,rules
+./install.sh remove --target codex --intent settings,rules      # project settings + global rules
+./install.sh remove --target codex --intent settings,plugins,rules --global
 ./install.sh remove --target all --intent base,settings,rules,hooks,plugins,mods
 ./install.sh remove --target opencode --intent agents,commands
-./install.sh remove --target opencode --intent plugins --plugins oh-my-opencode-slim --purge-cache
+./install.sh remove --target opencode --intent plugins --plugins oh-my-opencode-slim --purge-cache --global
 ```
 
 The example removing every intent above still uses project scope for Claude
-hooks. Global installer-managed hooks need a separate
-`./install.sh remove --target claude --intent hooks --global`.
+hooks and for Claude, Codex, and opencode settings; it skips the global-only
+`plugins` group and Cursor and OMP settings with a notice. Global settings,
+plugins, and installer-managed hooks need a separate `--global` run, for
+example `./install.sh remove --target claude,codex,opencode --intent settings,plugins,hooks --global`
+(add `./install.sh remove --target cursor,omp --intent settings --global` for those two).
 
 `remove` undoes any intent on any target, using the same intent → step mapping
 as `sync` (an intent a target does not support is reported and skipped). It
@@ -626,7 +689,7 @@ taken back:
 | `mcp`                              | Strips managed MCP servers, including ones the repo has since dropped. Servers you added are never touched.                                                                                                                                                                                                                                                                                                                                                                   |
 | `rules`, claude global `hooks` dir | Removes the symlinks, only while they still point at this checkout. A real file you put there is never deleted.                                                                                                                                                                                                                                                                                                                                                               |
 | claude project `hooks`             | Uninstalls `ycc-hooks@ycc` at project scope; removes only a local marketplace declaration matching this checkout or a project declaration matching `yandy-r/ystack`, when no other `@ycc` plugin is enabled in either project settings file and no other project or user scope has a `@ycc` install.                                                                                                                                                                          |
-| claude statusline script           | Removed while identical to the repo copy; an edited copy needs `--force`.                                                                                                                                                                                                                                                                                                                                                                                                     |
+| claude statusline script           | Removed (with `--global` only) while identical to the repo copy; an edited copy needs `--force`.                                                                                                                                                                                                                                                                                                                                                                              |
 | `base`                             | claude: `claude plugin uninstall ycc@ycc` + marketplace remove. cursor / opencode: the bundle's entries in the synced dirs (your own skills stay). codex: plugin links, plugin cache, custom agents, marketplace entry. omp: the recorded `ycc@ycc` and `ycc-mcp@ycc` installs for the scope, then the `ycc` marketplace and export once unused.                                                                                                                              |
 | `skills`, `agents`, `commands`     | Removes the standalone entries ycc recorded (or that are still identical to the bundle). Never the plugin, never your own entries without `--force`. On claude, `commands` retires only the recorded legacy `~/.claude/commands/` wrappers.                                                                                                                                                                                                                                   |
 | `mods` (claude)                    | Uninstalls each mod and the `ycc-mods` marketplace. With `--mods`, only the named mods; the marketplace stays while another ycc mod is still listed in `enabledPlugins`.                                                                                                                                                                                                                                                                                                      |
@@ -657,6 +720,9 @@ targets; installing `base` still skips because building or registering plugins
 cannot be safely previewed. On omp every step previews itself (see the
 [OMP guide](omp.md)). Any step without a preview prints
 `dry-run: <target> <step> step has no preview — skipped` and does not run.
+Scope applies as usual: a default settings preview targets the project file
+and creates no directories, and Cursor and OMP settings print the
+`settings have no project scope` notice instead of a preview.
 
 ### Legacy Flag Form
 
@@ -667,7 +733,8 @@ The original flag CLI keeps working unchanged:
 ```
 
 Without `--only`, the target's `base` step runs by default, and additive flags
-run additional steps.
+run additional steps. `--settings` follows the same scope rules as the
+`settings` intent: project files by default, user files with `--global`.
 
 Common flags:
 
@@ -677,6 +744,7 @@ Common flags:
 ./install.sh install --target codex --settings --rules
 ./install.sh install --target opencode --settings --rules
 ./install.sh install --target all --settings --rules --mcp
+./install.sh install --target all --settings --rules --global   # new machine: user-global settings
 ```
 
 Use `--only <steps>` to run exactly the listed steps and skip the default `base`

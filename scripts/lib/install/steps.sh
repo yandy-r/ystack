@@ -228,6 +228,7 @@ run_target() {
     local -a only_saved=(${ONLY_STEPS[@]+"${ONLY_STEPS[@]}"})
     local exclusive_saved="${EXCLUSIVE_STEPS:-0}"
     skip_unselectable_steps "${target}"
+    skip_unscoped_settings "${target}"
     skip_dry_run_steps "${target}"
     # --with-deps extends the selection for this target only (select.sh).
     local skills_saved="${SELECTION[skills]:-}" agents_saved="${SELECTION[agents]:-}" commands_saved="${SELECTION[commands]:-}"
@@ -238,6 +239,51 @@ run_target() {
     SELECTION[commands]="${commands_saved}"
     ONLY_STEPS=(${only_saved[@]+"${only_saved[@]}"})
     EXCLUSIVE_STEPS="${exclusive_saved}"
+}
+# skip_unscoped_settings <target> — no-op unless the settings step would run
+# at the default scope (no --project/--global, no --package). Targets without
+# <t>_project_groups (cursor, omp) then have no project settings file to
+# write, so the step is dropped with a notice naming the --global command
+# that restores the old behavior; the same skip applies when the project
+# root is $HOME. Rewrites ONLY_STEPS (exclusive mode), like
+# skip_unselectable_steps.
+skip_unscoped_settings() {
+    local target="$1" step
+    [[ -z "${SCOPE}" && -z "${PACKAGE:-}" ]] || return 0
+    # Only a target with a settings step can skip it: with the flag form
+    # (or --only settings) step_enabled is true for targets like agents that
+    # have no settings step at all.
+    [[ ",$(valid_steps_for_target "${target}")," == *",settings,"* ]] || return 0
+    step_enabled settings || return 0
+    local reason="" note="" dest=""
+    if declare -F "${target}_settings_scope_note" >/dev/null; then
+        note="$("${target}_settings_scope_note")"
+    fi
+    if declare -F "${target}_settings_global_dest" >/dev/null; then
+        dest="$("${target}_settings_global_dest")"
+    fi
+    local verb="write"
+    [[ "${COMMAND}" == "remove" ]] && verb="remove from"
+    if [[ -z "$(target_project_groups "${target}")" ]]; then
+        reason="${target}: settings have no project scope — skipped (nothing written)."
+        [[ -n "${note}" ]] && reason+=" ${note}"
+        [[ -n "${dest}" ]] && reason+=" Pass --global to ${verb} ${dest}."
+    else
+        reason="$(project_home_conflict "settings project scope")"
+        if [[ -n "${reason}" ]]; then
+            reason="${target}: settings default to project scope, but the project root is \$HOME — skipped. cd into a project, or pass --global."
+        fi
+    fi
+    [[ -n "${reason}" ]] || return 0
+    warn "${reason}"
+    local -a kept=()
+    for step in $(valid_steps_for_target "${target}" | tr ',' ' '); do
+        step_enabled "${step}" || continue
+        [[ "${step}" == "settings" ]] || kept+=("${step}")
+    done
+    ONLY_STEPS=(${kept[@]+"${kept[@]}"})
+    # shellcheck disable=SC2034  # EXCLUSIVE_STEPS is read by step_enabled.
+    EXCLUSIVE_STEPS=1
 }
 
 # skip_dry_run_steps <target> — with --dry-run, keep only the steps <target>
@@ -543,7 +589,8 @@ preflight_targets() {
 
 # preflight_step_support <target>
 # Every step selected for <target> must support project scope (explicit
-# --project).
+# --project), a project-capable settings step never runs from $HOME, and an
+# explicitly requested global-only config group cannot ride --project.
 preflight_step_support() {
     local target="$1"
     local step valid_csv
@@ -551,8 +598,52 @@ preflight_step_support() {
     for step in ${valid_csv//,/ }; do
         step_enabled "${step}" || continue
         if [[ "${SCOPE}" == "project" ]] && ! step_allows_project "${target}" "${step}"; then
-            err "--project is not supported by step '${step}' for target '${target}' (project scope currently supports: mcp; claude: hooks; omp: base, dedupe; opencode: settings for catalog plugins)"
+            err "--project is not supported by step '${step}' for target '${target}' (project scope currently supports: mcp; settings (claude, codex, opencode); claude: hooks; omp: base, dedupe)"
             err "  use --global, or select only project-capable steps with --only / --intent."
+            if [[ "${step}" == "settings" ]] && declare -F "${target}_settings_scope_note" >/dev/null; then
+                err "  $("${target}_settings_scope_note")"
+            fi
+            exit 1
+        fi
+    done
+    [[ "${SCOPE}" == "project" ]] || return 0
+    step_enabled settings || return 0
+    step_allows_project "${target}" settings || return 0
+    local home_conflict
+    home_conflict="$(project_home_conflict "settings project scope")"
+    if [[ -n "${home_conflict}" ]]; then
+        err "${home_conflict}"
+        exit 1
+    fi
+    # An explicitly requested global-only group (--intent plugins/hooks,
+    # --plugins/--hooks) cannot ride --project; the default (implicit) groups
+    # are dropped with a notice by config_group_selection instead.
+    local allowed group
+    allowed="$(target_project_groups "${target}")"
+    for group in $(config_groups_for_target "${target}" | tr ',' ' '); do
+        [[ -n "${group}" ]] || continue
+        [[ ",${allowed}," == *",${group},"* ]] && continue
+        local group_asked=0
+        intent_requested "${group}" && group_asked=1
+        if [[ "${group}" == plugins ]] && has_selection plugins; then
+            group_asked=1
+            # A catalog-only selection (opencode's opt-in catalog) is
+            # project-capable; bundle names are rejected by <t>_preflight.
+            if declare -F "${target}_catalog_names" >/dev/null; then
+                local -a catalog=()
+                local name only_catalog=1
+                mapfile -t catalog < <("${target}_catalog_names")
+                for name in $(selection_for_target plugins "${target}" | tr ',' ' '); do
+                    [[ " ${catalog[*]} " == *" ${name} "* ]] || only_catalog=0
+                done
+                [[ ${only_catalog} -eq 1 ]] && group_asked=0
+            fi
+        elif [[ "${group}" == hooks ]] && has_selection hooks; then
+            group_asked=1
+        fi
+        if [[ ${group_asked} -eq 1 ]]; then
+            err "--project cannot carry the ${group} group for target '${target}' (global-only)"
+            err "  use --global, or drop the ${group} selection."
             exit 1
         fi
     done

@@ -18,7 +18,7 @@ trust_level = "trusted"
 [mcp_servers.internal]
 url = "https://internal.example"
 TOML
-install_must_succeed "${home}" sync --target codex --intent settings,mcp --force
+install_must_succeed "${home}" sync --target codex --intent settings,mcp --force --global
 out="${INSTALL_OUT}"
 merged="$(cat "${home}/.codex/config.toml")"
 assert_contains "${merged}" "# local machine notes" "TOML comment preserved"
@@ -35,6 +35,69 @@ fi
 
 echo
 
+echo "== install.sh sync: codex project scope (default) =="
+
+# T8: the default scope merges the allowlisted settings into
+# <project>/.codex/config.toml; posture, provider and plugin keys never land.
+home="$(new_home)"
+mkdir -p "${home}/project/.codex"
+cat > "${home}/project/.codex/config.toml" <<'TOML'
+# project notes
+[projects."/home/me/other"]
+trust_level = "trusted"
+TOML
+install_must_succeed "${home}" sync --target codex --intent settings
+out="${INSTALL_OUT}"
+proj="$(cat "${home}/project/.codex/config.toml")"
+assert_contains "${proj}" "# project notes" "codex project merge preserves comments"
+assert_contains "${proj}" '[projects."/home/me/other"]' "codex project merge preserves a [projects.*] table"
+assert_contains "${proj}" 'model = "gpt-6-astra"' "codex project merge applies the managed model"
+assert_contains "${proj}" "model_reasoning_effort" "codex project merge applies reasoning effort"
+assert_contains "${proj}" "[features]" "codex project merge applies [features]"
+assert_contains "${proj}" "[agents]" "codex project merge applies [agents]"
+for absent in approval_policy sandbox_mode approvals_reviewer sandbox_workspace_write "[plugins." model_provider model_providers "profile" "profiles" "notify" "otel" openai_base_url chatgpt_base_url; do
+    assert_not_contains "${proj}" "${absent}" "codex project file excludes ${absent}"
+done
+assert_contains "${out}" "only when the project is trusted" "codex project merge prints the trust warning"
+if [[ ! -s "${home}/.codex/config.toml" ]]; then ok "default codex settings leaves ~/.codex/config.toml untouched"; else ko "default codex settings leaves ~/.codex/config.toml untouched"; fi
+
+# T9: mcp + settings share one project file, warn once, and remove strips
+# only the managed leaves.
+home="$(new_home)"
+install_must_succeed "${home}" sync --target codex --intent settings,mcp
+proj="$(cat "${home}/project/.codex/config.toml")"
+assert_contains "${proj}" "[mcp_servers." "codex project file carries the MCP servers"
+assert_contains "${proj}" 'model = "gpt-6-astra"' "codex project file carries the settings beside the MCP servers"
+count="$(grep -c 'only when the project is trusted' <<< "${INSTALL_OUT}")"
+if [[ "${count}" == "1" ]]; then ok "codex settings+mcp warns about trust once"; else ko "codex settings+mcp warns about trust once" "${count}"; fi
+cat >> "${home}/project/.codex/config.toml" <<'TOML'
+
+[mine]
+keep = true
+TOML
+install_must_succeed "${home}" remove --target codex --intent settings
+proj="$(cat "${home}/project/.codex/config.toml")"
+assert_contains "${proj}" "[mine]" "codex project remove keeps an unmanaged table"
+assert_contains "${proj}" "[mcp_servers." "codex settings-only remove leaves the MCP servers"
+assert_not_contains "${proj}" 'model = "gpt-6-astra"' "codex project remove strips the managed model"
+
+# The plugins group is global-only: dropped with a notice by default,
+# rejected with --project.
+home="$(new_home)"
+install_must_succeed "${home}" sync --target codex --intent plugins
+assert_contains "${INSTALL_OUT}" "the plugins group is global-only" "codex default plugins intent drops the group with a notice"
+if [[ ! -e "${home}/project/.codex/config.toml" && ! -s "${home}/.codex/config.toml" ]]; then ok "codex default plugins intent writes nothing"; else ko "codex default plugins intent writes nothing"; fi
+out="$(run_install "${home}" sync --target codex --intent plugins --project)"
+assert_contains "${out}" "--project cannot carry the plugins group for target 'codex' (global-only)" "codex --project rejects the plugins group"
+
+# T7-style legacy hint.
+home="$(new_home)"
+install_must_succeed "${home}" sync --target codex --intent settings --global
+install_must_succeed "${home}" sync --target codex --intent settings
+assert_contains "${INSTALL_OUT}" "settings now default to project scope" "codex legacy hint printed when the global file holds ycc state"
+
+echo
+
 echo "== install.sh remove: codex settings and rules =="
 
 home="$(new_home)"
@@ -43,8 +106,8 @@ cat > "${home}/.codex/config.toml" <<'TOML'
 [projects."/home/me/secret-project"]
 trust_level = "trusted"
 TOML
-install_must_succeed "${home}" sync --target codex --intent settings,plugins,rules
-install_must_succeed "${home}" remove --target codex --intent settings,plugins,rules
+install_must_succeed "${home}" sync --target codex --intent settings,plugins,rules --global
+install_must_succeed "${home}" remove --target codex --intent settings,plugins,rules --global
 merged="$(cat "${home}/.codex/config.toml")"
 assert_contains "${merged}" "# local machine notes" "codex settings remove keeps comments"
 assert_contains "${merged}" '[projects."/home/me/secret-project"]' "codex settings remove keeps trusted projects"
@@ -397,7 +460,7 @@ if ! [[ -e "${home}/.config/ycc/codex-native-install.json" ]]; then ok "listed f
 
 # Native settings removal must forward --force to remove an edited managed leaf.
 home="$(new_home)"
-install_must_succeed "${home}" sync --target codex --intent settings
+install_must_succeed "${home}" sync --target codex --intent settings --global
 python3 - "${home}/.codex/config.toml" <<'PY'
 import sys
 from pathlib import Path
@@ -406,8 +469,29 @@ text = path.read_text()
 text = "\n".join('model = "user-edited"' if line.startswith("model =") else line for line in text.splitlines()) + "\n"
 path.write_text(text)
 PY
-install_must_succeed "${home}" remove --target codex --intent settings --force
+install_must_succeed "${home}" remove --target codex --intent settings --force --global
 assert_not_contains "$(cat "${home}/.codex/config.toml" 2>/dev/null)" 'user-edited' "listed settings removal forwards --force for edited leaf"
+
+# T10: project settings bypass codex_install.py's home-only settings route
+# regardless of whether native packages are listed in this checkout.
+for native_mode in native legacy; do
+    if [[ "${native_mode}" == legacy ]]; then
+        python3 - "${listed_repo}/ycc/settings/packages.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+model = json.loads(path.read_text())
+for package in ("ycc", "ycc-mcp"):
+    model["packages"][package]["runtimes"]["codex"]["listed"] = False
+path.write_text(json.dumps(model, indent=2) + "\n")
+PY
+    fi
+    home="$(new_home)"
+    install_must_succeed "${home}" sync --target codex --intent settings
+    assert_contains "$(cat "${home}/project/.codex/config.toml")" 'model = "gpt-6-astra"' "${native_mode} codex project settings use the project destination"
+    if [[ ! -e "${home}/.codex/config.toml" ]]; then ok "${native_mode} codex project settings bypass the global settings route"; else ko "${native_mode} codex project settings bypass the global settings route"; fi
+done
 
 INSTALL="${listed_install_saved}"
 STUB_BIN="${listed_stub_saved}"
@@ -431,14 +515,14 @@ if repo_codex_native; then
 fi
 
 home="$(new_home)"
-install_must_succeed "${home}" sync --target codex --intent plugins --plugins github@openai-curated
+install_must_succeed "${home}" sync --target codex --intent plugins --plugins github@openai-curated --global
 tables="$(codex_plugin_tables "${home}/.codex/config.toml")"
 if [[ "${tables}" == "github@openai-curated" ]]; then ok "codex --plugins sync writes one plugin table"; else ko "codex --plugins sync writes one plugin table" "${tables}"; fi
 
 home="$(new_home)"
-install_must_succeed "${home}" sync --target codex --intent plugins
+install_must_succeed "${home}" sync --target codex --intent plugins --global
 before="$(codex_plugin_tables "${home}/.codex/config.toml")"
-install_must_succeed "${home}" remove --target codex --intent plugins --plugins cloudflare@openai-curated
+install_must_succeed "${home}" remove --target codex --intent plugins --plugins cloudflare@openai-curated --global
 after="$(codex_plugin_tables "${home}/.codex/config.toml")"
 expected="$(tr ',' '\n' <<< "${before}" | grep -vx 'cloudflare@openai-curated' | paste -sd, -)"
 if [[ "${before}" == *cloudflare@openai-curated* && "${after}" == "${expected}" ]]; then
@@ -446,5 +530,29 @@ if [[ "${before}" == *cloudflare@openai-curated* && "${after}" == "${expected}" 
 else
     ko "codex remove --plugins drops only the selected table" "before=${before} after=${after}"
 fi
+
+# A committed project config whose values equal the repo's must lose nothing
+# ycc never recorded writing (scalar and table-child keys alike).
+home="$(new_home)"
+mkdir -p "${home}/project/.codex"
+cat > "${home}/project/.codex/config.toml" <<'TOML'
+model = "gpt-6-astra"
+
+[features]
+multi_agent = true
+TOML
+cp "${home}/project/.codex/config.toml" "${home}/before.toml"
+install_must_succeed "${home}" remove --target codex --intent settings
+if cmp -s "${home}/before.toml" "${home}/project/.codex/config.toml"; then
+    ok "codex project remove keeps repo-equal keys ycc never wrote byte-identical"
+else
+    ko "codex project remove keeps repo-equal keys ycc never wrote byte-identical"
+fi
+
+# The legacy hint counts settings state only: global mcp state must not trigger it.
+home="$(new_home)"
+install_must_succeed "${home}" sync --target codex --intent mcp --global
+install_must_succeed "${home}" sync --target codex --intent settings
+assert_not_contains "${INSTALL_OUT}" "settings now default to project scope" "codex: no legacy hint from global mcp-only state"
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then install_tests_finish; fi

@@ -123,7 +123,7 @@ Settings and global instructions are never package-implied. They need the
 opt-in `--settings` and `--rules` flags (see
 [Settings And Model Roles](#settings-and-model-roles---settings) and
 [Global Instructions](#global-instructions---rules)), which cannot be
-combined with `--package`.
+combined with `--package`. `--settings` also needs `--global`.
 
 ## Update
 
@@ -146,8 +146,8 @@ run `./install.sh install --target omp --force` to reinstall the new content.
 
 The `plugins` intent maps to the same `base` and `dedupe` steps
 (`./install.sh sync --target omp --intent plugins`). The `settings` and
-`rules` intents map to the opt-in `settings` and `rules` steps. Every other
-intent is skipped with a notice.
+`rules` intents map to the opt-in `settings` and `rules` steps; `settings`
+runs only with `--global`. Every other intent is skipped with a notice.
 
 ## Reload Or Restart
 
@@ -314,11 +314,12 @@ instructions from it instead; OMP expands `@<path>` lines inline:
 ## Settings And Model Roles (`--settings`)
 
 ```bash
-./install.sh install --target omp --settings
+./install.sh install --target omp --settings --global
 ```
 
-`--settings` merges these ycc-owned leaves from `ycc/settings/omp/config.yml`
-into your user `<agentDir>/config.yml` (or an existing `config.yaml`):
+`--settings --global` merges these ycc-owned leaves from
+`ycc/settings/omp/config.yml` into your user `<agentDir>/config.yml` (or an
+existing `config.yaml`):
 
 ```yaml
 modelRoles:
@@ -380,16 +381,25 @@ ycc never writes `task.agentModelOverrides`. The chains come from
   `omp` call and prints the install command.
 - **Precedence.** OMP layers defaults < user < project < `--config` overlays
   < runtime flags. A project `.omp/config.yml` beats these user values.
-- **User scope only.** `--project` with `--settings` or `--rules` is rejected;
-  ycc never writes `.omp/config.yml`, `.omp/rules` or `.omp/AGENTS.md`. Edit
+- **User scope only.** OMP settings have no project scope. Without `--global`
+  the `settings` step is skipped with
+  `omp: settings have no project scope — skipped (nothing written).`
+  followed by the reason and the `--global` destination, and an explicit
+  `--project` with `--settings` or `--rules` is rejected. ycc never writes
+  project `.omp/config.yml`: project config outranks user config with no
+  trust gate. ycc also never writes `.omp/rules` or `.omp/AGENTS.md`. Edit
   the project file by hand.
+
+  > **Behavior change:** `--settings` used to write `<agentDir>/config.yml`
+  > without a flag. Pass `--global` to keep that.
+
 - **Missing credentials.** If no listed model resolves, OMP falls back to an
   available model.
 
 Remove only the unchanged ycc leaves and the owned `AGENTS.md` symlink:
 
 ```bash
-./install.sh remove --target omp --intent settings,rules
+./install.sh remove --target omp --intent settings,rules --global
 ```
 
 ## Approvals
@@ -634,7 +644,7 @@ ycc skills, commands, agents, rules and `ycc-mcp:*` still load. Limits:
 
 ```bash
 ./install.sh install --target omp --dry-run
-./install.sh install --target omp --settings --rules --dry-run
+./install.sh install --target omp --settings --rules --global --dry-run
 ./install.sh remove --target omp --only base --dry-run
 ```
 
@@ -730,7 +740,7 @@ OMP gets its own packages; you do not convert a Claude, Codex, Cursor,
 opencode or `agents` install into an OMP one. Install OMP beside them:
 
 ```bash
-./install.sh install --target omp            # + --settings --rules if wanted
+./install.sh install --target omp            # + --settings --rules --global if wanted
 omp skill list >/dev/null                    # stderr empty: no duplicates
 ```
 
@@ -748,7 +758,7 @@ omp skill list >/dev/null                    # stderr empty: no duplicates
   copies are gone.
 - **Global instructions and models do not carry over.** OMP reads
   `<agentDir>/AGENTS.md` and `<agentDir>/config.yml`, not the other tools'
-  files; use `--rules` and `--settings`.
+  files; use `--rules` and `--settings --global`.
 - **MCP logins do not carry over.** OMP keeps OAuth tokens in its own
   `agent.db`; sign in again with `/mcp reauth ycc-mcp:<server>`.
 
@@ -757,7 +767,7 @@ omp skill list >/dev/null                    # stderr empty: no duplicates
 ```bash
 ./install.sh remove --target omp --only base --project   # in each project that has one
 ./install.sh remove --target omp --only base             # user scope (+ dedupe entries)
-./install.sh remove --target omp --intent settings,rules # --settings / --rules leaves
+./install.sh remove --target omp --intent settings,rules --global # --settings / --rules leaves
 ```
 
 Run it once per OMP profile you installed into. Each command removes only what
@@ -787,9 +797,9 @@ for the profile.
 - **Untrusted repositories.** A project's `.omp/` can add extensions, hooks
   and MCP servers and override your user settings. Open one with the overlay
   in [Untrusted Projects](#untrusted-projects).
-- **Settings writes.** `--settings` and `--rules` touch only the user
-  `<agentDir>`, never project files; a symlinked `config.yml` is never
-  written through.
+- **Settings writes.** `--settings` (only with `--global`) and `--rules`
+  touch only the user `<agentDir>`, never project files; a symlinked
+  `config.yml` is never written through.
 
 ## Troubleshooting
 
@@ -872,6 +882,6 @@ prints `--target all: skipping omp (...)` and runs the other targets.
 - OMP never runs shell hooks; `WorktreeCreate` has no OMP event; herdr
   reporting comes from herdr's integration (see [herdr](#herdr)). Rules ship
   in `ycc-rules`; settings, model roles and global instructions are opt-in
-  installer steps (`--settings`, `--rules`).
+  installer steps (`--settings --global`, `--rules`).
 - Details: [ADR 0002](../internal/adr/0002-omp-runtime-contract.md) and the
   [capability matrix](../../ycc/skills/_shared/references/target-capability-matrix.md).

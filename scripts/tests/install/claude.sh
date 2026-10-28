@@ -8,6 +8,35 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 echo "== install.sh sync: claude settings merge =="
 
 home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{
+  "tui": "fullscreen",
+  "editorMode": "vim",
+  "env": { "MY_LOCAL_TOKEN": "keep-me" }
+}
+JSON
+# Default scope is project: the merge lands in <project>/.claude/settings.json
+# (settings-project allowlist), never in the user file.
+install_must_succeed "${home}" sync --target claude --intent settings
+out="${INSTALL_OUT}"
+merged="$(cat "${home}/project/.claude/settings.json")"
+assert_contains "${merged}" '"editorMode": "vim"' "project merge preserves an unmanaged local key"
+assert_contains "${merged}" '"MY_LOCAL_TOKEN": "keep-me"' "project merge preserves an unmanaged env leaf"
+assert_contains "${merged}" '"claude-fable-5-1"' "project merge applies the managed model"
+assert_contains "${merged}" '"effortLevel"' "project merge applies the managed effort level"
+assert_contains "${merged}" '"CLAUDE_CODE_SUBAGENT_MODEL": "opus[1m]"' "project merge applies the subagent model"
+for absent in statusLine permissions skipDangerousModePermissionPrompt skipAutoPermissionPrompt enabledPlugins extraKnownMarketplaces pluginMarketplaces hooks; do
+    assert_not_contains "${merged}" "\"${absent}\"" "project settings excludes ${absent}"
+done
+if [[ ! -e "${home}/.claude/settings.json" && ! -e "${home}/.claude/statusline-command.sh" ]]; then
+    ok "default claude settings writes neither the global file nor the statusline"
+else
+    ko "default claude settings writes neither the global file nor the statusline"
+fi
+
+# The same merge at --global is exactly the pre-change behavior.
+home="$(new_home)"
 cat > "${home}/.claude/settings.json" <<'JSON'
 {
   "tui": "fullscreen",
@@ -15,13 +44,17 @@ cat > "${home}/.claude/settings.json" <<'JSON'
   "env": { "MY_LOCAL_TOKEN": "keep-me" }
 }
 JSON
-install_must_succeed "${home}" sync --target claude --intent settings
+install_must_succeed "${home}" sync --target claude --intent settings --global
 out="${INSTALL_OUT}"
 merged="$(cat "${home}/.claude/settings.json")"
 assert_contains "${merged}" '"editorMode": "vim"' "unmanaged local key preserved"
 assert_contains "${merged}" '"MY_LOCAL_TOKEN": "keep-me"' "unmanaged env leaf preserved"
 assert_contains "${merged}" '"claude-fable-5-1"' "managed model applied"
-assert_contains "${merged}" '"CLAUDE_CODE_SUBAGENT_MODEL": "opus[1m]"' "subagent model applied"
+assert_contains "${merged}" '"statusLine"' "--global keeps the statusLine key"
+assert_contains "${merged}" '"permissions"' "--global keeps the permissions key"
+assert_contains "${merged}" '"skipDangerousModePermissionPrompt"' "--global keeps the prompt key"
+if [[ -x "${home}/.claude/statusline-command.sh" ]]; then ok "--global copies the statusline script"; else ko "--global copies the statusline script"; fi
+if [[ ! -e "${home}/project/.claude/settings.json" ]]; then ok "--global writes no project settings"; else ko "--global writes no project settings"; fi
 
 # The marketplace entry the Claude CLI writes must survive a settings sync;
 # this is the regression the old copy-based flow could not avoid.
@@ -33,7 +66,7 @@ cat > "${home}/.claude/settings.json" <<'JSON'
   }
 }
 JSON
-install_must_succeed "${home}" sync --target claude --intent settings,plugins
+install_must_succeed "${home}" sync --target claude --intent settings,plugins --global
 merged="$(cat "${home}/.claude/settings.json")"
 assert_contains "${merged}" '"cli-written"' "CLI-written marketplace entry preserved"
 assert_contains "${merged}" '"ycc"' "repo marketplace entry added"
@@ -73,26 +106,27 @@ assert_not_contains "${out}" "is not valid for target 'claude'" "--only mods is 
 assert_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "status-bar@ycc-mods" "install --only mods installs the mods"
 
 echo
-echo "== install.sh sync: local edits are respected =="
+echo "== install.sh sync: local edits are respected (project scope) =="
 
 home="$(new_home)"
 install_must_succeed "${home}" sync --target claude --intent settings
-python3 - "${home}/.claude/settings.json" <<'PY'
+python3 - "${home}/project/.claude/settings.json" <<'PY'
 import json, sys, pathlib
 p = pathlib.Path(sys.argv[1])
 data = json.loads(p.read_text())
 data["model"] = "my-own-model"
+data.setdefault("extraKnownMarketplaces", {})["mine"] = {"source": {"source": "github", "repo": "someone/else"}}
 p.write_text(json.dumps(data, indent=2) + "\n")
 PY
 install_must_succeed "${home}" sync --target claude --intent settings
 out="${INSTALL_OUT}"
 assert_contains "${out}" "kept your local value at /model" "local edit preserved with warning"
-assert_contains "$(cat "${home}/.claude/settings.json")" '"my-own-model"' "local model value intact"
+assert_contains "$(cat "${home}/project/.claude/settings.json")" '"my-own-model"' "local model value intact"
+assert_contains "$(cat "${home}/project/.claude/settings.json")" '"mine"' "project merge keeps a CLI-written extraKnownMarketplaces entry"
 
 install_must_succeed "${home}" sync --target claude --intent settings --force
 out="${INSTALL_OUT}"
-assert_contains "$(cat "${home}/.claude/settings.json")" '"claude-fable-5-1"' "--force restores repo value"
-
+assert_contains "$(cat "${home}/project/.claude/settings.json")" '"claude-fable-5-1"' "--force restores repo value"
 echo
 
 echo "== install.sh sync: claude project hooks =="
@@ -285,6 +319,9 @@ assert_contains "${INSTALL_OUT}" "re-registering would rewrite that declaration"
 # The CLI only accepts a project/local add that matches the user declaration
 # (directory sources aside): repo mode adds the user declaration's own source.
 home="$(new_home)"
+# Seed the legacy user declaration explicitly; project settings no longer
+# installs global plugin enablement or marketplace declarations.
+install_must_succeed "${home}" sync --target claude --intent plugins --global
 install_must_succeed "${home}" install --target claude --only settings,hooks --mode repo
 calls="$(cat "${home}/claude-calls.log")"
 assert_contains "${calls}" "plugin marketplace add yandy-r/ystack#main --scope project" "repo-mode settings,hooks adds the user declaration's source at project scope"
@@ -297,7 +334,7 @@ mkdir -p "${home}/project/.claude"
 cat > "${home}/project/.claude/settings.json" <<'JSON'
 { "extraKnownMarketplaces": { "ycc": { "source": { "source": "github", "repo": "yandy-r/ystack", "ref": "v6.1.0" } } } }
 JSON
-install_must_succeed "${home}" install --target claude --only settings --mode repo
+install_must_succeed "${home}" install --target claude --only settings --mode repo --global
 : > "${home}/claude-calls.log"
 install_must_succeed "${home}" sync --target claude --intent hooks --mode repo
 calls="$(cat "${home}/claude-calls.log")"
@@ -329,9 +366,17 @@ assert_contains "${INSTALL_OUT}" "failed: Failed to add marketplace: stub reject
 
 home="$(new_home)"
 install_must_succeed "${home}" sync --target claude --intent settings,hooks
-merged="$(cat "${home}/.claude/settings.json")"
-assert_contains "${merged}" '"claude-fable-5-1"' "settings still merge beside project hooks"
-assert_not_contains "${merged}" '"hooks"' "project hooks writes no global hook activation"
+calls="$(cat "${home}/claude-calls.log")"
+assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope project" "settings,hooks at default scope installs project hooks"
+merged="$(cat "${home}/project/.claude/settings.json")"
+assert_contains "${merged}" '"claude-fable-5-1"' "settings merge into the project file beside project hooks"
+assert_not_contains "${merged}" '"hooks"' "the project settings file carries no hooks group"
+assert_not_contains "$(cat "${home}/project/.claude/settings.json")" '"enabledPlugins"' "project settings carry no plugin enablement"
+if [[ ! -e "${home}/.claude/settings.json" && ! -e "${home}/.claude/statusline-command.sh" ]]; then
+    ok "settings,hooks default writes no global settings or statusline"
+else
+    ko "settings,hooks default writes no global settings or statusline"
+fi
 
 home="$(new_home)"
 mkdir -p "${home}/project/.claude"
@@ -489,7 +534,7 @@ assert_contains "${INSTALL_OUT}" "remove --target claude --intent hooks --global
 
 home="$(new_home)"
 install_must_succeed "${home}" sync --target claude --intent hooks --global
-install_must_succeed "${home}" remove --target claude --only settings
+install_must_succeed "${home}" remove --target claude --only settings --global
 assert_not_contains "$(cat "${home}/.claude/settings.json" 2>/dev/null)" '"hooks"' "settings-only removal still takes legacy hook activation"
 
 home="$(new_home)"
@@ -519,7 +564,7 @@ for f in CLAUDE.md AGENTS.md hooks statusline-command.sh; do
 done
 
 home="$(new_home)"
-install_must_succeed "${home}" sync --target claude --intent settings,plugins
+install_must_succeed "${home}" sync --target claude --intent settings,plugins --global
 python3 - "${home}/.claude/settings.json" <<'PY2'
 import json, sys, pathlib
 p = pathlib.Path(sys.argv[1])
@@ -527,17 +572,51 @@ data = json.loads(p.read_text())
 data["model"] = "my-own-model"
 p.write_text(json.dumps(data, indent=2) + "\n")
 PY2
-install_must_succeed "${home}" remove --target claude --intent settings
+install_must_succeed "${home}" remove --target claude --intent settings --global
 out="${INSTALL_OUT}"
 assert_contains "${out}" "kept your local value at /model" "remove keeps an edited managed value"
 assert_contains "$(cat "${home}/.claude/settings.json")" '"enabledPlugins"' "remove --intent settings leaves the plugins group"
-install_must_succeed "${home}" remove --target claude --intent settings,plugins --force
+install_must_succeed "${home}" remove --target claude --intent settings,plugins --force --global
 if [[ ! -e "${home}/.claude/settings.json" ]]; then ok "remove --force takes edited values too"; else ko "remove --force takes edited values too" "$(cat "${home}/.claude/settings.json")"; fi
+
+# The same remove at project scope strips only the project-allowed managed
+# leaves, keeps unmanaged keys and foreign env leaves, never touches the
+# global file or the statusline.
+home="$(new_home)"
+install_must_succeed "${home}" sync --target claude --intent settings,plugins --global
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{ "editorMode": "vim", "env": { "MY_LOCAL_TOKEN": "keep-me" } }
+JSON
+install_must_succeed "${home}" sync --target claude --intent settings
+python3 - "${home}/project/.claude/settings.json" <<'PY3'
+import json, sys, pathlib
+p = pathlib.Path(sys.argv[1])
+data = json.loads(p.read_text())
+data["model"] = "my-own-model"
+p.write_text(json.dumps(data, indent=2) + "\n")
+PY3
+install_must_succeed "${home}" remove --target claude --intent settings
+out="${INSTALL_OUT}"
+merged="$(cat "${home}/project/.claude/settings.json")"
+assert_contains "${merged}" '"editorMode": "vim"' "project remove keeps unmanaged keys"
+assert_contains "${merged}" '"MY_LOCAL_TOKEN": "keep-me"' "project remove keeps a foreign env leaf"
+assert_contains "${out}" "kept your local value at /model" "project remove keeps an edited managed value"
+assert_not_contains "${merged}" '"effortLevel"' "project remove strips the managed effort leaf"
+assert_contains "$(cat "${home}/.claude/settings.json")" '"claude-fable-5-1"' "project remove never touches the global file"
+if [[ -x "${home}/.claude/statusline-command.sh" ]]; then ok "project remove leaves the statusline script"; else ko "project remove leaves the statusline script"; fi
+# --force also takes the edited model, so only the unmanaged keys remain.
+install_must_succeed "${home}" remove --target claude --intent settings --force
+merged="$(cat "${home}/project/.claude/settings.json")"
+assert_not_contains "${merged}" '"my-own-model"' "project remove --force takes the edited managed value"
+assert_not_contains "${merged}" '"effortLevel"' "project remove --force strips every managed leaf"
+assert_contains "${merged}" '"editorMode": "vim"' "project remove --force keeps the unmanaged key"
+assert_contains "${merged}" '"MY_LOCAL_TOKEN": "keep-me"' "project remove --force keeps the foreign env leaf"
 
 home="$(new_home)"
 echo "# mine" > "${home}/.claude/CLAUDE.md"
 echo "custom" > "${home}/.claude/statusline-command.sh"
-install_must_succeed "${home}" remove --target claude --intent rules,settings --force
+install_must_succeed "${home}" remove --target claude --intent rules,settings --force --global
 out="${INSTALL_OUT}"
 assert_contains "$(cat "${home}/.claude/CLAUDE.md")" "# mine" "remove never deletes a real rules file"
 assert_contains "${out}" "not installed by ycc" "remove reports foreign rules file"
@@ -545,7 +624,7 @@ if [[ ! -e "${home}/.claude/statusline-command.sh" ]]; then ok "remove --force t
 
 home="$(new_home)"
 echo "custom" > "${home}/.claude/statusline-command.sh"
-install_must_succeed "${home}" remove --target claude --intent settings
+install_must_succeed "${home}" remove --target claude --intent settings --global
 out="${INSTALL_OUT}"
 assert_contains "${out}" "kept ${home}/.claude/statusline-command.sh" "remove keeps an edited statusline"
 
@@ -743,7 +822,7 @@ assert_not_contains $'\n'"${INSTALL_OUT}"$'\n' $'\nclaude-plugins-official\n' "l
 
 home="$(new_home)"
 install_must_succeed "${home}" sync --target claude --intent plugins \
-    --plugins superpowers@claude-plugins-official,context7@claude-plugins-official
+    --plugins superpowers@claude-plugins-official,context7@claude-plugins-official --global
 assert_contains "${INSTALL_OUT}" "Plugins: superpowers@claude-plugins-official, context7@claude-plugins-official" "--plugins names the selection"
 keys="$(claude_plugin_keys "${home}/.claude/settings.json")"
 if [[ "${keys}" == "enabledPlugins=context7@claude-plugins-official,superpowers@claude-plugins-official markets=claude-plugins-official lists=claude-plugins-official" ]]; then
@@ -753,7 +832,7 @@ else
 fi
 assert_not_contains "$(cat "${home}/.claude/settings.json")" '"model"' "--intent plugins --plugins leaves settings alone"
 
-install_must_succeed "${home}" remove --target claude --intent plugins --plugins context7@claude-plugins-official
+install_must_succeed "${home}" remove --target claude --intent plugins --plugins context7@claude-plugins-official --global
 keys="$(claude_plugin_keys "${home}/.claude/settings.json")"
 if [[ "${keys}" == "enabledPlugins=superpowers@claude-plugins-official markets=claude-plugins-official lists=claude-plugins-official" ]]; then
     ok "remove --plugins takes one plugin and keeps the marketplace another still uses"
@@ -762,7 +841,7 @@ else
 fi
 
 home="$(new_home)"
-install_must_succeed "${home}" sync --target claude --intent settings,plugins --plugins ycc@ycc
+install_must_succeed "${home}" sync --target claude --intent settings,plugins --plugins ycc@ycc --global
 merged="$(cat "${home}/.claude/settings.json")"
 assert_contains "${merged}" '"claude-fable-5-1"' "--intent settings,plugins --plugins still merges settings whole"
 keys="$(claude_plugin_keys "${home}/.claude/settings.json")"
@@ -775,6 +854,25 @@ if [[ ! -e "${home}/.claude/settings.json" ]]; then ok "--plugins rejection writ
 out="$(run_install "${home}" sync --target claude --intent plugins --plugins claude-plugins-official)"
 assert_contains "${out}" "unknown plugin 'claude-plugins-official'" "a marketplace name is not a plugin"
 if [[ ! -e "${home}/.claude/settings.json" ]]; then ok "unknown plugin writes nothing"; else ko "unknown plugin writes nothing"; fi
+
+# Default scope: the plugins group is global-only, so an unscoped plugins
+# intent is dropped with a notice and writes nothing; --project rejects it.
+home="$(new_home)"
+install_must_succeed "${home}" sync --target claude --intent plugins
+assert_contains "${INSTALL_OUT}" "the plugins group is global-only" "default plugins intent drops the group with a notice"
+assert_contains "${INSTALL_OUT}" "Pass --global to merge it" "the notice names the --global command"
+if [[ ! -e "${home}/.claude/settings.json" && ! -e "${home}/project/.claude/settings.json" ]]; then
+    ok "default plugins intent writes nothing"
+else
+    ko "default plugins intent writes nothing"
+fi
+out="$(run_install "${home}" sync --target claude --intent plugins --project)"
+assert_contains "${out}" "--project cannot carry the plugins group for target 'claude' (global-only)" "--project rejects the plugins group"
+if [[ ! -e "${home}/.claude/settings.json" && ! -e "${home}/project/.claude/settings.json" ]]; then
+    ok "the --project plugins rejection writes nothing"
+else
+    ko "the --project plugins rejection writes nothing"
+fi
 
 echo
 echo "== install.sh --mods: claude =="
@@ -901,5 +999,45 @@ out="$(run_install "${home}" sync --target claude --intent hooks --hooks Bogus -
 assert_contains "${out}" "unknown hook event 'Bogus'" "unknown hook event rejected"
 install_must_succeed_stubbed "${home}" install --target claude --hooks --global
 if [[ -L "${home}/.claude/hooks" ]]; then ok "install --hooks stays the boolean 'also run hooks' flag"; else ko "install --hooks stays the boolean 'also run hooks' flag" "${INSTALL_OUT}"; fi
+
+# The legacy-user hint: a home whose global settings file still holds
+# ycc-managed keys from an earlier sync is told that settings now default to
+# project scope; a fresh home never sees it.
+home="$(new_home)"
+install_must_succeed "${home}" sync --target claude --intent settings --global
+install_must_succeed "${home}" sync --target claude --intent settings
+assert_contains "${INSTALL_OUT}" "settings now default to project scope" "legacy hint printed when the global file holds ycc state"
+assert_contains "${INSTALL_OUT}" "still holds ycc-managed keys from earlier syncs" "legacy hint names the global destination"
+
+home="$(new_home)"
+install_must_succeed "${home}" sync --target claude --intent settings
+assert_not_contains "${INSTALL_OUT}" "settings now default to project scope" "no legacy hint on a fresh home"
+
+# A committed project file whose values equal the repo's must lose nothing ycc
+# never recorded writing: remove (and sync adoption) is owned-only at project
+# scope, scalar and object-child keys alike.
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+cat > "${home}/project/.claude/settings.json" <<'JSON'
+{
+  "alwaysThinkingEnabled": true,
+  "effortLevel": "high",
+  "env": { "FORCE_AUTOUPDATE_PLUGINS": "1" }
+}
+JSON
+before="$(cat "${home}/project/.claude/settings.json")"
+install_must_succeed "${home}" remove --target claude --intent settings
+assert_contains "$(cat "${home}/project/.claude/settings.json")" "${before}" "project remove keeps repo-equal keys ycc never wrote"
+install_must_succeed "${home}" sync --target claude --intent settings
+install_must_succeed "${home}" remove --target claude --intent settings
+assert_not_contains "$(cat "${home}/project/.claude/settings.json" 2>/dev/null)" '"CLAUDE_CODE_SUBAGENT_MODEL"' "project remove still takes back keys ycc wrote"
+assert_contains "$(cat "${home}/project/.claude/settings.json" 2>/dev/null)" '"alwaysThinkingEnabled": true' "project remove keeps the repo-equal key a sync did not need to write"
+
+# The legacy hint counts settings state only: global state from another
+# config group (here hooks) must not trigger it.
+home="$(new_home)"
+install_must_succeed_stubbed "${home}" sync --target claude --intent hooks --global
+install_must_succeed "${home}" sync --target claude --intent settings
+assert_not_contains "${INSTALL_OUT}" "settings now default to project scope" "no legacy hint from non-settings global state"
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then install_tests_finish; fi

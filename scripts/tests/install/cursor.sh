@@ -9,7 +9,29 @@ echo "== install.sh sync: cursor =="
 
 home="$(new_home)"
 install_must_succeed "${home}" sync --target cursor --intent settings
-assert_contains "$(cat "${home}/.cursor/cli-config.json")" '"claude-fable-5-1"' "cursor CLI model applied"
+out="${INSTALL_OUT}"
+assert_contains "${out}" "settings have no project scope" "cursor default settings explains the project-scope skip"
+assert_contains "${out}" "carries permissions only" "cursor default settings prints the scope note"
+assert_contains "${out}" "Pass --global to" "cursor default settings names the global recovery flag"
+if [[ ! -e "${home}/.cursor/cli-config.json" && ! -e "${home}/.config/ycc/managed-config-state.json" ]]; then
+    ok "cursor default settings writes nothing"
+else
+    ko "cursor default settings writes nothing" "${out}"
+fi
+
+install_must_succeed "${home}" sync --target cursor --intent settings --global
+assert_contains "$(cat "${home}/.cursor/cli-config.json")" '"claude-fable-5-1"' "cursor CLI model applied with --global"
+
+out="$(run_install "${home}" sync --target cursor --intent settings --project)" && rc=0 || rc=$?
+if [[ ${rc} -ne 0 ]]; then ok "cursor explicit --project settings is rejected"; else ko "cursor explicit --project settings is rejected" "${out}"; fi
+assert_contains "${out}" "--project is not supported by step 'settings' for target 'cursor'" "cursor --project settings reports the unsupported step"
+assert_contains "${out}" "carries permissions only" "cursor --project settings prints the scope note"
+before="$(cat "${home}/.cursor/cli-config.json")"
+install_must_succeed "${home}" remove --target cursor --intent settings
+assert_contains "${INSTALL_OUT}" "settings have no project scope" "cursor default remove explains the project-scope skip"
+assert_contains "$(cat "${home}/.cursor/cli-config.json")" "${before}" "cursor default remove keeps the global settings"
+install_must_succeed "${home}" remove --target cursor --intent settings --global
+assert_not_contains "$(cat "${home}/.cursor/cli-config.json" 2>/dev/null)" '"claude-fable-5-1"' "cursor --global remove drops managed settings"
 
 echo
 
@@ -19,8 +41,8 @@ home="$(new_home)"
 cat > "${home}/.cursor/cli-config.json" <<'JSON'
 { "privacyMode": 1, "permissions": { "allow": ["Shell(ls)"], "deny": [] } }
 JSON
-install_must_succeed "${home}" sync --target cursor --intent settings,rules
-install_must_succeed "${home}" remove --target cursor --intent settings,rules
+install_must_succeed "${home}" sync --target cursor --intent settings,rules --global
+install_must_succeed "${home}" remove --target cursor --intent settings,rules --global
 merged="$(cat "${home}/.cursor/cli-config.json")"
 assert_contains "${merged}" '"privacyMode": 1' "cursor remove keeps unmanaged keys"
 assert_contains "${merged}" '"Shell(ls)"' "cursor remove keeps user permission entries"

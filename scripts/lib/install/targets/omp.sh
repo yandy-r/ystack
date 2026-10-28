@@ -5,7 +5,7 @@
 #   omp_supports_repo_mode, omp_reads_agents_skills, sync_omp_target, remove_omp_target
 # plus the optional hooks the generic shell calls when they exist:
 #   omp_preflight, omp_in_all, omp_all_skip_reason, omp_repo_mode_hint, omp_project_steps,
-#   omp_dry_run_steps
+#   omp_dry_run_steps, omp_settings_scope_note, omp_settings_global_dest
 #
 # Sourced by install.sh (never run directly); inherits SCRIPT_DIR and the
 # shared helpers from core.sh / steps.sh / bundle.sh.
@@ -45,6 +45,17 @@ omp_intent_steps() {
 # tools.approvalMode); config_groups_for_target
 # filters by intent name, so it must be 'settings'.
 omp_config_groups() { echo "settings"; }
+
+# omp_settings_scope_note — why omp settings has no project scope (read by
+# skip_unscoped_settings and preflight_step_support). ycc never writes a
+# project .omp/config.yml: project config outranks user config at cwd with no
+# trust gate, so it must not carry ycc-managed posture (tools.approvalMode).
+omp_settings_scope_note() { echo "ycc never writes project .omp/config.yml: project config outranks user config with no trust gate."; }
+
+# omp_settings_global_dest — the settings destination for the skip notice;
+# omp_config_dest is runtime-only (the agent dir is resolved per run), so the
+# note names it generically.
+omp_settings_global_dest() { echo "<agentDir>/config.yml"; }
 
 # omp_supports_repo_mode — the upstream repo carries an OMP catalog only while a
 # package row is listed in ycc/settings/packages.json (listed since YAN-1180).

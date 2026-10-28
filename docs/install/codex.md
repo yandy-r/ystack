@@ -44,13 +44,15 @@ Restart Codex after the install.
 For the full local Codex setup:
 
 ```bash
-./install.sh sync --target codex --intent base,settings,mcp,plugins,rules
+./install.sh sync --target codex --intent base,settings,mcp,rules       # project settings
+./install.sh sync --target codex --intent settings,plugins --global      # user config.toml + plugins
 ```
 
 The step-flag `install` form is equivalent:
 
 ```bash
 ./install.sh install --target codex --settings --rules
+./install.sh install --target codex --settings --rules --global
 ```
 
 Step behavior:
@@ -60,7 +62,7 @@ Step behavior:
 | `base`     | Generates and validates the Codex bundle, syncs custom agents from `.codex-plugin/agents/` into `~/.codex/agents/` (local mode; your own agents stay), registers the Codex marketplace `ycc`, and installs + enables `ycc@ycc` and `ycc-mcp@ycc`. Repo mode registers the Git marketplace and skips the agent sync. See [Local Vs Repo Mode](#local-vs-repo-mode). |
 | `skills`   | Generates the skills and installs each into `~/.codex/skills/<name>` (helpers in `~/.codex/skills/_shared`), with plugin paths re-pointed. No plugin link, cache or marketplace entry.                                                                                                                                                                             |
 | `agents`   | Generates the custom agents and installs each into `~/.codex/agents/<name>.toml`, leaving your own agents alone.                                                                                                                                                                                                                                                   |
-| `settings` | Merges managed keys from `.codex-plugin/config/config.toml` into `~/.codex/config.toml`. Plugin enablement lives in the same file, so the `plugins` intent also maps here.                                                                                                                                                                                         |
+| `settings` | Default (project): merges the preference keys from `.codex-plugin/config/config.toml` into `<project>/.codex/config.toml`. With `--global`: merges every managed key into `~/.codex/config.toml`. Plugin enablement lives in the same file, so the `plugins` intent also maps here (`--global` only).                                                              |
 | `mcp`      | Merges `[mcp_servers.*]` from `.codex-plugin/config/config.toml` into `<project>/.codex/config.toml` (or `~/.codex/config.toml` with `--global`).                                                                                                                                                                                                                  |
 | `rules`    | Symlinks `.codex-plugin/config/default.rules` and `AGENTS.md` into `~/.codex/`; Codex reads `AGENTS.md`, not `CLAUDE.md`.                                                                                                                                                                                                                                          |
 
@@ -69,6 +71,34 @@ projects, account-specific connectors, tokens, and unknown tables stay intact.
 Managed defaults are `gpt-6-astra` at Medium effort for the main agent and
 `gpt-5.6-sol` at High effort for spawned agents (`[agents]` defaults). `--rules`
 symlinks the global rules so edits stay live.
+
+## Settings Scope
+
+The `settings` step defaults to `<project>/.codex/config.toml`, which Codex
+layers above `~/.codex/config.toml` and loads **only when the project is
+trusted** in `~/.codex/config.toml` (`[projects."<path>"] trust_level`). The
+installer warns when it writes the file and never writes trust entries: trust
+stays your decision.
+
+The project file carries preference keys only: `personality`, `model`,
+`model_reasoning_effort`, `model_context_window`,
+`model_auto_compact_token_limit`, `plan_mode_reasoning_effort`,
+`service_tier`, `[agents]` and `[features]`. Approval and sandbox keys
+(`approval_policy`, `approvals_reviewer`, `sandbox_mode`,
+`[sandbox_workspace_write]`) and `[plugins.*]` stay global, so a committed
+project file never widens anyone's approval or sandbox posture. Keys Codex
+ignores at project level (provider, auth, profile, `notify`, `otel`) are never
+written there.
+
+`.codex/config.toml` is usually committed and applies to everyone who trusts
+the project. Review the diff before committing, or keep these preferences
+global with `--global`. From `$HOME` (where the project file would be the user
+file) a default run skips the step with a notice. See
+[Project Vs Global Scope](README.md#project-vs-global-scope).
+
+> **Behavior change:** `settings` used to write only `~/.codex/config.toml`.
+> Pass `--global` to keep that; a defaulted run warns while
+> `~/.codex/config.toml` still holds ycc-managed keys.
 
 ## Global Rules
 
@@ -125,9 +155,10 @@ Use `--only` to run exactly the listed steps:
 
 ```bash
 ./install.sh install --target codex --only base
-./install.sh install --target codex --only settings
+./install.sh install --target codex --only settings                # <project>/.codex/config.toml
+./install.sh install --target codex --only settings --global       # ~/.codex/config.toml
 ./install.sh install --target codex --only rules
-./install.sh install --target codex --only settings,rules
+./install.sh install --target codex --only settings,rules --global
 ./install.sh install --target codex --only mcp                   # <project>/.codex/config.toml
 ./install.sh install --target codex --only mcp --global          # ~/.codex/config.toml
 ./install.sh remove --target codex --only mcp --global   # remove managed servers
@@ -165,10 +196,10 @@ reads the standard Codex config directories:
 | Plugin enablement and config | `~/.codex/config.toml`                            |
 | Custom agents                | `~/.codex/agents/`                                |
 
-Recommended desktop install:
+Recommended desktop install (user-global settings, so every project gets them):
 
 ```bash
-./install.sh install --target codex --mode repo --settings --rules
+./install.sh install --target codex --mode repo --settings --rules --global
 ```
 
 Then restart Codex Desktop. The `ycc` and `ycc-mcp` plugins from the `ycc`
@@ -177,7 +208,7 @@ marketplace appear in the desktop app's plugin UI or `/plugins` surface.
 For contributor/local desktop testing, use local mode instead:
 
 ```bash
-./install.sh install --target codex --settings --rules
+./install.sh install --target codex --settings --rules --global
 ```
 
 After local source edits, run `./scripts/sync.sh --only codex`, rerun the base

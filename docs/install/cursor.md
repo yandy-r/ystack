@@ -36,32 +36,44 @@ bundle into `~/.cursor/`.
 After the base install, add the command wrappers and optional configuration:
 
 ```bash
-./install.sh sync --target cursor --intent commands,settings,rules,mcp
+./install.sh sync --target cursor --intent commands,rules,mcp
+./install.sh sync --target cursor --intent settings --global
 ```
 
 To combine the base install with those steps:
 
 ```bash
-./install.sh install --target cursor --only base,commands,settings,rules,mcp
+./install.sh install --target cursor --only base,commands,settings,rules,mcp --global
 ```
 
 Step behavior:
 
-| Step       | Effect                                                                                                                                                                                                                 |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `base`     | Generates and validates `packages/cursor/ycc/{skills,agents}` and `packages/cursor/ycc-rules/rules`, then rsyncs them into `~/.cursor/`.                                                                               |
-| `skills`   | Generates the skills and installs each into `~/.cursor/skills/<name>`, leaving your own skills alone.                                                                                                                  |
-| `agents`   | Generates the agents and installs each into `~/.cursor/agents/<name>.md`.                                                                                                                                              |
-| `commands` | Installs user-invocable skill wrappers into `~/.cursor/commands/<name>.md`, rewriting plugin-local skill references to absolute installed skill paths. Install the corresponding skills with `base` or `skills` first. |
-| `settings` | Merges `packages/cursor/installer-fallback/config/cli-config.json` into `~/.cursor/cli-config.json`. This file is generated from `ycc/settings/cursor/cli-config.json`; edit the source, not the generated copy.       |
-| `rules`    | Links nothing: Cursor User Rules are set in Settings → Rules, not a file. Prints how to paste `ycc/settings/rules/CLAUDE.md`.                                                                                          |
-| `mcp`      | Merges `mcp-configs/mcp.json` into `<project>/.cursor/mcp.json` (or `~/.cursor/mcp.json` with `--global`).                                                                                                             |
-| `hooks`    | Optionally copies the canonical herdr session script into `~/.cursor/hooks/` and merges its `sessionStart` registration into `~/.cursor/hooks.json`, preserving unrelated user hooks.                                  |
+| Step       | Effect                                                                                                                                                                                                                            |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base`     | Generates and validates `packages/cursor/ycc/{skills,agents}` and `packages/cursor/ycc-rules/rules`, then rsyncs them into `~/.cursor/`.                                                                                          |
+| `skills`   | Generates the skills and installs each into `~/.cursor/skills/<name>`, leaving your own skills alone.                                                                                                                             |
+| `agents`   | Generates the agents and installs each into `~/.cursor/agents/<name>.md`.                                                                                                                                                         |
+| `commands` | Installs user-invocable skill wrappers into `~/.cursor/commands/<name>.md`, rewriting plugin-local skill references to absolute installed skill paths. Install the corresponding skills with `base` or `skills` first.            |
+| `settings` | `--global` only: merges `packages/cursor/installer-fallback/config/cli-config.json` into `~/.cursor/cli-config.json`. This file is generated from `ycc/settings/cursor/cli-config.json`; edit the source, not the generated copy. |
+| `rules`    | Links nothing: Cursor User Rules are set in Settings → Rules, not a file. Prints how to paste `ycc/settings/rules/CLAUDE.md`.                                                                                                     |
+| `mcp`      | Merges `mcp-configs/mcp.json` into `<project>/.cursor/mcp.json` (or `~/.cursor/mcp.json` with `--global`).                                                                                                                        |
+| `hooks`    | Optionally copies the canonical herdr session script into `~/.cursor/hooks/` and merges its `sessionStart` registration into `~/.cursor/hooks.json`, preserving unrelated user hooks.                                             |
 
 Only `plugins` remains a no-op among these intents: the installer does not
 activate account-native plugins. The generated `rules/` bundle unit ships with
 `base` only. Default `base` remains skills, agents, and rules; commands and
 hooks are explicit steps. Adding hooks is optional (`--hooks` also enables it).
+
+Cursor settings have no project scope: Cursor's project `.cursor/cli.json`
+carries permissions only, and every other CLI setting must be set globally.
+Without `--global` the `settings` step is skipped with a notice and writes
+nothing; an explicit `--project` is rejected. The `--global` in the combined
+`install` above also sends MCP to `~/.cursor/mcp.json`; run `--only mcp`
+separately for project MCP. See
+[Project Vs Global Scope](README.md#project-vs-global-scope).
+
+> **Behavior change:** `settings` used to write `~/.cursor/cli-config.json`
+> without a flag. Pass `--global` to keep that.
 
 For package-aware file delivery:
 
@@ -125,7 +137,7 @@ Use `--only` to run exactly the listed steps:
 
 ```bash
 ./install.sh install --target cursor --only base
-./install.sh install --target cursor --only settings
+./install.sh install --target cursor --only settings --global    # ~/.cursor/cli-config.json
 ./install.sh install --target cursor --only rules
 ./install.sh install --target cursor --only commands             # requires installed skills
 ./install.sh install --target cursor --only hooks                # optional sessionStart hook

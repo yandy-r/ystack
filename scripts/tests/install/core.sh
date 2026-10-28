@@ -143,9 +143,21 @@ out="$(run_install "${home}" install --target claude --project --global)"
 assert_contains "${out}" "mutually exclusive" "--project and --global rejected together"
 
 home="$(new_home)"
-out="$(run_install "${home}" install --target claude --only settings,mcp --project)"
-assert_contains "${out}" "--project is not supported by step 'settings'" "--project rejects non-project steps"
+install_must_succeed "${home}" install --target claude --only settings,mcp --project
+out="${INSTALL_OUT}"
+assert_contains "${out}" "Claude install complete" "--project allows claude settings and mcp together"
+assert_contains "$(cat "${home}/project/.claude/settings.json")" '"claude-fable-5-1"' "--project writes claude project settings"
+assert_contains "$(cat "${home}/project/.mcp.json")" '"mcpServers"' "--project still writes claude project MCP"
+
+home="$(new_home)"
+out="$(run_install "${home}" install --target claude --only rules,mcp --project)"
+assert_contains "${out}" "--project is not supported by step 'rules'" "--project rejects non-project steps"
 assert_not_contains "${out}" "Claude sync complete" "--project rejection happens before any target runs"
+
+home="$(new_home)"
+out="$(run_install "${home}" install --target claude --package ycc --project)"
+assert_contains "${out}" "--project is not supported by step 'base' for target 'claude'" "package project scope is rejected before global-only settings run"
+assert_not_contains "${out}" "Claude install complete" "package --project rejection happens before any target runs"
 
 home="$(new_home)"
 install_must_succeed "${home}" sync --target all --intent mcp
@@ -179,8 +191,8 @@ out="$(run_install "${home}" remove --target claude --only mcp --mode repo)"
 assert_contains "${out}" "remove does not accept --mode" "remove rejects --mode"
 
 home="$(new_home)"
-out="$(run_install "${home}" remove --target claude --only settings --project)"
-assert_contains "${out}" "--project is not supported by step 'settings'" "remove keeps the --project guard"
+out="$(run_install "${home}" remove --target claude --only rules --project)"
+assert_contains "${out}" "--project is not supported by step 'rules'" "remove keeps the --project guard"
 
 home="$(new_home)"
 cat > "${home}/project/.mcp.json" <<'JSON'
@@ -193,6 +205,88 @@ assert_contains "${out}" "Claude remove complete" "remove runs for claude"
 merged="$(cat "${home}/project/.mcp.json")"
 assert_contains "${merged}" '"mine"' "remove keeps user-added server"
 assert_not_contains "${merged}" '"playwright"' "remove drops managed server"
+
+echo
+echo "== install.sh: project settings scope and HOME guard =="
+
+scope_contract="$(bash -c 'REPO_ROOT="$1"; INSTALL="$2"; '"$(declare -f source_install_libs)"'
+    source_install_libs
+    for target in claude codex opencode cursor omp; do
+        printf "%s settings supports=%s scope=%s\n" "${target}" \
+            "$(step_supports_project "${target}" settings && echo yes || echo no)" \
+            "$(step_scope "${target}" settings)"
+    done' _ "${REPO_ROOT}" "${INSTALL}")"
+assert_contains "${scope_contract}" "claude settings supports=yes scope=project" "step_supports_project defaults claude settings to project"
+assert_contains "${scope_contract}" "codex settings supports=yes scope=project" "step_supports_project defaults codex settings to project"
+assert_contains "${scope_contract}" "opencode settings supports=yes scope=project" "step_supports_project defaults opencode settings to project"
+assert_contains "${scope_contract}" "cursor settings supports=no scope=global" "step_supports_project leaves cursor settings global-only"
+assert_contains "${scope_contract}" "omp settings supports=no scope=global" "step_supports_project leaves omp settings global-only"
+
+home="$(new_home)"
+out="$(run_install "${home}" sync --target cursor --intent settings --project)"
+assert_contains "${out}" "project scope currently supports:" "project preflight lists the current scope support"
+assert_contains "${out}" "settings (claude, codex, opencode)" "project preflight names the settings targets"
+
+home="$(new_home)"
+install_must_succeed "${home}" sync --target all --intent settings
+out="${INSTALL_OUT}"
+for f in .claude/settings.json .codex/config.toml opencode.json; do
+    if [[ -f "${home}/project/${f}" ]]; then ok "default settings written: ${f}"; else ko "default settings written: ${f}" "${out}"; fi
+done
+assert_contains "${out}" "cursor: settings have no project scope" "all-target default settings skips cursor with a notice"
+assert_contains "${out}" "omp: settings have no project scope" "all-target default settings skips omp with a notice"
+assert_not_contains "${out}" "agents: settings" "all-target default settings prints no notice for agents (no settings step)"
+for f in .claude/settings.json .codex/config.toml .config/opencode/opencode.json .cursor/cli-config.json; do
+    if [[ ! -e "${home}/${f}" ]]; then ok "default settings leaves global ${f} alone"; else ko "default settings leaves global ${f} alone"; fi
+done
+
+for target in claude codex opencode; do
+    home="$(new_home)"
+    install_must_succeed_in "${home}" "${home}" sync --target "${target}" --intent settings
+    out="${INSTALL_OUT}"
+    assert_contains "${out}" "${target}: settings default to project scope" "${target} default settings skips at HOME"
+    assert_contains "${out}" "\$HOME" "${target} HOME skip names \$HOME"
+    assert_contains "${out}" "cd into a project, or pass --global" "${target} HOME skip names the recovery"
+    if [[ ! -e "${home}/.config/ycc/managed-config-state.json" ]]; then
+        ok "${target} HOME default skip writes no managed state"
+    else
+        ko "${target} HOME default skip writes no managed state" "${out}"
+    fi
+    out="$(run_install_in "${home}" "${home}" sync --target "${target}" --intent settings --project)"
+    assert_contains "${out}" "--project at \$HOME" "${target} explicit --project rejects HOME"
+done
+
+home="$(new_home)"
+git -C "${home}/project" init -q
+mkdir -p "${home}/project/nested/deeper"
+install_must_succeed_in "${home}" "${home}/project/nested/deeper" sync --target claude --intent settings
+if [[ -f "${home}/project/.claude/settings.json" && ! -e "${home}/project/nested/deeper/.claude" ]]; then
+    ok "project settings resolve the git toplevel from a subdirectory"
+else
+    ko "project settings resolve the git toplevel from a subdirectory" "${INSTALL_OUT}"
+fi
+
+for target in claude codex opencode; do
+    home="$(new_home)"
+    out="$(run_install "${home}" sync --target "${target}" --intent settings,plugins --project)"
+    assert_contains "${out}" "--project cannot carry the plugins group for target '${target}' (global-only)" "${target} --project rejects an explicitly requested global-only plugins group"
+    if [[ ! -e "${home}/.config/ycc/managed-config-state.json" ]]; then
+        ok "${target} global-only group rejection writes no state"
+    else
+        ko "${target} global-only group rejection writes no state" "${out}"
+    fi
+done
+
+home="$(new_home)"
+out="$(run_install "${home}" sync --target claude --intent hooks --hooks WorktreeCreate --project)"
+assert_contains "${out}" "--hooks <events> narrows settings.json hook events, which only the --global hooks step manages" "claude --project rejects a global-only hook-event selection"
+
+home="$(new_home)"
+install_must_succeed "${home}" sync --target claude --intent settings
+assert_not_contains "${INSTALL_OUT}" "still holds ycc-managed keys from earlier syncs" "fresh default settings prints no legacy hint"
+install_must_succeed "${home}" sync --target claude --intent settings --global
+install_must_succeed "${home}" sync --target claude --intent settings
+assert_contains "${INSTALL_OUT}" "still holds ycc-managed keys from earlier syncs" "default settings warns about earlier global ycc state"
 
 home="$(new_home)"
 install_must_succeed "${home}" sync --target all --intent mcp --global

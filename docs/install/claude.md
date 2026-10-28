@@ -40,7 +40,8 @@ Claude Code session.
 For a full local Claude Code sync without implicitly running plugin registration:
 
 ```bash
-./install.sh sync --target claude --intent hooks,settings,mcp,plugins,rules
+./install.sh sync --target claude --intent hooks,settings,mcp,rules            # project settings
+./install.sh sync --target claude --intent settings,plugins --global           # user settings + plugins
 ```
 
 Add `base` to the intent list when you also want the Claude CLI to register and
@@ -48,6 +49,7 @@ install the plugin marketplace. The step-flag `install` form is equivalent:
 
 ```bash
 ./install.sh install --target claude --settings --rules --mcp --hooks
+./install.sh install --target claude --only settings --global
 ```
 
 Step behavior:
@@ -55,7 +57,7 @@ Step behavior:
 | Step                           | Effect                                                                                                                                                                                                                                                                                                                                                                                             |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `base`                         | Runs `claude plugin marketplace add <repo> --scope user` and `claude plugin install ycc@ycc --scope user`.                                                                                                                                                                                                                                                                                         |
-| `settings`                     | Merges managed keys from `ycc/settings/settings.json` into `~/.claude/settings.json` and copies `ycc/settings/statusline-command.sh` into `~/.claude/`.                                                                                                                                                                                                                                            |
+| `settings`                     | Default (project): merges the preference keys (`env`, `attribution`, `model`, `modelSettings`, `alwaysThinkingEnabled`, `effortLevel`) from `ycc/settings/settings.json` into `<project>/.claude/settings.json`. With `--global`: merges every managed key into `~/.claude/settings.json` and copies `ycc/settings/statusline-command.sh` into `~/.claude/`.                                       |
 | `rules`                        | Symlinks `ycc/settings/rules/CLAUDE.md` into `~/.claude/CLAUDE.md`, the user memory file Claude Code reads.                                                                                                                                                                                                                                                                                        |
 | `mcp`                          | Merges `mcp-configs/mcp.json` into `<project>/.mcp.json` (or `~/.claude.json` with `--global`).                                                                                                                                                                                                                                                                                                    |
 | `hooks`                        | Default (project): `claude plugin install ycc-hooks@ycc --scope project`, declaring the `ycc` marketplace at project scope (repo mode, committed to `.claude/settings.json`) or local scope (local mode, `.claude/settings.local.json`) only when no visible declaration already supplies it. With `--global`: symlinks `ycc/settings/hooks/` into `~/.claude/hooks/` and merges the hooks config. |
@@ -66,6 +68,27 @@ Settings are merge-safe: unmanaged local keys are preserved, and managed keys
 you changed locally are kept unless `--force` is passed. Model defaults are
 `claude-fable-5-1` at Medium effort for the main session and `opus[1m]` at High
 effort for subagents. `--rules` symlinks the global rules file so edits stay live.
+
+## Settings Scope
+
+The `settings` step defaults to the project's shared `.claude/settings.json`,
+the file Claude Code reads from the session's working directory and that
+outranks `~/.claude/settings.json`. Only preference keys go there.
+`statusLine` (it points at a script only the global step installs),
+`permissions`, `skipAutoPermissionPrompt` and
+`skipDangerousModePermissionPrompt` stay global, as do the `plugins` and
+`hooks` config groups: `--intent plugins` without `--global` is skipped with a
+notice, and project hooks remain the native `ycc-hooks` plugin.
+
+`.claude/settings.json` is usually committed, so its values apply to everyone
+who works in the repository. Review the diff before committing, or keep these
+preferences global with `--global`. From `$HOME` a default run skips the step
+with a notice. See
+[Project Vs Global Scope](README.md#project-vs-global-scope).
+
+> **Behavior change:** `settings` used to write only `~/.claude/settings.json`
+> and the statusline script. Pass `--global` to keep that; a defaulted run warns
+> while `~/.claude/settings.json` still holds ycc-managed keys.
 
 ## Global Rules
 
@@ -101,7 +124,8 @@ Use `--only` when you want exactly one step or a small set of steps:
 
 ```bash
 ./install.sh install --target claude --only base
-./install.sh install --target claude --only settings
+./install.sh install --target claude --only settings          # writes <project>/.claude/settings.json
+./install.sh install --target claude --only settings --global # writes ~/.claude/settings.json + statusline
 ./install.sh install --target claude --only rules
 ./install.sh install --target claude --only mcp           # writes <project>/.mcp.json
 ./install.sh install --target claude --only mcp --global  # writes ~/.claude.json

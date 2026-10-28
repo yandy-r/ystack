@@ -426,7 +426,7 @@ rm -rf -- "$proj/.omp/rules"
 log 'PASS L2: project .omp/rules/ycc-common-security.md wins at its cwd; the package body returns from a subdirectory'
 
 # --- L3. install --target omp --settings: managed values, installed rules, local edit kept ---
-ycc l3-install "$home" install --target omp --settings
+ycc l3-install "$home" install --target omp --settings --global
 assert_rc 0 'install --target omp --settings'
 has l3-install '[ok] ycc-rules@ycc' 'rules apply to new sessions (/new or restart)' \
   "omp: merge ycc settings into $agent_dir/config.yml (user scope)"
@@ -449,7 +449,7 @@ value l3-approval write
 check l3-seeded seeded "$agent_dir/config.yml"
 log '  config get tools.approvalMode: write'
 check l3-edit edit "$agent_dir/config.yml" slow spike-null/null-two
-ycc l3-rerun "$home" install --target omp --settings
+ycc l3-rerun "$home" install --target omp --settings --global
 assert_rc 0 're-run install --target omp --settings'
 has l3-rerun '[!!] kept your local value at /modelRoles/slow'
 o l3-roles-after "$home" config get modelRoles --json

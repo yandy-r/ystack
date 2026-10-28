@@ -3,6 +3,8 @@
 # dispatches through (see scripts/lib/install/steps.sh):
 #   codex_valid_steps, codex_intent_steps <intent>, codex_config_groups,
 #   codex_supports_repo_mode, codex_reads_agents_skills, sync_codex_target, remove_codex_target
+# plus the optional project-scope hooks: codex_project_groups (settings),
+# codex_settings_global_dest, codex_config_file.
 #
 # Sourced by install.sh (never run directly); inherits SCRIPT_DIR and the
 # shared helpers from core.sh / steps.sh / bundle.sh.
@@ -42,6 +44,27 @@ codex_intent_steps() {
 # codex_config_groups — default managed config groups for config.toml.
 # MCP servers are owned by the scope-aware 'mcp' step.
 codex_config_groups() { echo "settings,plugins"; }
+
+# codex_project_groups — settings-file config groups mergeable at project
+# scope (<project>/.codex/config.toml): 'settings' only, through the helper's
+# settings-project allowlist (no approval/sandbox posture keys, no provider/
+# profile/notify/otel keys Codex ignores at project level). plugins stays
+# global-only.
+codex_project_groups() { echo "settings"; }
+
+# codex_settings_global_dest — the user-scope config file (legacy-hint target).
+codex_settings_global_dest() { echo "${HOME}/.codex/config.toml"; }
+
+# codex_config_file — the config.toml destination for the current scope:
+# project <root>/.codex/config.toml (loaded only for trusted projects; the
+# sync path prints the trust warning), global ~/.codex/config.toml.
+codex_config_file() {
+    if [[ "$(step_scope codex settings)" == "project" ]]; then
+        echo "$(project_root)/.codex/config.toml"
+    else
+        echo "${HOME}/.codex/config.toml"
+    fi
+}
 
 codex_supports_repo_mode() { return 0; }
 
@@ -443,21 +466,35 @@ sync_codex_target() {
 
     if [[ $do_settings -eq 1 ]]; then
         step=$((step + 1))
-        printf '\n%s[%d/%d] Merge Codex config (config.toml)%s\n' "${BOLD}" "$step" "$total" "${NC}"
+        local codex_config_dest
+        codex_config_dest="$(codex_config_file)"
+        printf '\n%s[%d/%d] Merge Codex config (%s)%s\n' "${BOLD}" "$step" "$total" "${codex_config_dest}" "${NC}"
         # Merge managed keys only: trusted-project entries, MCP tokens,
         # connector IDs and comments in the user's config.toml are preserved.
         config_group_selection codex "$(config_groups_for_target codex)"
         if [[ -n "${CONFIG_GROUPS}" ]]; then
-            if [[ $native_codex -eq 1 ]]; then
+            if [[ "$(step_scope codex settings)" == "project" ]]; then
+                # Direct merge at project scope in both native and legacy
+                # modes: codex_install.py settings is hard-wired to the user
+                # config, and its only difference (the plugins group) stays
+                # global-only here.
+                merge_settings_config \
+                    "codex-config" \
+                    "${SCRIPT_DIR}/.codex-plugin/config/config.toml" \
+                    "${codex_config_dest}" \
+                    "${CONFIG_GROUPS}" "${CONFIG_SELECT[@]}"
+                codex_trust_warn "${codex_config_dest}"
+            elif [[ $native_codex -eq 1 ]]; then
                 codex_native_settings
             else
                 merge_settings_config \
                     "codex-config" \
                     "${SCRIPT_DIR}/.codex-plugin/config/config.toml" \
-                    "${HOME}/.codex/config.toml" \
+                    "${codex_config_dest}" \
                     "${CONFIG_GROUPS}" "${CONFIG_SELECT[@]}"
             fi
         fi
+        settings_legacy_hint codex codex-config "$(codex_settings_global_dest)"
     fi
 
     if [[ $do_rules -eq 1 ]]; then
@@ -582,16 +619,23 @@ remove_codex_target() {
         unlink_owned_link "${SCRIPT_DIR}/ycc/settings/rules/AGENTS.md" "${codex_dir}/AGENTS.md"
     fi
     if step_enabled settings; then
-        printf '\n%sCodex: remove managed config (config.toml)%s\n' "${BOLD}" "${NC}"
+        local codex_config_dest
+        codex_config_dest="$(codex_config_file)"
+        printf '\n%sCodex: remove managed config (%s)%s\n' "${BOLD}" "${codex_config_dest}" "${NC}"
         config_group_selection codex "$(config_groups_for_target codex)"
-        if codex_repository_native_enabled; then
+        if [[ "$(step_scope codex settings)" == "project" ]]; then
+            # Direct removal at project scope in both native and legacy modes.
+            remove_settings "codex-config" "${SCRIPT_DIR}/.codex-plugin/config/config.toml" \
+                "${codex_config_dest}" "${CONFIG_GROUPS}" "${CONFIG_SELECT[@]}"
+        elif codex_repository_native_enabled; then
             if [[ -n "${CONFIG_GROUPS}" ]]; then
                 codex_native_settings --remove
             fi
         else
             remove_settings "codex-config" "${SCRIPT_DIR}/.codex-plugin/config/config.toml" \
-                "${codex_dir}/config.toml" "${CONFIG_GROUPS}" "${CONFIG_SELECT[@]}"
+                "${codex_config_dest}" "${CONFIG_GROUPS}" "${CONFIG_SELECT[@]}"
         fi
+        settings_legacy_hint codex codex-config "$(codex_settings_global_dest)"
     fi
     remove_slices codex skills agents
     if step_enabled base; then

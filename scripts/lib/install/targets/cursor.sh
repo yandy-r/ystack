@@ -3,6 +3,8 @@
 # dispatches through (see scripts/lib/install/steps.sh):
 #   cursor_valid_steps, cursor_intent_steps <intent>, cursor_config_groups,
 #   cursor_supports_repo_mode, cursor_reads_agents_skills, sync_cursor_target, remove_cursor_target
+# plus the optional scope-note hooks: cursor_settings_scope_note,
+# cursor_settings_global_dest (settings is global-only: no cursor_project_groups).
 #
 # Sourced by install.sh (never run directly); inherits SCRIPT_DIR and the
 # shared helpers from core.sh / steps.sh / bundle.sh.
@@ -47,6 +49,16 @@ cursor_intent_steps() {
 
 # cursor_config_groups — default managed config groups for cli-config.json.
 cursor_config_groups() { echo "settings"; }
+
+# Cursor CLI settings have no project scope: the project .cursor/cli.json
+# carries permissions only, so ycc never writes one. The default (unscoped)
+# settings step is skipped with this note (skip_unscoped_settings, steps.sh);
+# an explicit --project is rejected in preflight with the note appended.
+cursor_settings_scope_note() { echo "Cursor's project .cursor/cli.json carries permissions only; every other CLI setting is global."; }
+
+# cursor_settings_global_dest — the only settings destination (the note names
+# it for the --global command that restores the old behavior).
+cursor_settings_global_dest() { echo "${HOME}/.cursor/cli-config.json"; }
 
 # Cursor reads bundles from local directories only.
 cursor_supports_repo_mode() { return 1; }
