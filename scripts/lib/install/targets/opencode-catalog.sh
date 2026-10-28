@@ -35,16 +35,20 @@ opencode_catalog_names() {
 # ~/.config/opencode/, project <root>/opencode.json + <root>/.opencode/.
 opencode_settings_paths() {
     if [[ "$(step_scope opencode settings)" == "project" ]]; then
-        local root
+        local root global project_physical global_physical
         root="$(project_root)"
+        global="$(opencode_settings_global_dest)"
+        project_physical="$(cd "${root}" && pwd -P)"
+        global_physical="$(cd "$(dirname "${global}")" 2>/dev/null && pwd -P)" || global_physical=""
         OPENCODE_SETTINGS_FILE="${root}/opencode.json"
         OPENCODE_COMPANION_DIR="${root}/.opencode"
         # The project root itself can be ~/.config/opencode when that
         # directory is versioned as its own repo; then the "project" file IS
         # the global file, and companions must not land in a nested
-        # .opencode/ directory. Fall back to the global paths.
-        if [[ "${OPENCODE_SETTINGS_FILE}" == "$(opencode_settings_global_dest)" ]]; then
-            OPENCODE_SETTINGS_FILE="$(opencode_settings_global_dest)"
+        # .opencode/ directory. Compare physical paths so a symlinked HOME
+        # cannot bypass the global-path fallback.
+        if [[ "${project_physical}/opencode.json" == "${global_physical}/opencode.json" ]]; then
+            OPENCODE_SETTINGS_FILE="${global}"
             OPENCODE_COMPANION_DIR="${HOME}/.config/opencode"
         fi
     else
@@ -105,16 +109,15 @@ opencode_catalog_sync() {
     rm -rf "${tmp}"
     [[ ${rc} -eq 0 ]] || exit "${rc}"
 }
-
-# opencode_catalog_sync_one <name> <tmp source.json>
 opencode_catalog_sync_one() {
     local name="$1" src="$2"
-    local -a force=() dry_run=()
+    local -a force=() dry_run=() owned_only=()
     [[ "${FORCE:-0}" == "1" ]] && force=(--force)
     [[ "${DRY_RUN:-0}" == "1" ]] && dry_run=(--dry-run)
+    [[ "$(step_scope opencode settings)" == "project" ]] && owned_only=(--owned-only)
     opencode_catalog source --names "${name}" --out "${src}" || return $?
     merge_settings_config opencode-catalog "${src}" "${OPENCODE_SETTINGS_FILE}" plugins,agents \
-        --state-scope "${name}" || return $?
+        --state-scope "${name}" "${owned_only[@]}" || return $?
     opencode_catalog companions sync --names "${name}" --dest-dir "${OPENCODE_COMPANION_DIR}" \
         "${force[@]}" "${dry_run[@]}" || return $?
     opencode_catalog notes --names "${name}"
@@ -142,8 +145,9 @@ opencode_catalog_remove() {
 # run took out of opencode.json.
 opencode_catalog_remove_one() {
     local name="$1" src="$2" loaded=0
-    local -a force=() dry_run=()
+    local -a force=() dry_run=() owned_only=()
     [[ "${DRY_RUN:-0}" == "1" ]] && dry_run=(--dry-run)
+    [[ "$(step_scope opencode settings)" == "project" ]] && owned_only=(--owned-only)
     if [[ ",${PLUGINS_CATALOG_SELECT}," != *",${name},"* ]] \
         && ! opencode_catalog_has_state "${name}" "${OPENCODE_SETTINGS_FILE}"; then
         return 0
@@ -152,7 +156,7 @@ opencode_catalog_remove_one() {
     opencode_config_loads "${OPENCODE_SETTINGS_FILE}" "${name}" && loaded=1
     opencode_catalog source --names "${name}" --out "${src}" || return $?
     remove_settings opencode-catalog "${src}" "${OPENCODE_SETTINGS_FILE}" plugins,agents \
-        --state-scope "${name}" || return $?
+        --state-scope "${name}" "${owned_only[@]}" || return $?
     if [[ "${DRY_RUN:-0}" == "1" ]]; then
         if opencode_config_loads_after_remove "${OPENCODE_SETTINGS_FILE}" "${name}" "${src}" \
             opencode-catalog plugins,agents "${name}"; then
@@ -205,6 +209,7 @@ opencode_catalog_has_state() {
 opencode_catalog_legacy_hint() {
     [[ -z "${SCOPE}" && -z "${PACKAGE:-}" ]] || return 0
     [[ "$(step_scope opencode settings)" == "project" ]] || return 0
+    [[ "${OPENCODE_SETTINGS_FILE}" == "$(opencode_settings_global_dest)" ]] && return 0
     [[ -z "${SETTINGS_LEGACY_HINT_SHOWN[opencode]:-}" ]] || return 0
     local name
     for name in $(opencode_catalog_names); do

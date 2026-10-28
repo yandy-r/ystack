@@ -537,9 +537,13 @@ model = "gpt-6-astra"
 [features]
 multi_agent = true
 TOML
-before="$(cat "${home}/project/.codex/config.toml")"
+cp "${home}/project/.codex/config.toml" "${home}/before.toml"
 install_must_succeed "${home}" remove --target codex --intent settings
-assert_contains "$(cat "${home}/project/.codex/config.toml")" "${before}" "codex project remove keeps repo-equal keys ycc never wrote"
+if cmp -s "${home}/before.toml" "${home}/project/.codex/config.toml"; then
+    ok "codex project remove keeps repo-equal keys ycc never wrote byte-identical"
+else
+    ko "codex project remove keeps repo-equal keys ycc never wrote byte-identical"
+fi
 
 # The legacy hint counts settings state only: global mcp state must not trigger it.
 home="$(new_home)"

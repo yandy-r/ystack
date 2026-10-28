@@ -211,5 +211,30 @@ home="$(new_home)"
 git -C "${home}/.config/opencode" init -q
 install_must_succeed_in "${home}" "${home}/.config/opencode" sync --target opencode --intent plugins --plugins oh-my-opencode-slim
 if [[ ! -e "${home}/.config/opencode/.opencode" ]]; then ok "opencode project root equal to the global dir writes no nested .opencode/"; else ko "opencode project root equal to the global dir writes no nested .opencode/"; fi
+assert_contains "$(cat "${home}/.config/opencode/opencode.json")" "oh-my-opencode-slim" "opencode project/global fallback writes the global settings file"
+assert_not_contains "${INSTALL_OUT}" "settings now default to project scope" "opencode project/global fallback prints no false legacy hint"
+
+# The same fallback must hold when HOME is a symlink into the physical home.
+home="$(new_home)"
+git -C "${home}/.config/opencode" init -q
+ln -s "${home}" "${SANDBOX_ROOT}/linked-home"
+install_must_succeed_in "${SANDBOX_ROOT}/linked-home" "${home}/.config/opencode" sync --target opencode --intent plugins --plugins oh-my-opencode-slim
+assert_contains "$(cat "${home}/.config/opencode/opencode.json")" "oh-my-opencode-slim" "opencode project/global fallback resolves physical HOME paths"
+assert_not_contains "${INSTALL_OUT}" "settings now default to project scope" "opencode physical-path fallback prints no false legacy hint"
+if [[ ! -e "${home}/.config/opencode/.opencode" ]]; then ok "opencode physical-path fallback writes no nested .opencode/"; else ko "opencode physical-path fallback writes no nested .opencode/"; fi
+
+# A missing global config directory cannot alias the project destination;
+# its physical-path probe must not abort a normal or dry-run project sync.
+home="$(new_home)"
+rmdir "${home}/.config/opencode"
+install_must_succeed "${home}" sync --target opencode --intent settings
+assert_contains "$(cat "${home}/project/opencode.json")" '"model"' "opencode project sync succeeds without a global config directory"
+if [[ ! -e "${home}/.config/opencode" ]]; then ok "opencode project sync creates no global config directory"; else ko "opencode project sync creates no global config directory"; fi
+
+home="$(new_home)"
+rmdir "${home}/.config/opencode"
+install_must_succeed "${home}" sync --target opencode --intent settings --dry-run
+assert_contains "${INSTALL_OUT}" "would set /model" "opencode project dry-run succeeds without a global config directory"
+if [[ ! -e "${home}/project/opencode.json" && ! -e "${home}/.config/opencode" ]]; then ok "opencode project dry-run without a global config directory writes nothing"; else ko "opencode project dry-run without a global config directory writes nothing"; fi
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then install_tests_finish; fi

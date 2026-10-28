@@ -1578,11 +1578,11 @@ def remove_toml(
     destination = tomllib.loads(destination_text)
 
     to_remove, rewrites, conflicts, stale_keys, owned_after, notes = plan_remove(
-        profile, groups, source, destination, state_entry, force
-    )
-    to_remove, rewrites, conflicts, stale_keys, owned_after, notes = plan_remove(
         profile, groups, source, destination, state_entry, force, owned_only=owned_only
     )
+    if not to_remove and not rewrites:
+        return None, [], conflicts, stale_keys, owned_after, notes
+
     rendered = delete_toml_entries(destination_text, to_remove)
     if rewrites:
         rendered = apply_toml_updates(rendered, list(rewrites))
@@ -2021,9 +2021,9 @@ def main() -> int:
         except MergeError as error:
             print(f"merge_managed_config: {error}", file=sys.stderr)
             return 2
-        except OSError as error:
-            # An unreadable state file is not "no state" (exit 1); callers
-            # must not silently treat an I/O error as a fresh install.
+        except (OSError, UnicodeDecodeError) as error:
+            # An unreadable or undecodable state file is not "no state" (exit
+            # 1); callers must not treat it as a fresh install.
             print(f"merge_managed_config: cannot read state: {error}", file=sys.stderr)
             return 2
         return 0 if found else 1

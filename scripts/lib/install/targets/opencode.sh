@@ -188,7 +188,9 @@ sync_opencode_target() {
                 "${OPENCODE_SETTINGS_FILE}" \
                 "${CONFIG_GROUPS}" "${CONFIG_SELECT[@]}"
         fi
-        settings_legacy_hint opencode opencode-config "$(opencode_settings_global_dest)"
+        if [[ "${OPENCODE_SETTINGS_FILE}" != "$(opencode_settings_global_dest)" ]]; then
+            settings_legacy_hint opencode opencode-config "$(opencode_settings_global_dest)"
+        fi
         opencode_catalog_legacy_hint sync
         # The managed `plugins` group loads "./ycc-sensitive-guard"; ship that
         # directory with it (unless 'base' mirrored it above) so the entry
@@ -245,7 +247,9 @@ remove_opencode_target() {
         opencode_catalog_remove
         remove_settings "opencode-config" "${OPENCODE_PLUGIN_DIR}/opencode.json" \
             "${OPENCODE_SETTINGS_FILE}" "${CONFIG_GROUPS}" "${CONFIG_SELECT[@]}"
-        settings_legacy_hint opencode opencode-config "$(opencode_settings_global_dest)"
+        if [[ "${OPENCODE_SETTINGS_FILE}" != "$(opencode_settings_global_dest)" ]]; then
+            settings_legacy_hint opencode opencode-config "$(opencode_settings_global_dest)"
+        fi
         opencode_catalog_legacy_hint remove
         # The guard plugin goes with the `plugins` entry that loads it; an
         # entry kept as a local edit still loads it, so the directory stays.

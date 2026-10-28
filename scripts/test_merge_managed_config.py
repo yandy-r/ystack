@@ -917,6 +917,23 @@ class MergeHelperTestCase(MergeBase):
         self.assertEqual(tomllib.loads(text), {"model": "m", "mcp_servers": {"mine": {"url": "https://mine"}}})
 
     # -- --remove: list-union ----------------------------------------------
+    def test_remove_toml_noop_preserves_symlink_bytes_and_inode(self) -> None:
+        source = self.tmp / "src.toml"
+        source.write_text('[mcp_servers.svc]\nurl = "https://x"\n', encoding="utf-8")
+        original = self.tmp / "original.toml"
+        original.write_bytes(b'# no trailing newline\n[projects."/p"]\ntrust_level = "trusted"')
+        destination = self.tmp / "dest.toml"
+        destination.symlink_to(original)
+        before = original.read_bytes()
+        inode = original.stat().st_ino
+
+        result = self.run_merge("codex-config", source, destination, "mcp", extra=("--remove",))
+
+        self.assertIn("nothing to remove", result.stdout)
+        self.assertTrue(destination.is_symlink())
+        self.assertEqual(destination.readlink(), original)
+        self.assertEqual(original.read_bytes(), before)
+        self.assertEqual(original.stat().st_ino, inode)
 
     def remove_plugins(self, source: Path, destination: Path, **kwargs) -> subprocess.CompletedProcess[str]:
         return self.run_merge("opencode-config", source, destination, "plugins", extra=("--remove",), **kwargs)
@@ -2341,6 +2358,7 @@ class ProjectSettingsGroupTestCase(MergeBase):
         state = json.loads(self.state.read_text())
         self.assertTrue(state[f"claude-settings:{destination}"])
 
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root can read a mode-0 file")
     def test_has_state_unreadable_state_file_exits_2(self) -> None:
         # An I/O error must not read as "no state" (exit 1).
         self.state.write_text("{}", encoding="utf-8")
@@ -2349,6 +2367,11 @@ class ProjectSettingsGroupTestCase(MergeBase):
             self.assertEqual(self.has_state(self.tmp / "settings.json"), 2)
         finally:
             self.state.chmod(0o600)
+
+    def test_has_state_invalid_utf8_exits_2(self) -> None:
+        self.state.write_bytes(b"\xff")
+
+        self.assertEqual(self.has_state(self.tmp / "settings.json"), 2)
 
     def test_codex_project_merge_and_remove_keep_comments_and_trust(self) -> None:
         destination = self.tmp / "config.toml"

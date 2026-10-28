@@ -291,6 +291,18 @@ home="$(new_home)"
 install_must_succeed "${home}" sync --target opencode --intent plugins --plugins "${SLIM}" --project
 assert_contains "$(cat "${home}/project/opencode.json" 2>/dev/null)" "${SLIM_PKG}" "--project merges the catalog item into <project>/opencode.json"
 
+# Equal team-written values prove no ownership: a no-op project sync adopts
+# nothing, and a default project remove preserves the slim entry and agents.
+home="$(new_home)"
+cfg="${home}/project/opencode.json"
+printf '{"plugins": ["%s"], "agents": {"general": {"disabled": true}, "explore": {"disabled": true}}}\n' "${SLIM_PKG}" > "${cfg}"
+cp "${cfg}" "${home}/team-written.json"
+install_must_succeed "${home}" sync --target opencode --intent plugins --plugins "${SLIM}"
+if cmp -s "${home}/team-written.json" "${cfg}"; then ok "project catalog sync adopts no equal team-written leaves"; else ko "project catalog sync adopts no equal team-written leaves"; fi
+install_must_succeed "${home}" remove --target opencode --intent plugins
+assert_contains "$(json_query "${cfg}" 'd["plugins"]')" "'${SLIM_PKG}'" "default project catalog remove keeps the team-written slim entry"
+assert_contains "$(json_query "${cfg}" '[d["agents"][a].get("disabled") for a in ("explore", "general")]')" "[True, True]" "default project catalog remove keeps team-written agents leaves"
+
 # A bare plugins intent at default scope has nothing project-capable: the
 # bundle plugins group is dropped with a notice and nothing is written.
 home="$(new_home)"
