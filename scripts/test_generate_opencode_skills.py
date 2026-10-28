@@ -11,6 +11,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import generate_opencode_skills as skills  # noqa: E402
+from generate_codex_common import expand_quoted_home  # noqa: E402
+from generate_opencode_common import apply_opencode_text_transforms  # noqa: E402
 
 FORGE_PRIMARY = 'FORGE_LIB="${SCRIPT_DIR}/../../../shared/scripts/lib/forge.sh"'
 FORGE_FALLBACK = '[[ -f "$FORGE_LIB" ]] || FORGE_LIB="${HOME}/.config/opencode/shared/scripts/lib/forge.sh"'
@@ -48,6 +50,44 @@ class HomePathTestCase(unittest.TestCase):
         self.assertIn("\n~/.config/opencode/skills/research-to-issues/scripts/validate-prerequisites.sh ", skill)
         script = self.read("shared/scripts/pr-guard.sh")
         self.assertIn("#   ~/.config/opencode/shared/references/branching-model.md#rules", script)
+
+    def test_python_and_other_non_shell_output_keeps_quoted_tilde(self) -> None:
+        # The ${HOME} rewrite is shell/Markdown-only: a generated Python file
+        # must keep expanduser("~/.claude/x") semantics (a literal "~/" string),
+        # never "${HOME}" — Python would not expand that.
+        raw = 'location = os.path.expanduser("~/.claude/state.json")\npath = "~/.claude/hooks"\n'
+        transformed = apply_opencode_text_transforms(raw, {}, output_suffix=".py")
+        self.assertIn('os.path.expanduser("~/.config/opencode/state.json")', transformed)
+        self.assertIn('"~/.config/opencode/hooks"', transformed)
+        self.assertNotIn("${HOME}", transformed)
+
+    def test_shell_output_still_expands_quoted_home(self) -> None:
+        raw = '[[ -f "$LIB" ]] || LIB="~/.claude/shared/scripts/lib/forge.sh"\n'
+        transformed = apply_opencode_text_transforms(raw, {}, output_suffix=".sh")
+        self.assertIn('"${HOME}/.config/opencode/shared/scripts/lib/forge.sh"', transformed)
+
+    def test_expand_quoted_home_gates_on_suffix(self) -> None:
+        self.assertEqual(
+            expand_quoted_home('x = "~/.codex/y"', ".codex/", ".py"),
+            'x = "~/.codex/y"',
+        )
+        self.assertEqual(
+            expand_quoted_home('x = "~/.codex/y"', ".codex/", ".json"),
+            'x = "~/.codex/y"',
+        )
+        self.assertEqual(
+            expand_quoted_home('x = "~/.codex/y"', ".codex/", ".sh"),
+            'x = "${HOME}/.codex/y"',
+        )
+        self.assertEqual(
+            expand_quoted_home('x = "~/.codex/y"', ".codex/", ".bash"),
+            'x = "${HOME}/.codex/y"',
+        )
+        self.assertEqual(
+            expand_quoted_home('x = "~/.codex/y"', ".codex/", ".md"),
+            'x = "${HOME}/.codex/y"',
+        )
+        self.assertEqual(expand_quoted_home('x = "~/.codex/y"', ".codex/", ""), 'x = "~/.codex/y"')
 
 
 if __name__ == "__main__":

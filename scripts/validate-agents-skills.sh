@@ -10,6 +10,9 @@ SKILLS_DIR="${BUNDLE_ROOT}/skills"
 echo "== Sync check (generator --check) =="
 python3 "${REPO_ROOT}/scripts/generate_agents_skills.py" --check
 
+echo "== Text transform regressions =="
+python3 "${REPO_ROOT}/scripts/test_generate_agents_common.py"
+
 echo "== Frontmatter lint (agentskills.io) =="
 python3 - <<'PY' "${SKILLS_DIR}"
 import re

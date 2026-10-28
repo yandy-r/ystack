@@ -152,6 +152,7 @@ def write_tree(dest_root: Path, dry_run: bool) -> set[Path]:
                 transformed = apply_agents_text_transforms(
                     rewrite_agents_plugin_paths(text),
                     aliases,
+                    output_suffix=out.suffix,
                 )
             if rel.parts and rel.parts[0] == "bundle-release":
                 for old, new in BUNDLE_RELEASE_RESTORE:

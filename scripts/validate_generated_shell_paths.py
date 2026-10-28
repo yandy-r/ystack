@@ -19,8 +19,9 @@ packages/; node_modules/ is skipped) and fail on:
 - in every ``.sh``/``.bash`` file, a dead fallback ``[[ -f "$VAR" ]] || VAR="X"``
   directly after ``VAR="X"`` (see generate_codex_common.self_fallbacks);
 - in any other generated ``.opencode-plugin/`` file, a ``${HOME}/.config/opencode``
-  path: the opencode generator's quote-aware ``"${HOME}`` rewrite targets shell
-  code and must never reach JSON, YAML, Python or other non-shell text.
+  path: the generators' quote-aware ``"${HOME}`` rewrite is limited to shell and
+  Markdown (see generate_codex_common.expand_quoted_home) and must never reach
+  JSON, YAML, Python or other non-shell text.
 
 Exit 0 when clean, 1 on any finding (findings go to stderr).
 """
@@ -103,7 +104,12 @@ def candidate_files(roots: Sequence[Path]) -> Iterator[Path]:
 
 
 def check_other(path: Path, text: str) -> list[str]:
-    """Flag the shell-only ``${HOME}`` rewrite leaking into a non-shell opencode file."""
+    """Flag the shell-only ``${HOME}`` rewrite leaking into a non-shell opencode file.
+
+    Scope: the ``"${HOME}`` expansion is deliberately limited to ``.sh``/``.bash``
+    and Markdown output by the generators; every other file type keeps its literal
+    ``"~/`` text, so a ``${HOME}/.config/opencode`` sighting there is a leak.
+    """
     if ".opencode-plugin" in path.parts and HOME_OPENCODE in text:
         return [f"{HOME_OPENCODE} belongs only in shell code, not a {path.suffix or 'suffixless'} file"]
     return []

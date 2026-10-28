@@ -25,6 +25,7 @@ from generate_codex_common import (
     compress_skill_description,
     drop_self_fallbacks,
     dump_frontmatter,
+    expand_quoted_home,
     load_agent_aliases,
     model_invocation_disabled,
     parse_frontmatter,
@@ -282,14 +283,23 @@ def prune_orphans(dest_root: Path, expected_files: set[Path]) -> None:
             path.rmdir()
 
 
-def write_tree(dest_root: Path, dry_run: bool, *, native_paths: bool = False) -> set[Path]:
+def write_tree(
+    dest_root: Path,
+    dry_run: bool,
+    *,
+    native_paths: bool = False,
+    expand_home: bool = True,
+) -> set[Path]:
     """Render the Codex skill tree under dest_root; return the relative paths written.
 
-    ``native_paths=False`` is the pre-listing legacy render. It keeps the bytes old
-    releases installed (including their quoted ``"~/.codex/`` helper fallbacks) because
-    install_migrate.py proves ownership of installed copies by byte equality with it;
-    rewriting them would leave every legacy install unretirable. That render is never
-    committed while the Codex catalog is listed, and the shell-path validator skips it.
+    ``native_paths=False`` is the pre-listing legacy render. It now expands
+    quoted ``"~/.codex/`` helper fallbacks to ``"${HOME}/.codex/`` (SC2088),
+    so the shell-path validator now covers it like every other render.
+    ``expand_home=False`` reproduces the pre-fix legacy bytes — the exact form
+    older releases installed — and exists only for install_migrate.py's
+    ownership proofs; that render is never committed.
+    The flag applies to the native render too; it emits no quoted ``"~/.codex/``
+    paths, so its output is byte-identical either way.
     """
     aliases = load_agent_aliases()
     written: set[Path] = set()
@@ -362,6 +372,10 @@ def write_tree(dest_root: Path, dry_run: bool, *, native_paths: bool = False) ->
                         transformed = rewrite_native_paths(transformed, out.relative_to(dest_root))
                     else:
                         transformed = rewrite_shared_reference_paths(transformed, out.relative_to(dest_root))
+                if expand_home:
+                    # SC2088: a quoted "~/.codex/" never expands in shell code
+                    # or in Markdown shell snippets; native output has none left.
+                    transformed = expand_quoted_home(transformed, ".codex/", out.suffix)
                 if rel.parts and rel.parts[0] == "bundle-release":
                     transformed = restore_bundle_release_source_paths(transformed)
                 transformed = transformed.replace("\x00RELEASE_MODEL_CLAUDE_FILE\x00", "CLAUDE.md")
