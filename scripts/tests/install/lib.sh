@@ -134,6 +134,27 @@ run_install() {
     return "${rc}"
 }
 
+# run_install_in <home> <cwd> <args...> — run_install from a caller-chosen
+# working directory (the default is <home>/project): for the $HOME-guard and
+# git-subdirectory project-root cases.
+run_install_in() {
+    local home="$1" cwd="$2" out rc=0
+    shift 2
+    out="$(
+        cd "${cwd}" || exit 1
+        unset OMP_BIN OMP_PROFILE FAKE_OMP_LOG
+        HOME="${home}" \
+        PATH="${STUB_BIN}:${PATH}" \
+        CLAUDE_STUB_LOG="${home}/claude-calls.log" \
+        FAKE_OMP_HOME="${home}/.fake-omp" \
+        YCC_MANAGED_CONFIG_STATE="${home}/.config/ycc/managed-config-state.json" \
+        YCC_INSTALL_SKIP_BUILD="${YCC_INSTALL_SKIP_BUILD:-1}" \
+            bash "${INSTALL}" "$@" 2>&1
+    )" || rc=$?
+    [[ -n "${out}" ]] && printf '%s\n' "${out}"
+    return "${rc}"
+}
+
 # install_must_succeed <home> <args...> — checked success-path invocation.
 # Run in the current shell and leave captured output in INSTALL_OUT. On failure,
 # report the original diagnostic and stop before placement assertions, preserving
@@ -144,6 +165,18 @@ install_must_succeed() {
     INSTALL_OUT="$(run_install "$@")" || rc=$?
     if [[ ${rc} -ne 0 ]]; then
         printf '%s[FAIL]%s install.sh %s exited %d\n%s\n' "${RED}" "${NC}" "${*:2}" "${rc}" "${INSTALL_OUT}" >&2
+        exit "${rc}"
+    fi
+    return 0
+}
+
+# install_must_succeed_in <home> <cwd> <args...> — install_must_succeed from a
+# caller-chosen working directory (see run_install_in).
+install_must_succeed_in() {
+    local rc=0
+    INSTALL_OUT="$(run_install_in "$@")" || rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        printf '%s[FAIL]%s install.sh %s exited %d\n%s\n' "${RED}" "${NC}" "${*:3}" "${rc}" "${INSTALL_OUT}" >&2
         exit "${rc}"
     fi
     return 0

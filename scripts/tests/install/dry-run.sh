@@ -73,6 +73,8 @@ assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin" "in
 
 install_must_succeed "${home}" sync --target codex,opencode,cursor,agents --intent skills,settings,rules,mcp --dry-run
 out="${INSTALL_OUT}"
+assert_contains "${out}" "cursor: settings have no project scope" "cursor default settings dry-run explains the project-scope skip"
+assert_not_contains "${out}" "dry-run: cursor settings step has no preview" "skipped cursor settings does not also report a missing preview"
 for pair in "codex skills" "opencode skills" "cursor skills" "agents skills"; do
     assert_contains "${out}" "dry-run: ${pair% *} ${pair#* } step has no preview" "sync --dry-run skips ${pair}"
 done
@@ -97,6 +99,39 @@ else
     ko "install --package --dry-run writes nothing" "$(diff <(echo "${before}") <(echo "${after}"))"
 fi
 
+
+echo
+echo "== install.sh --dry-run: default settings previews project destinations =="
+
+for target in claude codex opencode; do
+    home="$(new_home)"
+    before="$(tree_digest "${home}")"
+    install_must_succeed "${home}" sync --target "${target}" --intent settings --dry-run
+    out="${INSTALL_OUT}"
+    assert_contains "${out}" "would set" "${target} default settings dry-run lists project keys"
+    case "${target}" in
+        claude) dest="${home}/project/.claude/settings.json" ;;
+        codex) dest="${home}/project/.codex/config.toml" ;;
+        opencode) dest="${home}/project/opencode.json" ;;
+    esac
+    assert_contains "${out}" "${dest}" "${target} default settings dry-run names the project destination"
+    assert_home_unchanged "${home}" "${before}" "${target} default settings preview"
+
+    install_must_succeed "${home}" sync --target "${target}" --intent settings
+    before="$(tree_digest "${home}")"
+    install_must_succeed "${home}" remove --target "${target}" --intent settings --dry-run
+    assert_contains "${INSTALL_OUT}" "would remove /" "${target} project settings removal previews managed keys"
+    assert_contains "${INSTALL_OUT}" "${dest}" "${target} project settings removal names the project destination"
+    assert_home_unchanged "${home}" "${before}" "${target} project settings removal preview"
+done
+
+home="$(new_home)"
+before="$(tree_digest "${home}")"
+install_must_succeed "${home}" sync --target omp --intent settings --dry-run
+out="${INSTALL_OUT}"
+assert_contains "${out}" "omp: settings have no project scope" "omp default settings dry-run explains the project-scope skip"
+assert_not_contains "${out}" "dry-run: omp settings step has no preview" "skipped omp settings does not also report a missing preview"
+assert_home_unchanged "${home}" "${before}" "omp default settings preview"
 echo
 echo "== settings, rules, hooks and base previews preserve installed and fresh homes =="
 for target in claude cursor codex opencode; do
@@ -196,12 +231,12 @@ assert_home_unchanged "${home}" "${before}" "exact Claude removal preview"
 # Settings can also carry opt-in plugin companions and the guard directory.
 home="$(new_home)"
 before="$(tree_digest "${home}")"
-install_must_succeed "${home}" sync --target opencode --intent plugins --plugins oh-my-opencode-slim --dry-run
+install_must_succeed "${home}" sync --target opencode --intent plugins --plugins oh-my-opencode-slim --global --dry-run
 assert_contains "${INSTALL_OUT}" "would copy" "catalog preview lists companion copy"
 assert_home_unchanged "${home}" "${before}" "catalog sync preview"
-install_must_succeed "${home}" sync --target opencode --intent plugins --plugins ./ycc-sensitive-guard,oh-my-opencode-slim
+install_must_succeed "${home}" sync --target opencode --intent plugins --plugins ./ycc-sensitive-guard,oh-my-opencode-slim --global
 before="$(tree_digest "${home}")"
-install_must_succeed "${home}" remove --target opencode --intent plugins --dry-run
+install_must_succeed "${home}" remove --target opencode --intent plugins --global --dry-run
 assert_contains "${INSTALL_OUT}" "would remove ${home}/.config/opencode/oh-my-opencode-slim.json" "catalog removal previews companion"
 assert_contains "${INSTALL_OUT}" "would remove ${home}/.config/opencode/ycc-sensitive-guard/index.js" "bundle removal previews guard tree"
 assert_home_unchanged "${home}" "${before}" "catalog and guard removal preview"

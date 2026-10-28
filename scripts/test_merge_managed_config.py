@@ -21,7 +21,15 @@ from typing import Any
 from unittest.mock import patch
 
 import yaml
-from merge_managed_config import ADDED_ITEMS_KEY, value_hash
+from merge_managed_config import (
+    ADDED_ITEMS_KEY,
+    PROFILES,
+    PROJECT_GROUP,
+    PROJECT_IGNORED_KEYS,
+    check_project_ignored_keys,
+    project_subset,
+    value_hash,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HELPER = REPO_ROOT / "scripts" / "merge_managed_config.py"
@@ -2179,6 +2187,274 @@ class MarketplaceRetentionTestCase(MergeBase):
         self.assertIn("kept your local value at /enabledPlugins/context7@claude-plugins-official", result.stdout)
         self.assertIn("(still used by context7@claude-plugins-official)", result.stdout)
         self.assertIn("claude-plugins-official", json.loads(self.dest.read_text())["extraKnownMarketplaces"])
+
+
+class ProjectSettingsGroupTestCase(MergeBase):
+    """``settings-project``: fail-closed allowlists for project-scope settings (YAN-218)."""
+
+    PROJECT_PROFILES = ("claude-settings", "codex-config", "opencode-config")
+    CLAUDE_SOURCE = REPO_ROOT / "ycc" / "settings" / "settings.json"
+    CODEX_SOURCE = REPO_ROOT / ".codex-plugin" / "config" / "config.toml"
+    OPENCODE_SOURCE = REPO_ROOT / ".opencode-plugin" / "opencode.json"
+
+    def project_paths(self, profile: str) -> set[tuple[str, ...]]:
+        return {tuple(rule["path"]) for rule in PROFILES[profile]["groups"][PROJECT_GROUP]}
+
+    def has_state(self, destination: Path, *extra: str, profile: str = "claude-settings") -> int:
+        env = {**os.environ, "YCC_MANAGED_CONFIG_STATE": str(self.state)}
+        argv = [sys.executable, str(HELPER), "--profile", profile, "--destination", str(destination), "--has-state"]
+        return subprocess.run([*argv, *extra], capture_output=True, text=True, env=env).returncode
+
+    # -- allowlists -------------------------------------------------------
+
+    def test_only_three_profiles_have_a_project_group(self) -> None:
+        self.assertEqual(
+            sorted(name for name, profile in PROFILES.items() if PROJECT_GROUP in profile["groups"]),
+            sorted(self.PROJECT_PROFILES),
+        )
+
+    def test_claude_project_allowlist_is_preference_only(self) -> None:
+        self.assertEqual(
+            self.project_paths("claude-settings"),
+            {("env",), ("attribution",), ("model",), ("modelSettings",), ("alwaysThinkingEnabled",), ("effortLevel",)},
+        )
+        for key in (
+            "statusLine",
+            "permissions",
+            "skipAutoPermissionPrompt",
+            "skipDangerousModePermissionPrompt",
+            "hooks",
+            "enabledPlugins",
+            "extraKnownMarketplaces",
+            "pluginMarketplaces",
+        ):
+            self.assertNotIn((key,), self.project_paths("claude-settings"))
+
+    def test_codex_project_allowlist_excludes_ignored_and_posture_keys(self) -> None:
+        top_level = {path[0] for path in self.project_paths("codex-config")}
+        self.assertEqual(top_level & PROJECT_IGNORED_KEYS["codex-config"], set())
+        for key in ("approval_policy", "approvals_reviewer", "sandbox_mode", "sandbox_workspace_write", "plugins"):
+            self.assertNotIn(key, top_level)
+        self.assertIn("model", top_level)
+
+    def test_drift_guard_rejects_unknown_allowlisted_path(self) -> None:
+        rules = [{"path": ["model"], "policy": "scalar"}]
+        self.assertEqual(project_subset(rules, (("model",),), "probe"), rules)
+        with self.assertRaisesRegex(ValueError, "probe: settings-project allowlist .*: statusLine"):
+            project_subset(rules, (("model",), ("statusLine",)), "probe")
+
+    def test_ignored_keys_guard_rejects_leaked_key(self) -> None:
+        profiles = {"codex-config": {"groups": {PROJECT_GROUP: [{"path": ["notify"], "policy": "scalar"}]}}}
+        with self.assertRaisesRegex(ValueError, "codex-config: .*ignored at project level: notify"):
+            check_project_ignored_keys(profiles, PROJECT_IGNORED_KEYS)
+
+    # -- merge / remove ---------------------------------------------------
+
+    def test_claude_project_merge_writes_only_allowlisted_keys(self) -> None:
+        destination = self.write_json(self.tmp / "settings.json", {"editorMode": "vim", "env": {"MINE": "1"}})
+
+        self.run_merge("claude-settings", self.CLAUDE_SOURCE, destination, PROJECT_GROUP)
+
+        merged = json.loads(destination.read_text())
+        self.assertEqual(
+            set(merged),
+            {"editorMode", "env", "attribution", "model", "modelSettings", "alwaysThinkingEnabled", "effortLevel"},
+        )
+        self.assertEqual(merged["env"]["MINE"], "1")
+        self.assertIn("CLAUDE_CODE_SUBAGENT_MODEL", merged["env"])
+
+    def test_claude_project_remove_strips_only_owned_managed_keys(self) -> None:
+        status_line = json.loads(self.CLAUDE_SOURCE.read_text())["statusLine"]
+        destination = self.write_json(
+            self.tmp / "settings.json", {"editorMode": "vim", "env": {"MINE": "1"}, "statusLine": status_line}
+        )
+        self.run_merge("claude-settings", self.CLAUDE_SOURCE, destination, PROJECT_GROUP)
+        edited = json.loads(destination.read_text())
+        edited["model"] = "opus[1m]"
+        self.write_json(destination, edited)
+
+        result = self.run_merge("claude-settings", self.CLAUDE_SOURCE, destination, PROJECT_GROUP, extra=("--remove",))
+
+        self.assertIn("kept your local value at /model", result.stdout)
+        # statusLine equals the repo value but is outside the project group: untouched.
+        self.assertEqual(
+            json.loads(destination.read_text()),
+            {"editorMode": "vim", "env": {"MINE": "1"}, "statusLine": status_line, "model": "opus[1m]"},
+        )
+
+    def test_owned_only_remove_keeps_equal_unrecorded_keys(self) -> None:
+        # The HIGH regression: a committed project file whose values match the
+        # repo byte for byte must lose nothing ycc never wrote — including
+        # children of object rules (here: env's leaves).
+        source = json.loads(self.CLAUDE_SOURCE.read_text())
+        initial = {
+            "alwaysThinkingEnabled": source["alwaysThinkingEnabled"],
+            "effortLevel": source["effortLevel"],
+            "env": dict(source["env"]),
+        }
+        destination = self.write_json(self.tmp / "settings.json", initial)
+
+        result = self.run_merge(
+            "claude-settings", self.CLAUDE_SOURCE, destination, PROJECT_GROUP, extra=("--remove", "--owned-only")
+        )
+
+        self.assertIn("kept your local value at /alwaysThinkingEnabled", result.stdout)
+        self.assertIn("kept your local value at /env/FORCE_AUTOUPDATE_PLUGINS", result.stdout)
+        self.assertEqual(json.loads(destination.read_text()), initial)
+
+    def test_owned_only_remove_takes_recorded_keys(self) -> None:
+        # Recorded ownership still wins at project scope: a sync that wrote the
+        # key lets remove take it back (equal-value shortcut stays disabled).
+        destination = self.tmp / "settings.json"
+        self.run_merge("claude-settings", self.CLAUDE_SOURCE, destination, PROJECT_GROUP, extra=("--owned-only",))
+
+        self.run_merge(
+            "claude-settings", self.CLAUDE_SOURCE, destination, PROJECT_GROUP, extra=("--remove", "--owned-only")
+        )
+
+        self.assertFalse(destination.exists())
+
+    def test_owned_only_sync_adopts_nothing(self) -> None:
+        # An unchanged project file (managed values already equal to the repo)
+        # must not have its keys recorded as tool-owned at project scope.
+        source = json.loads(self.CLAUDE_SOURCE.read_text())
+        destination = self.write_json(
+            self.tmp / "settings.json",
+            {
+                "env": dict(source["env"]),
+                "attribution": dict(source["attribution"]),
+                "model": source["model"],
+                "modelSettings": source["modelSettings"],
+                "alwaysThinkingEnabled": source["alwaysThinkingEnabled"],
+                "effortLevel": source["effortLevel"],
+            },
+        )
+
+        result = self.run_merge(
+            "claude-settings", self.CLAUDE_SOURCE, destination, PROJECT_GROUP, extra=("--owned-only",)
+        )
+
+        self.assertIn("up-to-date", result.stdout)
+        self.assertFalse(self.state.exists())
+        # And the unflagged behavior is unchanged (adoption still happens).
+        self.run_merge("claude-settings", self.CLAUDE_SOURCE, destination, PROJECT_GROUP)
+        state = json.loads(self.state.read_text())
+        self.assertTrue(state[f"claude-settings:{destination}"])
+
+    def test_has_state_unreadable_state_file_exits_2(self) -> None:
+        # An I/O error must not read as "no state" (exit 1).
+        self.state.write_text("{}", encoding="utf-8")
+        self.state.chmod(0)
+        try:
+            self.assertEqual(self.has_state(self.tmp / "settings.json"), 2)
+        finally:
+            self.state.chmod(0o600)
+
+    def test_codex_project_merge_and_remove_keep_comments_and_trust(self) -> None:
+        destination = self.tmp / "config.toml"
+        original = '# mine\n[projects."/p"]\ntrust_level = "trusted"\n'
+        destination.write_text(original, encoding="utf-8")
+
+        self.run_merge("codex-config", self.CODEX_SOURCE, destination, PROJECT_GROUP)
+
+        text = destination.read_text()
+        parsed = tomllib.loads(text)
+        self.assertIn("# mine", text)
+        self.assertEqual(parsed["model"], "gpt-6-astra")
+        self.assertTrue(parsed["agents"]["enabled"])
+        self.assertTrue(parsed["features"]["multi_agent"])
+        for key in ("approval_policy", "approvals_reviewer", "sandbox_mode", "sandbox_workspace_write"):
+            self.assertNotIn(key, parsed)
+        for key in ("plugins", "mcp_servers", "tui", "notice", "apps"):
+            self.assertNotIn(key, parsed)
+        self.assertEqual(parsed["projects"], {"/p": {"trust_level": "trusted"}})
+
+        self.run_merge("codex-config", self.CODEX_SOURCE, destination, PROJECT_GROUP, extra=("--remove",))
+
+        text = destination.read_text()
+        self.assertIn("# mine", text)
+        parsed = tomllib.loads(text)
+        # Object-policy tables keep an empty header after removal, as at global scope.
+        self.assertEqual(
+            {key: value for key, value in parsed.items() if value}, {"projects": {"/p": {"trust_level": "trusted"}}}
+        )
+
+    def test_opencode_project_merge_preserves_jsonc_and_credentials(self) -> None:
+        destination = self.tmp / "opencode.json"
+        destination.write_text(
+            '{\n  // mine\n  "providers": { "9router": { "options": { "apiKey": "sk-private" } } },\n}\n',
+            encoding="utf-8",
+        )
+
+        result = self.run_merge("opencode-config", self.OPENCODE_SOURCE, destination, PROJECT_GROUP)
+
+        self.assertIn("JSONC", result.stdout)
+        merged = json.loads(destination.read_text())
+        self.assertEqual(merged["providers"]["9router"]["options"]["apiKey"], "sk-private")
+        self.assertEqual(merged["experimental"]["subagent_depth"], 2)
+        self.assertIn("$schema", merged)
+        self.assertNotIn("plugins", merged)
+        self.assertNotIn("mcp", merged)
+
+    def test_project_and_global_state_do_not_interfere(self) -> None:
+        global_dest = self.tmp / "home" / "settings.json"
+        project_dest = self.tmp / "project" / ".claude" / "settings.json"
+        self.run_merge("claude-settings", self.CLAUDE_SOURCE, global_dest, "settings")
+        self.run_merge("claude-settings", self.CLAUDE_SOURCE, project_dest, PROJECT_GROUP)
+        global_before = global_dest.read_bytes()
+
+        self.run_merge("claude-settings", self.CLAUDE_SOURCE, project_dest, PROJECT_GROUP, extra=("--remove",))
+
+        self.assertFalse(project_dest.exists())
+        self.assertEqual(global_dest.read_bytes(), global_before)
+        state = json.loads(self.state.read_text())
+        self.assertIn(f"claude-settings:{global_dest}", state)
+        self.assertNotIn(f"claude-settings:{project_dest}", state)
+        self.assertEqual(self.has_state(global_dest), 0)
+        self.assertEqual(self.has_state(project_dest), 1)
+
+    # -- --has-state ------------------------------------------------------
+
+    def test_has_state_without_state_file_is_false_and_writes_nothing(self) -> None:
+        destination = self.tmp / "settings.json"
+
+        self.assertEqual(self.has_state(destination), 1)
+        self.assertEqual(self.has_state(destination, "--source", "/dev/null"), 1)
+        self.assertFalse(self.state.exists())
+        self.assertFalse(destination.exists())
+
+    def test_has_state_exit_codes(self) -> None:
+        destination = self.tmp / "settings.json"
+        self.run_merge("claude-settings", self.CLAUDE_SOURCE, destination, PROJECT_GROUP)
+        state_before = self.state.read_bytes()
+
+        self.assertEqual(self.has_state(destination, "--source", "/dev/null"), 0)
+        self.assertEqual(self.has_state(destination, "--groups", PROJECT_GROUP), 0)
+        self.assertEqual(self.has_state(destination, "--groups", "settings"), 0)
+        self.assertEqual(self.has_state(destination, "--groups", "plugins"), 1)
+        self.assertEqual(self.has_state(destination, "--groups", "nope"), 2)
+        self.assertEqual(self.has_state(self.tmp / "other.json"), 1)
+        self.assertEqual(self.has_state(destination, profile="codex-config"), 1)
+        self.assertEqual(self.has_state(destination, "--state-scope", "x"), 1)
+        self.assertEqual(self.has_state(destination, "--state-scope", "bad scope"), 2)
+        self.assertEqual(self.state.read_bytes(), state_before)
+
+    def test_has_state_honours_state_scope(self) -> None:
+        source = self.write_json(self.tmp / "src.json", {"plugins": ["repo-a"]})
+        destination = self.tmp / "opencode.json"
+        self.run_merge("opencode-catalog", source, destination, "plugins", extra=("--state-scope", "repo-a"))
+
+        self.assertEqual(self.has_state(destination, "--state-scope", "repo-a", profile="opencode-catalog"), 0)
+        self.assertEqual(self.has_state(destination, "--state-scope", "repo-b", profile="opencode-catalog"), 1)
+        self.assertEqual(self.has_state(destination, profile="opencode-catalog"), 1)
+
+    def test_merge_still_requires_source_and_groups(self) -> None:
+        env = {**os.environ, "YCC_MANAGED_CONFIG_STATE": str(self.state)}
+        argv = [sys.executable, str(HELPER), "--profile", "claude-settings", "--destination", str(self.tmp / "d")]
+        result = subprocess.run(argv, capture_output=True, text=True, env=env)
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--source and --groups are required", result.stderr)
 
 
 if __name__ == "__main__":

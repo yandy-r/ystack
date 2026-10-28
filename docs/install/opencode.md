@@ -29,31 +29,52 @@ Restart opencode after installing or updating the bundle.
 For the full opencode setup:
 
 ```bash
-./install.sh sync --target opencode --intent base,settings,mcp,plugins,rules
+./install.sh sync --target opencode --intent base,settings,mcp,rules      # project settings
+./install.sh sync --target opencode --intent settings,plugins --global     # user opencode.json + plugins
 ```
 
 The step-flag `install` form is equivalent:
 
 ```bash
 ./install.sh install --target opencode --settings --rules
+./install.sh install --target opencode --settings --rules --global
 ```
 
 Step behavior:
 
-| Step       | Effect                                                                                                                                             |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `base`     | Generates and validates `.opencode-plugin/{skills,agents,commands,shared,ycc-sensitive-guard}/`, then rsyncs them into `~/.config/opencode/`.      |
-| `skills`   | Generates the skills and installs each into `skills/<name>`, plus the `shared/` helpers.                                                           |
-| `agents`   | Generates the agents and installs each into `agents/<name>.md`.                                                                                    |
-| `commands` | Generates one thin command per public skill from its `SKILL.md` and installs it as `commands/<name>.md`.                                           |
-| `settings` | Merges managed keys from `.opencode-plugin/opencode.json` into `~/.config/opencode/opencode.json`. Plugins live in this same file.                 |
-| `mcp`      | Merges `mcp.servers` from `.opencode-plugin/opencode.json` into `<project>/opencode.json` (or `~/.config/opencode/opencode.json` with `--global`). |
-| `rules`    | Symlinks `.opencode-plugin/AGENTS.md` into `~/.config/opencode/AGENTS.md`.                                                                         |
+| Step       | Effect                                                                                                                                                                                 |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base`     | Generates and validates `.opencode-plugin/{skills,agents,commands,shared,ycc-sensitive-guard}/`, then rsyncs them into `~/.config/opencode/`.                                          |
+| `skills`   | Generates the skills and installs each into `skills/<name>`, plus the `shared/` helpers.                                                                                               |
+| `agents`   | Generates the agents and installs each into `agents/<name>.md`.                                                                                                                        |
+| `commands` | Generates one thin command per public skill from its `SKILL.md` and installs it as `commands/<name>.md`.                                                                               |
+| `settings` | Merges managed keys from `.opencode-plugin/opencode.json` into `<project>/opencode.json` (default) or `~/.config/opencode/opencode.json` (`--global`). Plugins live in this same file. |
+| `mcp`      | Merges `mcp.servers` from `.opencode-plugin/opencode.json` into `<project>/opencode.json` (or `~/.config/opencode/opencode.json` with `--global`).                                     |
+| `rules`    | Symlinks `.opencode-plugin/AGENTS.md` into `~/.config/opencode/AGENTS.md`.                                                                                                             |
 
 MCP servers moved from the `settings` step to the `mcp` step, which defaults to
 project scope; pass `--global` to keep writing the user config. See
 [Project Vs Global Scope](README.md#project-vs-global-scope) and
 [Removing Installed Config](README.md#removing-installed-config).
+
+## Settings Scope
+
+The `settings` step defaults to `<project>/opencode.json`, which opencode
+merges above `~/.config/opencode/opencode.json`. The project file gets every
+managed settings key (`$schema`, `model`, `agents`, `providers`,
+`experimental.subagent_depth`) plus any
+[third-party catalog plugins](#third-party-plugins) you select. The bundle
+`plugins` items and the `./ycc-sensitive-guard` directory stay global-only:
+`--intent plugins` without `--global` skips them with a notice.
+
+`opencode.json` at the project root is usually committed, so its values apply
+to everyone who works in the repository and override their own global model
+choices. Review the diff before committing, or keep these preferences global
+with `--global`. From `$HOME` a default run skips the step with a notice.
+
+> **Behavior change:** `settings` used to write only
+> `~/.config/opencode/opencode.json`. Pass `--global` to keep that; a defaulted
+> run warns while the user file still holds ycc-managed keys.
 
 ## Global Rules
 
@@ -75,7 +96,7 @@ The generated `opencode.json` declares the bundle's shared OpenCode V2 plugins i
 | `@prevalentware/opencode-goal-plugin` | Goal mode — `/goal` commands, persistent goal state, and the goal tool suite |
 | `./ycc-sensitive-guard`               | Sensitive-file policy for restricted ycc specialists (see below)             |
 
-`--settings` installs the server-side half. On opencode v2.0.x the TUI half
+`--settings --global` installs the server-side half. On opencode v2.0.x the TUI half
 (sidebar goal indicator and command-palette entry) was read from the global
 `~/.config/opencode/cli.json`, which this repository does not manage. On opencode
 v2.1.1, `opencode plugin add` writes only the `opencode.json` `plugins` entry and
@@ -83,7 +104,7 @@ the V2 CLI loads TUI halves from `opencode.json` (verified with the catalog's
 `oh-my-opencode-slim`). Install both halves on a new machine with:
 
 ```bash
-./install.sh install --target opencode --settings --rules
+./install.sh install --target opencode --settings --rules --global
 opencode2 plugin add @prevalentware/opencode-goal-plugin
 ```
 
@@ -104,8 +125,8 @@ twice. See the [v6 opencode guide](v6/opencode.md) before opting in.
 removed, and your own items stay:
 
 ```bash
-ycc sync   --target opencode --intent plugins --plugins @prevalentware/opencode-goal-plugin
-ycc remove --target opencode --intent plugins --plugins @prevalentware/opencode-goal-plugin
+ycc sync   --target opencode --intent plugins --plugins @prevalentware/opencode-goal-plugin --global
+ycc remove --target opencode --intent plugins --plugins @prevalentware/opencode-goal-plugin --global
 ```
 
 Selecting `./ycc-sensitive-guard` also ships (or removes) its guard directory;
@@ -129,8 +150,8 @@ bundle names.
 | `oh-my-opencode-slim` | `oh-my-opencode-slim@3.0.5` | the pinned `plugins` item, `agents.explore.disabled` and `agents.general.disabled`, and the companion `oh-my-opencode-slim.json` |
 
 ```bash
-ycc sync   --target opencode --intent plugins --plugins oh-my-opencode-slim
-ycc remove --target opencode --intent plugins --plugins oh-my-opencode-slim --purge-cache
+ycc sync   --target opencode --intent plugins --plugins oh-my-opencode-slim --global
+ycc remove --target opencode --intent plugins --plugins oh-my-opencode-slim --purge-cache --global
 ```
 
 Sync merges, for each selected catalog plugin:
@@ -176,14 +197,17 @@ plugin's opencode package cache under `${XDG_CACHE_HOME:-~/.cache}/opencode`:
 the V2 `npm/<pkg>@<spec>/`, the V1 `packages/<pkg>@<spec>/`, and the legacy
 `node_modules/<pkg>`. It refuses any path that resolves outside that directory.
 
-`--project` installs catalog plugins into the current project instead:
-`<project>/opencode.json`, with companions in `<project>/.opencode/` (where slim
-looks for its project override). Project scope takes catalog plugins only; it
-rejects bundle plugins, the `settings` group and a run without `--plugins`,
-because the bundle settings and the guard are global-only:
+Without `--global` (or with an explicit `--project`) catalog plugins install
+into the current project instead: `<project>/opencode.json`, with companions in
+`<project>/.opencode/` (where slim looks for its project override). Project
+scope takes catalog plugins only: an explicit `--project` rejects bundle
+plugins and a `plugins` run without catalog `--plugins` (the bundle plugins
+and the guard are global-only), while the default scope skips those with a
+notice. Project settings keys may ride along in the same run:
 
 ```bash
-ycc sync   --target opencode --intent plugins --plugins oh-my-opencode-slim --project
+ycc sync   --target opencode --intent plugins --plugins oh-my-opencode-slim
+ycc sync   --target opencode --intent settings,plugins --plugins oh-my-opencode-slim --project
 ycc remove --target opencode --intent plugins --plugins oh-my-opencode-slim --project
 ```
 
@@ -209,8 +233,8 @@ Two layers enforce it:
   denied. `git diff --no-index` is denied for every restricted agent.
 - **Guard plugin.** `~/.config/opencode/ycc-sensitive-guard` is a local
   OpenCode V2 plugin registered through the relative `plugins` entry above. It
-  is its own bundle unit: `base` mirrors it, and `--settings` (the `plugins`
-  group) installs it with the entry and takes it back on removal. It does not
+  is its own bundle unit: `base` mirrors it, and `--settings --global` (the
+  `plugins` group) installs it with the entry and takes it back on removal. It does not
   depend on `skills/` or `shared/`, so `--skills-home agents` keeps it. For the
   restricted agents it resolves paths against the calling session's directory
   (not the server's; when neither can be determined, the call is rejected) on `read`, `edit`, `write`, `patch`,
@@ -305,9 +329,10 @@ Use `--only` to run exactly the listed steps:
 
 ```bash
 ./install.sh install --target opencode --only base
-./install.sh install --target opencode --only settings
+./install.sh install --target opencode --only settings                    # <project>/opencode.json
+./install.sh install --target opencode --only settings --global           # ~/.config/opencode/opencode.json
 ./install.sh install --target opencode --only rules
-./install.sh install --target opencode --only settings,rules
+./install.sh install --target opencode --only settings,rules --global
 ./install.sh install --target opencode --only mcp                   # <project>/opencode.json
 ./install.sh remove --target opencode --only mcp --global   # remove managed servers
 ```
@@ -322,7 +347,7 @@ config directories, so use the default local mode.
 | Skills   | `~/.config/opencode/skills/`                                    |
 | Agents   | `~/.config/opencode/agents/`                                    |
 | Commands | `~/.config/opencode/commands/`                                  |
-| Config   | `~/.config/opencode/opencode.json`                              |
+| Config   | `<project>/opencode.json` or `~/.config/opencode/opencode.json` |
 | MCP      | `<project>/opencode.json` or `~/.config/opencode/opencode.json` |
 | Rules    | `~/.config/opencode/AGENTS.md`                                  |
 

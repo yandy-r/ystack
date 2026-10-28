@@ -141,6 +141,12 @@ merge_settings_config() {
     )
     [[ "${FORCE:-0}" == "1" ]] && command+=(--force)
     [[ "${DRY_RUN:-0}" == "1" ]] && command+=(--dry-run)
+    # At project scope the destination is usually committed and written by the
+    # team, so a value matching the repo proves nothing: remove (and adoption
+    # on sync) must touch only keys the state records as ycc-written.
+    if [[ ",${groups}," == *",settings-project,"* && " $* " != *" --owned-only "* ]]; then
+        command+=(--owned-only)
+    fi
     "${command[@]}"
 }
 
@@ -205,9 +211,10 @@ plugins_source() {
 
 # config_group_selection <target> <groups> — apply every config-group
 # selector (select.sh SELECTION_GROUP kinds: --plugins, --hooks) to one
-# settings merge. Sets:
+# settings merge, then map the result onto the settings scope. Sets:
 #   CONFIG_GROUPS          <groups>, minus each narrowed group <target>
-#                          manages none of the selected names for (warns);
+#                          manages none of the selected names for (warns) and
+#                          minus each group the project scope never merges;
 #   CONFIG_GROUP_ENTRIES   [<group>]=<csv> of the names kept per narrowed group;
 #   CONFIG_SELECT          helper arguments narrowing only those groups (one
 #                          --entry-groups g1,g2 --entries <union>; plugin keys
@@ -218,6 +225,14 @@ plugins_source() {
 #                          with <t>_catalog_names (opencode), split off the
 #                          bundle merge; a selection of catalog names only
 #                          drops the bundle 'plugins' group without a warning.
+# At project scope (no --package) the remaining groups must be listed by the
+# target's <t>_project_groups hook: any other group is global-only, so it is
+# dropped with a notice ('--project' + an explicitly requested group was
+# already rejected by preflight_step_support), and each kept base group g
+# merges the helper's fail-closed g-project allowlist group instead (the
+# catalog plugins stay project-capable as PLUGINS_CATALOG_SELECT). Remove
+# paths use this too, so remove at project scope only touches
+# project-allowed leaves.
 declare -gA CONFIG_GROUP_ENTRIES=()
 config_group_selection() {
     local target="$1" kind group selection name
@@ -244,6 +259,18 @@ config_group_selection() {
             done
             selection="$(IFS=','; echo "${bundle[*]:-}")"
         fi
+        if [[ -z "${PACKAGE:-}" && "$(step_scope "${target}" settings)" == project \
+            && ",$(target_project_groups "${target}")," != *",${group},"* ]]; then
+            if [[ -n "${selection}" ]]; then
+                warn "${target}: the ${group} group is global-only — skipped at project scope. Pass --global to merge it."
+            fi
+            kept=()
+            for name in ${CONFIG_GROUPS//,/ }; do
+                [[ "${name}" == "${group}" ]] || kept+=("${name}")
+            done
+            CONFIG_GROUPS="$(IFS=','; echo "${kept[*]:-}")"
+            continue
+        fi
         if [[ -z "${selection}" ]]; then
             [[ "${kind}" == plugins && -n "${PLUGINS_CATALOG_SELECT}" ]] \
                 || warn "none of the selected ${SELECTION_NOUNS[${kind}]} ($(selection_for "${kind}" | tr ',' ' ')) is managed for ${target} — skipping its ${group} group"
@@ -260,10 +287,90 @@ config_group_selection() {
         names+=("${selection}")
         info "${SELECTION_NOUNS[${kind}]^}: ${selection//,/, }"
     done
-    [[ ${#narrowed[@]} -gt 0 ]] || return 0
-    local IFS=','
-    # shellcheck disable=SC2034  # CONFIG_SELECT is read by the target libs.
-    CONFIG_SELECT=(--entry-groups "${narrowed[*]}" --entries "${names[*]}")
+    if [[ ${#narrowed[@]} -gt 0 ]]; then
+        local IFS=','
+        # shellcheck disable=SC2034  # CONFIG_SELECT is read by the target libs.
+        CONFIG_SELECT=(--entry-groups "${narrowed[*]}" --entries "${names[*]}")
+    fi
+
+    # Project scope: drop every group the target's project allowlist does not
+    # cover, then merge each kept base group through its g-project subset.
+    if [[ -z "${PACKAGE:-}" && "$(step_scope "${target}" settings)" == "project" ]]; then
+        local allowed
+        allowed="$(target_project_groups "${target}")"
+        kept=()
+        for group in ${CONFIG_GROUPS//,/ }; do
+            [[ -n "${group}" ]] || continue
+            if [[ ",${allowed}," == *",${group},"* ]]; then
+                kept+=("${group}")
+                continue
+            fi
+            local message="${target}: the ${group} group is global-only — skipped at project scope. Pass --global to merge it."
+            # A catalog-only plugins selection drops the bundle group quietly
+            # already (the catalog names ride PLUGINS_CATALOG_SELECT).
+            if [[ "${group}" == plugins && -n "${PLUGINS_CATALOG_SELECT}" ]]; then
+                continue
+            elif [[ "${SCOPE}" == "project" ]] || intent_requested "${group}"; then
+                warn "${message}"
+            else
+                info "${message}"
+            fi
+        done
+        CONFIG_GROUPS="$(IFS=','; echo "${kept[*]:-}")"
+        CONFIG_GROUPS="${CONFIG_GROUPS%,}"
+        if [[ -n "${CONFIG_GROUPS}" ]]; then
+            # Merge each kept base group through its fail-closed g-project
+            # subset (merge_managed_config.py's settings-project group).
+            local -a projected=()
+            for group in ${CONFIG_GROUPS//,/ }; do
+                projected+=("${group}-project")
+            done
+            CONFIG_GROUPS="$(IFS=','; echo "${projected[*]}")"
+        fi
+    fi
+}
+# project_home_conflict — echo why project scope cannot run when the project
+# root IS $HOME (physical paths compared). Empty output means no conflict;
+# the settings skip and the explicit --project gate read it. Kept generic:
+# <context> (e.g. 'claude project scope', 'settings project scope') names the
+# caller in the message.
+project_home_conflict() {
+    local root home
+    root="$(cd "$(project_root)" && pwd -P)"
+    home="$(cd "${HOME}" && pwd -P)"
+    if [[ "${root}" == "${home}" ]]; then
+        # shellcheck disable=SC2016  # Explain the literal HOME boundary.
+        echo "--project at \$HOME: $1 needs a project directory (cd into a project, or use --global)"
+    fi
+}
+
+# settings_legacy_hint <target> <profile> <global dest> — once per target per
+# run, when the settings scope was defaulted (no --project/--global, no
+# --package) and the GLOBAL destination still holds ycc-managed keys from an
+# earlier global sync, note that settings now default to the project so the
+# user knows to pass --global to update or remove them.
+declare -gA SETTINGS_LEGACY_HINT_SHOWN=()
+settings_legacy_hint() {
+    [[ -z "${SCOPE}" && -z "${PACKAGE:-}" ]] || return 0
+    [[ "$(step_scope "$1" settings)" == "project" ]] || return 0
+    [[ -z "${SETTINGS_LEGACY_HINT_SHOWN[$1]:-}" ]] || return 0
+    [[ -f "${CONFIG_MERGE_HELPER}" && -r "${CONFIG_MERGE_HELPER}" ]] || return 0
+    # Only SETTINGS state counts: an earlier mcp/plugins/hooks global sync
+    # records state in the same file but says nothing about settings.
+    if python3 "${CONFIG_MERGE_HELPER}" --profile "$2" --destination "$3" --has-state --groups settings; then
+        warn "$1: settings now default to project scope; $3 still holds ycc-managed keys from earlier syncs — pass --global to update or remove them."
+        SETTINGS_LEGACY_HINT_SHOWN[$1]=1
+    fi
+}
+
+# codex_trust_warn <dest> — the Codex project-config trust warning, once per
+# run (a run with both the mcp and settings steps warns once). Trust lives in
+# ~/.codex/config.toml and is a user decision; ycc never writes it.
+CODEX_TRUST_WARNED=0
+codex_trust_warn() {
+    [[ "${CODEX_TRUST_WARNED}" == "0" ]] || return 0
+    CODEX_TRUST_WARNED=1
+    warn "Codex loads $1 only when the project is trusted in ~/.codex/config.toml."
 }
 
 # ---------------------------------------------------------------------------
@@ -324,12 +431,31 @@ run_repo_style_format_modified() {
 # ---------------------------------------------------------------------------
 # Scope (--project / --global)
 # ---------------------------------------------------------------------------
-# config. Without an explicit flag, these default to project scope and every
-# other step stays global. Package installs keep Claude hooks global alongside
-# their package-wide settings and rules.
-# ponytail: widen this per step as project support lands for settings, rules.
+# Without an explicit flag, these steps default to project scope and every
+# other step stays global: 'mcp' everywhere; 'hooks' for claude; 'settings'
+# for every target that declares <t>_project_groups (claude, codex, opencode).
+# Package installs keep Claude hooks global alongside their package-wide
+# settings and rules. Targets without <t>_project_groups (cursor, omp) skip
+# their settings step at the default scope with a notice (steps.sh).
+#
+# target_project_groups <target> — csv of the settings-file config groups
+# mergeable at project scope ('' when the target has none). Defining the
+# optional <t>_project_groups hook is what makes 'settings' default to
+# project scope for <target>; a listed group g merges the helper's g-project
+# allowlist group (fail-closed: only the allowlisted rules leave the global
+# group), so the plugins/hooks groups stay global-only here.
+target_project_groups() {
+    declare -F "${1}_project_groups" >/dev/null || return 0
+    "${1}_project_groups"
+}
+
 step_supports_project() {
-    [[ "$2" == "mcp" ]] || [[ "$1" == "claude" && "$2" == "hooks" && -z "${PACKAGE:-}" ]]
+    case "$2" in
+        mcp) return 0 ;;
+        hooks) [[ "$1" == claude && -z "${PACKAGE:-}" ]] ;;
+        settings) [[ -z "${PACKAGE:-}" && -n "$(target_project_groups "$1")" ]] ;;
+        *) return 1 ;;
+    esac
 }
 
 # step_allows_project <target> <step> — true when an explicit --project is
@@ -430,6 +556,6 @@ run_mcp_step() {
     info "Merging MCP servers into ${dest}"
     merge_settings_config "${profile}" "${src}" "${dest}" "mcp" "${select[@]}"
     if [[ "${target}" == "codex" && "${dest}" != "${HOME}/.codex/config.toml" ]]; then
-        warn "Codex loads ${dest} only when the project is trusted in ~/.codex/config.toml."
+        codex_trust_warn "${dest}"
     fi
 }

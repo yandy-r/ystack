@@ -110,7 +110,7 @@ home="$(new_home)"
 if out="$(run_install "${home}" install --target cursor --only base --project)"; then
     ko "--project still rejects cursor base"
 else
-    assert_contains "${out}" "project scope currently supports: mcp; claude: hooks; omp: base" "--project still rejects cursor base"
+    assert_contains "${out}" "project scope currently supports: mcp; settings (claude, codex, opencode); claude: hooks; omp: base, dedupe" "--project still rejects cursor base"
 fi
 
 echo
@@ -227,7 +227,7 @@ omp_rules_src="${REPO_ROOT}/ycc/settings/rules/AGENTS.md"
 
 # Dry-run previews settings and rules without 'omp config path' (it writes).
 home="$(new_home)"
-PI_CODING_AGENT_DIR="${home}/pi-agent" install_must_succeed "${home}" install --target omp --only settings,rules --dry-run
+PI_CODING_AGENT_DIR="${home}/pi-agent" install_must_succeed "${home}" install --target omp --only settings,rules --dry-run --global
 assert_contains "${INSTALL_OUT}" "would set /tools/approvalMode" "omp settings dry-run previews the merge"
 assert_contains "${INSTALL_OUT}" "[dry-run] would link ${home}/pi-agent/AGENTS.md" "omp rules dry-run previews the link in the assumed agent dir"
 assert_contains "${INSTALL_OUT}" "assuming the default omp agent dir" "omp dry-run labels the assumed agent dir"
@@ -238,9 +238,31 @@ else
     ko "omp settings/rules dry-run writes nothing"
 fi
 
-# I1: --settings merges the managed leaves without any omp plugin call.
+# Default scope skips settings with a notice; --global performs the user merge.
 home="$(new_home)"
 install_must_succeed "${home}" sync --target omp --intent settings
+out="${INSTALL_OUT}"
+assert_contains "${out}" "omp: settings have no project scope" "omp default settings explains the project-scope skip"
+assert_contains "${out}" ".omp/config.yml" "omp default settings prints the scope note"
+assert_contains "${out}" "<agentDir>/config.yml" "omp default settings names the global recovery flag"
+if [[ ! -e "$(omp_agent "${home}")/config.yml" && ! -e "${home}/project/.omp" && ! -e "${home}/.config/ycc/managed-config-state.json" ]]; then
+    ok "omp default settings writes nothing"
+else
+    ko "omp default settings writes nothing" "${out}"
+fi
+
+out="$(run_install "${home}" sync --target omp --intent settings --project)" && rc=0 || rc=$?
+if [[ ${rc} -ne 0 ]]; then ok "omp explicit --project settings is rejected"; else ko "omp explicit --project settings is rejected" "${out}"; fi
+assert_contains "${out}" "--project is not supported by step 'settings' for target 'omp'" "omp --project settings reports the unsupported step"
+assert_contains "${out}" ".omp/config.yml" "omp --project settings prints the scope note"
+if [[ ! -e "$(omp_agent "${home}")/config.yml" && ! -e "${home}/project/.omp" ]]; then
+    ok "omp --project settings writes nothing"
+else
+    ko "omp --project settings writes nothing" "${out}"
+fi
+
+# I1: --settings merges the managed leaves without any omp plugin call.
+install_must_succeed "${home}" sync --target omp --intent settings --global
 config="$(cat "$(omp_agent "${home}")/config.yml" 2>/dev/null)"
 assert_contains "${config}" "approvalMode: write" "omp --settings writes tools.approvalMode"
 for role in default slow task; do
@@ -251,7 +273,6 @@ done
 assert_not_contains "${config}" "- openai/gpt-5.6-sol:" "omp --settings writes bare chain entries (the turn's thinking level carries over)"
 assert_contains "${INSTALL_OUT}" "applied 7 managed update(s)" "omp --settings reports the merged leaves"
 assert_not_contains "$(omp_log "${home}")" "omp plugin" "omp --settings makes no omp plugin call"
-
 # I2: a user edit to a managed leaf survives a re-run.
 agent="$(omp_agent "${home}")"
 python3 - "${agent}/config.yml" <<'PY'
@@ -261,7 +282,7 @@ data = yaml.safe_load(open(path, encoding="utf-8"))
 data["modelRoles"]["slow"] = "openai/gpt-5.6-sol:low"
 open(path, "w", encoding="utf-8").write(yaml.safe_dump(data, sort_keys=False))
 PY
-install_must_succeed "${home}" install --target omp --only settings
+install_must_succeed "${home}" install --target omp --only settings --global
 assert_contains "${INSTALL_OUT}" "kept your local value at /modelRoles/slow" "omp --settings re-run reports the kept edit"
 assert_contains "$(cat "${agent}/config.yml")" "slow: openai/gpt-5.6-sol:low" "omp --settings re-run keeps the user edit"
 
@@ -287,6 +308,21 @@ else
 fi
 
 # I4: --project with settings or rules is rejected before any write.
+home2="$(new_home)"
+git -C "${home2}/project" init -q
+if out="$(run_install "${home2}" install --target omp --project --settings)"; then
+    ko "omp --project --settings is rejected" "${out}"
+else
+    assert_contains "${out}" "--project is not supported by step 'settings' for target 'omp'" "omp --project --settings is rejected"
+    assert_contains "${out}" ".omp/config.yml" "omp --project --settings prints the scope note"
+fi
+if [[ ! -e "${home2}/project/.omp" && ! -e "$(omp_agent "${home2}")" ]]; then
+    ok "omp --project --settings writes nothing"
+else
+    ko "omp --project --settings writes nothing" "${out}"
+fi
+
+# I4: --project with settings or rules is rejected before any write.
 for flag in --settings --rules; do
     home2="$(new_home)"
     git -C "${home2}/project" init -q
@@ -306,7 +342,7 @@ done
 home2="$(new_home)"
 mkdir -p "${home2}/no-yaml"
 printf 'raise ImportError("No module named yaml")\n' > "${home2}/no-yaml/yaml.py"
-if out="$(PYTHONPATH="${home2}/no-yaml" run_install "${home2}" install --target omp --settings)"; then
+if out="$(PYTHONPATH="${home2}/no-yaml" run_install "${home2}" install --target omp --settings --global)"; then
     ko "omp without PyYAML fails" "${out}"
 else
     assert_contains "${out}" "python3 -m pip install --user pyyaml" "omp without PyYAML names the install command"
@@ -328,7 +364,7 @@ else
 fi
 
 # I5: remove drops the unchanged leaves and the owned link, keeping the edit.
-install_must_succeed "${home}" remove --target omp --intent settings,rules
+install_must_succeed "${home}" remove --target omp --intent settings,rules --global
 config="$(cat "${agent}/config.yml" 2>/dev/null)"
 assert_contains "${config}" "slow: openai/gpt-5.6-sol:low" "omp remove keeps the user-edited leaf"
 assert_not_contains "${config}" "approvalMode" "omp remove drops the unchanged approvalMode leaf"
@@ -337,6 +373,22 @@ assert_not_contains "${config}" "fallbackChains" "omp remove drops the unchanged
 if [[ ! -e "${agent}/AGENTS.md" && ! -L "${agent}/AGENTS.md" ]]; then ok "omp remove unlinks AGENTS.md"; else ko "omp remove unlinks AGENTS.md"; fi
 assert_not_contains "$(omp_log "${home}")" "omp plugin" "omp settings/rules remove makes no omp plugin call"
 
+
+home="$(new_home)"
+install_must_succeed "${home}" sync --target all --intent settings,rules
+out="${INSTALL_OUT}"
+assert_contains "${out}" "cursor: settings have no project scope" "all-target settings/rules skips cursor settings"
+assert_contains "${out}" "omp: settings have no project scope" "all-target settings/rules skips omp settings"
+if [[ -L "$(omp_agent "${home}")/AGENTS.md" && "$(readlink "$(omp_agent "${home}")/AGENTS.md")" == "${omp_rules_src}" ]]; then
+    ok "all-target settings/rules still links omp rules"
+else
+    ko "all-target settings/rules still links omp rules" "${out}"
+fi
+if [[ ! -e "$(omp_agent "${home}")/config.yml" ]]; then
+    ok "all-target settings/rules writes no omp settings"
+else
+    ko "all-target settings/rules writes no omp settings" "${out}"
+fi
 echo
 echo "== install.sh: omp dedupe (YAN-1176) =="
 

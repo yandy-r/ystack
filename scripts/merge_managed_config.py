@@ -22,6 +22,18 @@ Each managed leaf records the SHA-256 of the value this tool last applied, in
 ``--force`` makes the repo value win in every case. State stores hashes only,
 never values, so tokens in a user's config never leak into the state file.
 
+``--has-state`` answers whether that state holds anything for
+``<profile>[scope]:<destination>`` (exit 0 yes, 1 no) without reading the source
+or the destination; installers pass ``--source /dev/null``.
+
+Project scope
+-------------
+``claude-settings``, ``codex-config`` and ``opencode-config`` carry a
+``settings-project`` group: a fail-closed allowlist of their ``settings`` rules
+for project files (``.claude/settings.json``, ``.codex/config.toml``,
+``opencode.json``). Import fails when the allowlist names a path the
+``settings`` group lacks, or a key Codex ignores in project config.
+
 Formats
 -------
 JSON destinations are parsed, merged and re-serialized. TOML destinations are
@@ -96,22 +108,139 @@ STATE_PATH = Path(
 #   entry_key    — ``marketplace``: a derived rule selected through the
 #                  marketplace of each selected ``plugin@marketplace`` entry;
 #                  never listed, and kept on removal while still in use.
+Rule = dict[str, Any]
+RulePath = tuple[str, ...]
+
+CLAUDE_SETTINGS_RULES: list[Rule] = [
+    {"path": ["env"], "policy": "object"},
+    {"path": ["attribution"], "policy": "object"},
+    {"path": ["permissions"], "policy": "object"},
+    {"path": ["statusLine"], "policy": "object"},
+    {"path": ["model"], "policy": "scalar"},
+    {"path": ["modelSettings"], "policy": "object"},
+    {"path": ["alwaysThinkingEnabled"], "policy": "scalar"},
+    {"path": ["effortLevel"], "policy": "scalar"},
+    {"path": ["skipDangerousModePermissionPrompt"], "policy": "scalar"},
+    {"path": ["skipAutoPermissionPrompt"], "policy": "scalar"},
+]
+
+# [projects.*] and [apps.*] are deliberately unmanaged: they hold machine-local
+# trust decisions and account-specific connector IDs.
+CODEX_SETTINGS_RULES: list[Rule] = [
+    {"path": ["personality"], "policy": "scalar"},
+    {"path": ["model"], "policy": "scalar"},
+    {"path": ["model_reasoning_effort"], "policy": "scalar"},
+    {"path": ["model_context_window"], "policy": "scalar"},
+    {"path": ["model_auto_compact_token_limit"], "policy": "scalar"},
+    {"path": ["plan_mode_reasoning_effort"], "policy": "scalar"},
+    {"path": ["approval_policy"], "policy": "scalar"},
+    {"path": ["approvals_reviewer"], "policy": "scalar"},
+    {"path": ["sandbox_mode"], "policy": "scalar"},
+    {"path": ["sandbox_workspace_write"], "policy": "object"},
+    {"path": ["service_tier"], "policy": "scalar"},
+    {"path": ["agents"], "policy": "object"},
+    {"path": ["features"], "policy": "object"},
+]
+
+OPENCODE_SETTINGS_RULES: list[Rule] = [
+    {"path": ["$schema"], "policy": "scalar"},
+    {"path": ["model"], "policy": "scalar"},
+    {"path": ["agents"], "policy": "deep"},
+    {"path": ["providers"], "policy": "deep"},
+    # Scoped to the one leaf the bundle sets so other user-owned
+    # `experimental` toggles are never adopted or deleted.
+    {"path": ["experimental", "subagent_depth"], "policy": "scalar"},
+]
+
+# Project-scope settings (install.sh `settings` step without --global) merge the
+# ``settings-project`` group: a fail-closed allowlist of ``settings`` rules. A
+# rule added to ``settings`` stays global-only until it is listed here.
+PROJECT_GROUP = "settings-project"
+
+# Claude: statusLine points at a script only the global step installs;
+# permissions.defaultMode "auto" and skip*PermissionPrompt do not take effect
+# from a project's shared .claude/settings.json.
+CLAUDE_PROJECT_PATHS: tuple[RulePath, ...] = (
+    ("env",),
+    ("attribution",),
+    ("model",),
+    ("modelSettings",),
+    ("alwaysThinkingEnabled",),
+    ("effortLevel",),
+)
+
+# Codex: approval/sandbox posture stays global so a committed .codex/config.toml
+# never widens it for every contributor.
+CODEX_PROJECT_PATHS: tuple[RulePath, ...] = (
+    ("personality",),
+    ("model",),
+    ("model_reasoning_effort",),
+    ("model_context_window",),
+    ("model_auto_compact_token_limit",),
+    ("plan_mode_reasoning_effort",),
+    ("service_tier",),
+    ("agents",),
+    ("features",),
+)
+
+OPENCODE_PROJECT_PATHS: tuple[RulePath, ...] = (
+    ("$schema",),
+    ("model",),
+    ("agents",),
+    ("providers",),
+    ("experimental", "subagent_depth"),
+)
+
+# Top-level keys Codex ignores (with a startup warning) in project config files;
+# none may ever enter a project group.
+PROJECT_IGNORED_KEYS: dict[str, frozenset[str]] = {
+    "codex-config": frozenset(
+        {
+            "openai_base_url",
+            "chatgpt_base_url",
+            "apps_mcp_product_sku",
+            "model_provider",
+            "model_providers",
+            "notify",
+            "profile",
+            "profiles",
+            "experimental_realtime_ws_base_url",
+            "otel",
+        }
+    ),
+}
+
+
+def project_subset(rules: list[Rule], allowed_paths: tuple[RulePath, ...], label: str) -> list[Rule]:
+    """The ``rules`` whose path is allowlisted for project scope, in base order.
+
+    Raises ``ValueError`` (at import, via PROFILES) when an allowlisted path
+    names no base rule, so a renamed or dropped rule breaks loudly instead of
+    silently shrinking the project group.
+    """
+    known = {tuple(rule["path"]) for rule in rules}
+    missing = ["/".join(path) for path in allowed_paths if path not in known]
+    if missing:
+        raise ValueError(f"{label}: {PROJECT_GROUP} allowlist names paths missing from settings: {', '.join(missing)}")
+    allowed = set(allowed_paths)
+    return [rule for rule in rules if tuple(rule["path"]) in allowed]
+
+
+def check_project_ignored_keys(profiles: dict[str, dict[str, Any]], ignored: dict[str, frozenset[str]]) -> None:
+    """Raise ``ValueError`` when a project group manages a key its runtime ignores at project level."""
+    for name, keys in ignored.items():
+        rules: list[Rule] = profiles[name]["groups"][PROJECT_GROUP]
+        leaked = sorted({str(rule["path"][0]) for rule in rules} & keys)
+        if leaked:
+            raise ValueError(f"{name}: {PROJECT_GROUP} manages keys ignored at project level: {', '.join(leaked)}")
+
+
 PROFILES: dict[str, dict[str, Any]] = {
     "claude-settings": {
         "format": "json",
         "groups": {
-            "settings": [
-                {"path": ["env"], "policy": "object"},
-                {"path": ["attribution"], "policy": "object"},
-                {"path": ["permissions"], "policy": "object"},
-                {"path": ["statusLine"], "policy": "object"},
-                {"path": ["model"], "policy": "scalar"},
-                {"path": ["modelSettings"], "policy": "object"},
-                {"path": ["alwaysThinkingEnabled"], "policy": "scalar"},
-                {"path": ["effortLevel"], "policy": "scalar"},
-                {"path": ["skipDangerousModePermissionPrompt"], "policy": "scalar"},
-                {"path": ["skipAutoPermissionPrompt"], "policy": "scalar"},
-            ],
+            "settings": CLAUDE_SETTINGS_RULES,
+            PROJECT_GROUP: project_subset(CLAUDE_SETTINGS_RULES, CLAUDE_PROJECT_PATHS, "claude-settings"),
             "hooks": [
                 {"path": ["hooks"], "policy": "map-entries"},
             ],
@@ -173,23 +302,8 @@ PROFILES: dict[str, dict[str, Any]] = {
     "codex-config": {
         "format": "toml",
         "groups": {
-            # [projects.*] and [apps.*] are deliberately unmanaged: they hold
-            # machine-local trust decisions and account-specific connector IDs.
-            "settings": [
-                {"path": ["personality"], "policy": "scalar"},
-                {"path": ["model"], "policy": "scalar"},
-                {"path": ["model_reasoning_effort"], "policy": "scalar"},
-                {"path": ["model_context_window"], "policy": "scalar"},
-                {"path": ["model_auto_compact_token_limit"], "policy": "scalar"},
-                {"path": ["plan_mode_reasoning_effort"], "policy": "scalar"},
-                {"path": ["approval_policy"], "policy": "scalar"},
-                {"path": ["approvals_reviewer"], "policy": "scalar"},
-                {"path": ["sandbox_mode"], "policy": "scalar"},
-                {"path": ["sandbox_workspace_write"], "policy": "object"},
-                {"path": ["service_tier"], "policy": "scalar"},
-                {"path": ["agents"], "policy": "object"},
-                {"path": ["features"], "policy": "object"},
-            ],
+            "settings": CODEX_SETTINGS_RULES,
+            PROJECT_GROUP: project_subset(CODEX_SETTINGS_RULES, CODEX_PROJECT_PATHS, "codex-config"),
             "mcp": [
                 {"path": ["mcp_servers"], "policy": "deep"},
             ],
@@ -203,15 +317,8 @@ PROFILES: dict[str, dict[str, Any]] = {
         # opencode parses its config as JSONC (comments, trailing commas).
         "jsonc": True,
         "groups": {
-            "settings": [
-                {"path": ["$schema"], "policy": "scalar"},
-                {"path": ["model"], "policy": "scalar"},
-                {"path": ["agents"], "policy": "deep"},
-                {"path": ["providers"], "policy": "deep"},
-                # Scoped to the one leaf the bundle sets so other user-owned
-                # `experimental` toggles are never adopted or deleted.
-                {"path": ["experimental", "subagent_depth"], "policy": "scalar"},
-            ],
+            "settings": OPENCODE_SETTINGS_RULES,
+            PROJECT_GROUP: project_subset(OPENCODE_SETTINGS_RULES, OPENCODE_PROJECT_PATHS, "opencode-config"),
             "mcp": [
                 {"path": ["mcp", "servers"], "policy": "deep"},
             ],
@@ -257,6 +364,7 @@ PROFILES: dict[str, dict[str, Any]] = {
         },
     },
 }
+check_project_ignored_keys(PROFILES, PROJECT_IGNORED_KEYS)
 
 
 # State field listing the hashes of list-union items this tool appended.
@@ -565,13 +673,19 @@ def adopt_matching_values(
     source: dict[str, Any],
     destination_path: Path,
     state_entry: dict[str, Any],
+    owned_only: bool = False,
 ) -> bool:
     """Record source values already present in the destination as tool-owned.
 
     First-run configs often already equal the repo. Recording that equality is
     essential: otherwise a future repo update looks like a local edit and is
-    conservatively skipped forever.
+    conservatively skipped forever. With ``owned_only`` (project scope, where
+    the destination is usually committed and written by the team), equal
+    values are NOT adopted: recording them as owned would let a later remove
+    delete keys this tool never wrote.
     """
+    if owned_only:
+        return False
     raw = destination_path.read_text(encoding="utf-8")
     if profile["format"] == "json":
         destination = load_json_config(raw, destination_path, profile)
@@ -1196,12 +1310,16 @@ def plan_remove(
     destination: dict[str, Any],
     state_entry: dict[str, Any],
     force: bool,
+    owned_only: bool = False,
 ) -> tuple[list[list[str]], list[tuple[list[str], list[Any]]], list[str], list[str], dict[str, list[str]], list[str]]:
     """Decide which managed entries can be deleted from the destination.
 
     Returns entry paths to delete, list-union rewrites, conflicts, the state
     keys that no longer track anything, the owned-item hashes left per list
     pointer, and notes for marketplaces kept because a plugin still uses them.
+    With ``owned_only``, only entries recorded in ``state_entry`` count as
+    owned — an equal repo value alone never does (project files are usually
+    committed by the team, so matching values prove nothing there).
     """
     rules = entry_policy_rules(profile, groups)
     list_rules = [rule for rule in rules if rule["policy"] == "list-union"]
@@ -1218,7 +1336,7 @@ def plan_remove(
                 "source_value": value,
                 "policy": rule["policy"],
                 "derived": False,
-                "owned_only": bool(rule.get("owned_only")),
+                "owned_only": owned_only or bool(rule.get("owned_only")),
             }
         elif isinstance(value, dict) and value:
             for child_key, child_value in value.items():
@@ -1228,6 +1346,9 @@ def plan_remove(
                     "source_value": child_value,
                     "policy": rule["policy"],
                     "derived": is_derived(rule),
+                    # --owned-only applies to children of object/deep rules
+                    # too (the rule field only reaches scalar rules).
+                    "owned_only": owned_only,
                 }
 
     for key in state_entry:
@@ -1309,6 +1430,7 @@ def remove_json(
     groups: list[str],
     state_entry: dict[str, Any],
     force: bool,
+    owned_only: bool = False,
 ) -> RemoveOutcome:
     if not destination_path.exists():
         return None, [], [], [], {}, []
@@ -1321,7 +1443,7 @@ def remove_json(
         check_cursor_hooks_ownership(source, destination)
 
     to_remove, rewrites, conflicts, stale_keys, owned_after, notes = plan_remove(
-        profile, groups, source, destination, state_entry, force
+        profile, groups, source, destination, state_entry, force, owned_only=owned_only
     )
     if profile.get("strict_hooks") and conflicts:
         raise MergeError(
@@ -1448,6 +1570,7 @@ def remove_toml(
     groups: list[str],
     state_entry: dict[str, Any],
     force: bool,
+    owned_only: bool = False,
 ) -> RemoveOutcome:
     if not destination_path.exists():
         return None, [], [], [], {}, []
@@ -1457,9 +1580,9 @@ def remove_toml(
     to_remove, rewrites, conflicts, stale_keys, owned_after, notes = plan_remove(
         profile, groups, source, destination, state_entry, force
     )
-    if not to_remove and not rewrites:
-        return None, [], conflicts, stale_keys, owned_after, notes
-
+    to_remove, rewrites, conflicts, stale_keys, owned_after, notes = plan_remove(
+        profile, groups, source, destination, state_entry, force, owned_only=owned_only
+    )
     rendered = delete_toml_entries(destination_text, to_remove)
     if rewrites:
         rendered = apply_toml_updates(rendered, list(rewrites))
@@ -1610,12 +1733,13 @@ def remove_yaml(
     groups: list[str],
     state_entry: dict[str, Any],
     force: bool,
+    owned_only: bool = False,
 ) -> RemoveOutcome:
     if not destination_path.exists():
         return None, [], [], [], {}, []
     destination = load_yaml_destination(destination_path)
     to_remove, rewrites, conflicts, stale_keys, owned_after, notes = plan_remove(
-        profile, groups, source, destination, state_entry, force
+        profile, groups, source, destination, state_entry, force, owned_only=owned_only
     )
     if not to_remove and not rewrites:
         return None, [], conflicts, stale_keys, owned_after, notes
@@ -1719,7 +1843,7 @@ def run_remove(
             removers = {"json": remove_json, "toml": remove_toml, "yaml": remove_yaml}
             remove = removers[profile["format"]]
             rendered, removed, conflicts, stale_keys, owned_after, notes = remove(
-                source, destination_path, profile, groups, plan_state, args.force
+                source, destination_path, profile, groups, plan_state, args.force, owned_only=args.owned_only
             )
     except (MergeError, json.JSONDecodeError, tomllib.TOMLDecodeError) as error:
         print(f"merge_managed_config: {error}", file=sys.stderr)
@@ -1810,12 +1934,37 @@ def remove_owns_nothing(
     )
 
 
+def has_state(
+    profile_name: str,
+    profile: dict[str, Any],
+    destination_path: Path,
+    state_scope: str | None,
+    groups: list[str] | None,
+) -> bool:
+    """Whether ``<profile>[scope]:<destination>`` has recorded ownership state.
+
+    With ``groups``, only state under those groups' rules counts (unknown
+    groups raise ``MergeError``); without, any recorded leaf does.
+    """
+    scope = f"[{state_scope}]" if state_scope is not None else ""
+    entry = load_state().get(f"{profile_name}{scope}:{destination_path}")
+    if not isinstance(entry, dict) or not entry:
+        return False
+    if groups is None:
+        return True
+    rules = entry_policy_rules(profile, groups)
+    return any(
+        key.startswith("/") and any(parse_pointer(key)[: len(rule["path"])] == rule["path"] for rule in rules)
+        for key in entry
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", required=True, choices=sorted(PROFILES), help="Managed-key profile to apply")
-    parser.add_argument("--source", required=True, type=Path, help="Repo-managed config file")
+    parser.add_argument("--source", type=Path, help="Repo-managed config file (required unless --has-state)")
     parser.add_argument("--destination", required=True, type=Path, help="User config file to merge into")
-    parser.add_argument("--groups", required=True, help="Comma-separated managed key groups")
+    parser.add_argument("--groups", help="Comma-separated managed key groups (required unless --has-state)")
     parser.add_argument("--force", action="store_true", help="Let repo values win over conflicting local edits")
     parser.add_argument("--dry-run", action="store_true", help="Report the merge without writing anything")
     parser.add_argument("--remove", action="store_true", help="Remove managed entries instead of merging them")
@@ -1838,12 +1987,49 @@ def main() -> int:
         help="Print the entry names the source manages for the entry groups, one per line, and exit",
     )
     parser.add_argument(
+        "--owned-only",
+        action="store_true",
+        help=(
+            "Trust recorded ownership only: --remove never deletes an equal-value key it did not write, "
+            "and a sync adopts nothing (project files are committed by the team; matching values prove nothing)"
+        ),
+    )
+    parser.add_argument(
         "--state-scope",
         help="Keep ownership state under '<profile>[NAME]:<destination>' (one scope per opt-in plugin)",
     )
+    parser.add_argument(
+        "--has-state",
+        action="store_true",
+        help=(
+            "Exit 0 when ownership state exists for '<profile>[scope]:<destination>' (only under --groups rules "
+            "when given), else 1; reads nothing else and writes nothing"
+        ),
+    )
     args = parser.parse_args()
 
+    if args.state_scope is not None and not re.fullmatch(r"[A-Za-z0-9@/._-]+", args.state_scope):
+        print(f"merge_managed_config: invalid --state-scope {args.state_scope!r}", file=sys.stderr)
+        # --has-state reserves 1 for "no state"; a usage error must not read as one.
+        return 2 if args.has_state else 1
     profile = PROFILES[args.profile]
+    if args.has_state:
+        # Answered from the state file alone: --source (e.g. /dev/null) is never read.
+        state_groups = [g.strip() for g in (args.groups or "").split(",") if g.strip()] or None
+        try:
+            found = has_state(args.profile, profile, args.destination.expanduser(), args.state_scope, state_groups)
+        except MergeError as error:
+            print(f"merge_managed_config: {error}", file=sys.stderr)
+            return 2
+        except OSError as error:
+            # An unreadable state file is not "no state" (exit 1); callers
+            # must not silently treat an I/O error as a fresh install.
+            print(f"merge_managed_config: cannot read state: {error}", file=sys.stderr)
+            return 2
+        return 0 if found else 1
+    if args.source is None or args.groups is None:
+        parser.error("--source and --groups are required (unless --has-state)")
+
     groups = [group.strip() for group in args.groups.split(",") if group.strip()]
     if not groups:
         print("merge_managed_config: --groups requires at least one group", file=sys.stderr)
@@ -1867,9 +2053,6 @@ def main() -> int:
             "--groups hooks and cannot be combined with --force or --list-entries",
             file=sys.stderr,
         )
-        return 1
-    if args.state_scope is not None and not re.fullmatch(r"[A-Za-z0-9@/._-]+", args.state_scope):
-        print(f"merge_managed_config: invalid --state-scope {args.state_scope!r}", file=sys.stderr)
         return 1
 
     source_path = args.source if args.source.is_absolute() else (REPO_ROOT / args.source)
@@ -1973,7 +2156,9 @@ def main() -> int:
         if (
             not args.dry_run
             and destination_path.exists()
-            and adopt_matching_values(profile, groups, source, destination_path, state_entry)
+            and adopt_matching_values(
+                profile, groups, source, destination_path, state_entry, owned_only=args.owned_only
+            )
         ):
             state[state_key] = state_entry
             save_state(state)

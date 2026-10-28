@@ -2,8 +2,9 @@
 # opencode.sh — the opencode target: implements the per-target contract that install.sh
 # dispatches through (see scripts/lib/install/steps.sh):
 #   opencode_valid_steps, opencode_intent_steps <intent>, opencode_config_groups,
-#   opencode_project_steps, opencode_preflight, opencode_catalog_names,
-#   opencode_supports_repo_mode, opencode_reads_agents_skills, sync_opencode_target, remove_opencode_target
+#   opencode_project_groups, opencode_settings_global_dest, opencode_preflight,
+#   opencode_catalog_names, opencode_supports_repo_mode,
+#   opencode_reads_agents_skills, sync_opencode_target, remove_opencode_target
 #
 # Sourced by install.sh (never run directly); inherits SCRIPT_DIR and the
 # shared helpers from core.sh / steps.sh / bundle.sh. The opt-in third-party
@@ -57,9 +58,18 @@ opencode_intent_steps() {
 # MCP servers are owned by the scope-aware 'mcp' step.
 opencode_config_groups() { echo "settings,plugins"; }
 
-# opencode_project_steps — steps an explicit --project may run: settings, for
-# catalog plugins only (opencode_preflight rejects anything else).
-opencode_project_steps() { echo "settings"; }
+# opencode_project_groups — settings-file config groups mergeable at project
+# scope (<project>/opencode.json): 'settings' only, through the helper's
+# settings-project allowlist. The bundle plugins group (+ guard directory) is
+# global-only; the opt-in catalog plugins stay project-capable and ride
+# PLUGINS_CATALOG_SELECT (config_group_selection, opencode_preflight and
+# preflight_step_support allow a catalog-only --plugins selection with
+# --project).
+opencode_project_groups() { echo "settings"; }
+
+# opencode_settings_global_dest — the user-scope settings file (legacy-hint
+# target).
+opencode_settings_global_dest() { echo "${HOME}/.config/opencode/opencode.json"; }
 
 # opencode reads bundles from local directories only.
 opencode_supports_repo_mode() { return 1; }
@@ -167,7 +177,9 @@ sync_opencode_target() {
         [[ "${DRY_RUN:-0}" == "1" ]] || mkdir -p "$(dirname "${OPENCODE_SETTINGS_FILE}")"
         # Merge managed keys only: per-machine model overrides, provider
         # credentials and unknown keys in the user's opencode.json are kept.
-        # Project scope (opencode_preflight) carries catalog plugins only.
+        # At project scope the bundle plugins group (+ guard) is global-only;
+        # the catalog plugins ride PLUGINS_CATALOG_SELECT (opencode_preflight
+        # rejects anything else under --project).
         config_group_selection opencode "$(config_groups_for_target opencode)"
         if [[ -n "${CONFIG_GROUPS}" ]]; then
             merge_settings_config \
@@ -176,9 +188,12 @@ sync_opencode_target() {
                 "${OPENCODE_SETTINGS_FILE}" \
                 "${CONFIG_GROUPS}" "${CONFIG_SELECT[@]}"
         fi
+        settings_legacy_hint opencode opencode-config "$(opencode_settings_global_dest)"
+        opencode_catalog_legacy_hint sync
         # The managed `plugins` group loads "./ycc-sensitive-guard"; ship that
         # directory with it (unless 'base' mirrored it above) so the entry
-        # never points at a missing plugin.
+        # never points at a missing plugin. Global scope only: a project
+        # opencode.json would resolve the relative path inside the project.
         if opencode_guard_selected && [[ " ${units[*]:-} " != *" ycc-sensitive-guard "* ]]; then
             command -v rsync >/dev/null 2>&1 || { err "rsync is required but not found"; exit 1; }
             sync_bundle_units "${OPENCODE_PLUGIN_DIR}" "${opencode_dir}" ycc-sensitive-guard
@@ -230,8 +245,12 @@ remove_opencode_target() {
         opencode_catalog_remove
         remove_settings "opencode-config" "${OPENCODE_PLUGIN_DIR}/opencode.json" \
             "${OPENCODE_SETTINGS_FILE}" "${CONFIG_GROUPS}" "${CONFIG_SELECT[@]}"
+        settings_legacy_hint opencode opencode-config "$(opencode_settings_global_dest)"
+        opencode_catalog_legacy_hint remove
         # The guard plugin goes with the `plugins` entry that loads it; an
         # entry kept as a local edit still loads it, so the directory stays.
+        # Global scope only (opencode_guard_selected is never true at project
+        # scope, where the bundle plugins group is not merged).
         if opencode_guard_selected && ! step_enabled base \
             && ! opencode_guard_remains "${opencode_dir}/opencode.json"; then
             remove_mirrored_entries "${OPENCODE_PLUGIN_DIR}/ycc-sensitive-guard" "${opencode_dir}/ycc-sensitive-guard"
@@ -254,9 +273,12 @@ remove_opencode_target() {
 }
 
 # opencode_guard_selected — true when this settings run merges (or removes)
-# the bundle's "./ycc-sensitive-guard" plugins entry: the plugins group runs
-# (CONFIG_GROUPS, set by config_group_selection) and --plugins, if given, names it.
+# the bundle's "./ycc-sensitive-guard" plugins entry: the bundle plugins
+# group runs at global scope (CONFIG_GROUPS, set by config_group_selection)
+# and --plugins, if given, names it. Never true at project scope, where the
+# bundle plugins group is dropped (project scope carries catalog plugins only).
 opencode_guard_selected() {
+    [[ "$(step_scope opencode settings)" == "global" ]] || return 1
     [[ ",${CONFIG_GROUPS}," == *",plugins,"* ]] || return 1
     [[ -z "${CONFIG_GROUP_ENTRIES[plugins]:-}" || ",${CONFIG_GROUP_ENTRIES[plugins]}," == *",./ycc-sensitive-guard,"* ]]
 }

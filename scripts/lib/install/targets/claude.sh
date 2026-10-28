@@ -3,6 +3,8 @@
 # dispatches through (see scripts/lib/install/steps.sh):
 #   claude_valid_steps, claude_intent_steps <intent>, claude_config_groups,
 #   claude_supports_repo_mode, claude_reads_agents_skills, sync_claude_target, remove_claude_target
+# plus the optional project-scope hooks: claude_project_groups (settings),
+# claude_settings_global_dest, claude_settings_file.
 #
 # Sourced by install.sh (never run directly); inherits SCRIPT_DIR and the
 # shared helpers from core.sh / steps.sh / bundle.sh. The mods step lives in
@@ -25,8 +27,8 @@ claude_dry_run_steps() {
 claude_intent_steps() {
     case "$1" in
         base|settings|rules|mcp) echo "$1" ;;
-        # Project hooks use the native plugin, which carries its own activation;
-        # the settings group remains global until its own project support lands.
+        # Project hooks use the native plugin, which carries its own
+        # activation; the hooks settings group stays global-only.
         hooks)
             if [[ "$(step_scope claude hooks)" == "project" ]]; then
                 echo "hooks"
@@ -50,6 +52,26 @@ claude_intent_steps() {
 # claude_config_groups — default managed config groups for settings.json.
 # The intent filter (and its order) lives in config_groups_for_target.
 claude_config_groups() { echo "settings,hooks,plugins"; }
+
+# claude_project_groups — settings-file config groups mergeable at project
+# scope (<project>/.claude/settings.json): 'settings' only, through the
+# helper's settings-project allowlist (preference keys; no statusLine,
+# permissions, skip*PermissionPrompt). plugins/hooks stay global-only.
+claude_project_groups() { echo "settings"; }
+
+# claude_settings_global_dest — the user-scope settings file (legacy-hint
+# target and the default-scope skip destination).
+claude_settings_global_dest() { echo "${HOME}/.claude/settings.json"; }
+
+# claude_settings_file — the settings destination for the current scope:
+# project <root>/.claude/settings.json, global ~/.claude/settings.json.
+claude_settings_file() {
+    if [[ "$(step_scope claude settings)" == "project" ]]; then
+        echo "$(project_root)/.claude/settings.json"
+    else
+        echo "${HOME}/.claude/settings.json"
+    fi
+}
 
 claude_supports_repo_mode() { return 0; }
 
@@ -313,6 +335,8 @@ claude_project_install_plugin() {
     )
 }
 
+
+
 # claude_project_remove_plugin <plugin> — retract project enablement; remove
 # only declarations the installer could write, once neither project file needs ycc.
 claude_project_remove_plugin() {
@@ -430,12 +454,10 @@ claude_project_hooks_selected() {
 # claude_project_hooks_unavailable_reason — shared preflight/step availability
 # check. An empty result means project hooks can run.
 claude_project_hooks_unavailable_reason() {
-    local root home
-    root="$(cd "$(project_root)" && pwd -P)"
-    home="$(cd "${HOME}" && pwd -P)"
-    if [[ "${root}" == "${home}" ]]; then
-        # shellcheck disable=SC2016  # Explain the literal HOME boundary.
-        echo '--project at $HOME: claude project scope needs a project directory (cd into a project, or use --global)'
+    local reason
+    reason="$(project_home_conflict "claude project scope")"
+    if [[ -n "${reason}" ]]; then
+        echo "${reason}"
         return
     fi
     if ! command -v claude >/dev/null 2>&1; then
@@ -624,7 +646,9 @@ sync_claude_target() {
         base_ran=1
     fi
     if step_enabled settings; then
-        printf '\n%sClaude: merge settings + copy statusline%s\n' "${BOLD}" "${NC}"
+        local claude_settings_dest
+        claude_settings_dest="$(claude_settings_file)"
+        printf '\n%sClaude: merge settings into %s%s\n' "${BOLD}" "${claude_settings_dest}" "${NC}"
         # Structured merge keeps CLI-written marketplace entries and local
         # machine preferences while updating repo-managed model, hook and
         # plugin keys. This is safe even when 'base' ran in the same invocation.
@@ -633,11 +657,16 @@ sync_claude_target() {
             merge_settings_config \
                 "claude-settings" \
                 "${SCRIPT_DIR}/ycc/settings/settings.json" \
-                "${HOME}/.claude/settings.json" \
+                "${claude_settings_dest}" \
                 "${CONFIG_GROUPS}" "${CONFIG_SELECT[@]}"
         fi
-        if [[ ${#INTENTS[@]} -eq 0 ]] || intent_requested settings; then
-            copy_settings_file "${SCRIPT_DIR}/ycc/settings/statusline-command.sh" "${HOME}/.claude/statusline-command.sh"
+        settings_legacy_hint claude claude-settings "$(claude_settings_global_dest)"
+        # The statusline script is installed globally only: a project settings
+        # file must not point at a script ycc never placed in the project.
+        if [[ "$(step_scope claude settings)" == "global" ]]; then
+            if [[ ${#INTENTS[@]} -eq 0 ]] || intent_requested settings; then
+                copy_settings_file "${SCRIPT_DIR}/ycc/settings/statusline-command.sh" "${HOME}/.claude/statusline-command.sh"
+            fi
         fi
         ran=1
     fi
@@ -803,12 +832,17 @@ remove_claude_target() {
         unlink_owned_link "${SCRIPT_DIR}/ycc/settings/rules/AGENTS.md" "${claude_dir}/AGENTS.md"
     fi
     if step_enabled settings; then
-        printf '\n%sClaude: remove managed settings + statusline%s\n' "${BOLD}" "${NC}"
+        local claude_settings_dest
+        claude_settings_dest="$(claude_settings_file)"
+        printf '\n%sClaude: remove managed settings from %s%s\n' "${BOLD}" "${claude_settings_dest}" "${NC}"
         config_group_selection claude "$(config_groups_for_target claude)"
         remove_settings "claude-settings" "${SCRIPT_DIR}/ycc/settings/settings.json" \
-            "${claude_dir}/settings.json" "${CONFIG_GROUPS}" "${CONFIG_SELECT[@]}"
-        if [[ ${#INTENTS[@]} -eq 0 ]] || intent_requested settings; then
-            remove_copied_file "${SCRIPT_DIR}/ycc/settings/statusline-command.sh" "${claude_dir}/statusline-command.sh"
+            "${claude_settings_dest}" "${CONFIG_GROUPS}" "${CONFIG_SELECT[@]}"
+        settings_legacy_hint claude claude-settings "$(claude_settings_global_dest)"
+        if [[ "$(step_scope claude settings)" == "global" ]]; then
+            if [[ ${#INTENTS[@]} -eq 0 ]] || intent_requested settings; then
+                remove_copied_file "${SCRIPT_DIR}/ycc/settings/statusline-command.sh" "${claude_dir}/statusline-command.sh"
+            fi
         fi
     fi
     remove_slices claude skills agents commands

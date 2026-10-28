@@ -78,7 +78,8 @@ files are MERGED (repo-managed keys only), so local edits, tokens, trusted
 projects and CLI-written marketplace entries survive. 'install' is the
 step-flag form used for first-time setup.
 
-  $(basename "$0") sync --target claude --intent hooks,settings,mcp,plugins
+  $(basename "$0") sync --target claude --intent hooks,settings,mcp
+  $(basename "$0") sync --target all --intent settings,rules --global
   $(basename "$0") sync --target codex,claude,opencode --intent mcp
   $(basename "$0") sync --target opencode --intent mcp --mcps github,linear
   $(basename "$0") sync --target claude --intent mods
@@ -123,12 +124,16 @@ plugins, mods):
     agents    ~/.agents/skills/<name> (+ ~/.agents/ycc-shared/), read by Zed,
               Codex, opencode, Cursor, Gemini CLI, Copilot, Amp, Goose, Windsurf
   settings  Merge repo-managed config keys (models, effort levels, ...).
+            Project scope by default on claude, codex and opencode; cursor
+            and omp write only with --global (see Scope).
   rules     Link native global instructions (Cursor: manual Settings guidance).
   mcp       Merge MCP server definitions.
   hooks     Install hooks. claude defaults to the native ycc-hooks plugin at
             project scope; --global merges hook config and links its scripts.
   plugins   Merge plugin enablement and marketplace entries. Add 'base' too
             when you also want the target's CLI to perform registration.
+            The plugins config group is global-only (pass --global); opencode
+            catalog plugins also install per project.
   mods      Install the Claude Code mods under ycc/mods (claude only for now).
 
   Intents a target cannot execute are reported and skipped. 'sync' is exclusive:
@@ -154,7 +159,8 @@ plugins, mods):
               skills, agents, commands, hooks, mcp, mods → no-op
               (the native packages ycc, ycc-mcp and ycc-rules carry skills, agents,
               commands, MCP servers and rules; dedupe is default-on and writes the user
-              config.yml; settings and rules are opt-in, user scope only)
+              config.yml; settings and rules are opt-in, user scope only;
+              settings runs only with --global)
 
 Remove ('remove' subcommand):
   Undoes what the selected steps installed, for every target and intent (same
@@ -168,7 +174,8 @@ Remove ('remove' subcommand):
                             symlinks, only while they still point here.
     claude project hooks    native plugin uninstall; its project marketplace
                             goes only when declared there and no longer used.
-    claude statusline script    only while identical to the repo (or --force).
+    claude statusline script    only while identical to the repo (or --force);
+                                --global only.
     base                        claude: 'claude plugin uninstall ycc@ycc' +
                                 marketplace remove; cursor/opencode: the
                                 bundle entries from the synced dirs; codex:
@@ -191,25 +198,30 @@ Remove ('remove' subcommand):
 
   $(basename "$0") remove --target claude --only mcp            # project scope
   $(basename "$0") remove --target all --intent mcp --global    # user-global
-  $(basename "$0") remove --target codex --intent settings,rules
+  $(basename "$0") remove --target codex --intent settings,rules  # project settings
   $(basename "$0") remove --target all --intent base,settings,rules,hooks,plugins,mods
   $(basename "$0") remove --target opencode --intent agents,commands
   $(basename "$0") remove --target opencode --intent plugins --plugins oh-my-opencode-slim --purge-cache
   $(basename "$0") remove --target all --only mcp --dry-run     # preview, change nothing
   $(basename "$0") remove --target omp --only base --dry-run    # preview the omp uninstall
 
-  Global installer-managed Claude hooks need a separate removal:
+  Global settings/plugins and installer-managed Claude hooks need --global:
+  $(basename "$0") remove --target claude,codex,opencode --intent settings,plugins --global
   $(basename "$0") remove --target claude --intent hooks --global
 
 Scope (--project | --global, mutually exclusive):
-  Without a flag, steps that support project scope use it; all others stay
-  global. --project with a step lacking project support is an error. The
+  Without a flag, steps that support project scope use it (mcp; settings on
+  claude, codex and opencode; claude hooks) and all others stay global;
+  cursor and omp settings are skipped with a notice (their --project is an
+  error). --project with a step lacking project support is an error. The
   project is the git toplevel of the current directory (else the directory).
-  Project-capable steps today: mcp and claude hooks (default project; package
-  installs keep hooks global), omp base,dedupe (opt-in: only with an explicit
-  --project; omp installs default to user scope; dedupe always writes the user
-  config.yml), and opencode settings for catalog plugins only (opt-in:
-  <project>/opencode.json plus companions in <project>/.opencode/).
+  Package installs keep hooks and settings global. omp base,dedupe are
+  opt-in: only with an explicit --project (omp installs default to user
+  scope; dedupe always writes the user config.yml).
+
+  Behavior change: settings used to write only user-global files. Pass
+  --global to keep that (install, sync and remove alike). A defaulted run
+  warns while the global file still holds ycc-managed keys.
 
     target    mcp --project                   mcp --global
     claude    <project>/.mcp.json             ~/.claude.json
@@ -224,9 +236,29 @@ Scope (--project | --global, mutually exclusive):
               (writes <project>/.claude/settings.json;
               needs Claude Code >= 2.1.300; refused at \$HOME)
 
+    target    settings --project (default)    settings --global
+    claude    <project>/.claude/settings.json ~/.claude/settings.json +
+                                              ~/.claude/statusline-command.sh
+    codex     <project>/.codex/config.toml    ~/.codex/config.toml
+              (Codex loads it only for trusted projects)
+    opencode  <project>/opencode.json         ~/.config/opencode/opencode.json
+              (catalog plugins: + <project>/.opencode/)
+    cursor    none (skipped unless --global)  ~/.cursor/cli-config.json
+    omp       none (skipped unless --global)  <agentDir>/config.yml
+    Project files take preference keys only. claude: env, attribution, model,
+    modelSettings, alwaysThinkingEnabled, effortLevel. codex: personality,
+    model, model_reasoning_effort, model_context_window,
+    model_auto_compact_token_limit, plan_mode_reasoning_effort, service_tier,
+    [agents], [features]. opencode: every managed settings key. Global-only:
+    the plugins and hooks config groups (opencode catalog plugins excepted),
+    claude statusLine, permissions and skip*PermissionPrompt, codex approval
+    and sandbox keys. These project files are usually committed: review them
+    before committing. Refused at \$HOME (default scope skips with a notice).
+
     target    base --project                  base (default, or --global)
     omp       omp plugin install --scope      omp plugin install --scope user
               project (refused at \$HOME)
+
 Merge semantics (all structured config files):
   - Keys this repo declares as managed are written; every other key is kept.
   - A managed value the installer previously wrote is updated automatically.
@@ -269,14 +301,24 @@ Options:
                       are preserved unless --force is passed. Non-structured
                       companion files (for example the Claude statusline script)
                       still use copy semantics.
-                      Mode-agnostic. Scope per target:
-                        claude   — settings.json, statusline-command.sh
-                        codex    — config.toml
-                        opencode — opencode.json
-                        cursor   — cli-config.json (CLI model preference)
-                        omp      — <agentDir>/config.yml (modelRoles,
+                      Mode-agnostic. Scope per target (project = default,
+                      --global = user files; see Scope above):
+                        claude   — <project>/.claude/settings.json (preference
+                                   keys only) | ~/.claude/settings.json +
+                                   statusline-command.sh (global only)
+                        codex    — <project>/.codex/config.toml (trusted
+                                   projects only; no approval/sandbox keys)
+                                   | ~/.codex/config.toml
+                        opencode — <project>/opencode.json |
+                                   ~/.config/opencode/opencode.json
+                        cursor   — global-only (skipped unless --global):
+                                   ~/.cursor/cli-config.json (CLI model
+                                   preference)
+                        omp      — global-only (skipped unless --global):
+                                   <agentDir>/config.yml (modelRoles,
                                    retry.fallbackChains, tools.approvalMode;
                                    user scope)
+                      Project files are usually committed; review them first.
   --rules             Additive: SYMLINK rules files so edits flow across
                       systems (this is the old --settings behavior for rules).
                       Refuses to replace a real rules file without --force;
@@ -336,14 +378,20 @@ Options:
                       install --only settings); not with --package.
                       Marketplaces follow their plugins; remove keeps one
                       while an enabled plugin still uses it. A target that
-                      manages none of them skips its plugins group.
+                      manages none of them skips its plugins group. The
+                      plugins group is global-only: pass --global (default
+                      scope skips it with a notice; an explicit --project
+                      rejects --intent plugins / --plugins, except opencode
+                      catalog names).
                       opencode also offers an opt-in catalog of pinned
                       third-party plugins (ycc/settings/opencode-plugins.json,
                       e.g. oh-my-opencode-slim): only --plugins installs one;
                       it merges the pinned item plus its managed keys, ships
                       its companion config, and prints manual follow-ups.
                       remove without --plugins takes back every catalog
-                      plugin ycc installed.
+                      plugin ycc installed. Catalog plugins also install per
+                      project: <project>/opencode.json, companions in
+                      <project>/.opencode/.
                       Names: '$(basename "$0") list plugins'
   --mods <names>      Comma-separated claude mods (ycc-mods marketplace
                       plugins): the mods step installs (or uninstalls) only
@@ -363,16 +411,18 @@ Options:
                       selection remains. A target whose hooks step has no
                       hook-event selection (cursor) skips it with a warning.
                       Names: '$(basename "$0") list hooks'
-  --project           Scope-capable steps (mcp, claude hooks) write into the
-                      current project. Default when neither flag is given
-                      (except package installs, whose hooks stay global).
-                      Claude project hooks refuse \$HOME. omp base installs at
-                      omp's project scope only with an explicit --project
-                      (never at \$HOME). opencode settings, opt-in and for
-                      catalog plugins only (--intent plugins
-                      --plugins <catalog names>): <project>/opencode.json and
-                      <project>/.opencode/.
-  --global            Scope-capable steps write into user-global config.
+  --project           Scope-capable steps (mcp; settings on claude, codex and
+                      opencode; claude hooks) write into the current project.
+                      Default when neither flag is given (except package
+                      installs, whose hooks and settings stay global).
+                      Claude project hooks and project settings refuse \$HOME.
+                      Project settings carry preference keys only and never
+                      the global-only plugins/hooks groups (opencode catalog
+                      plugins excepted). cursor and omp settings reject it.
+                      omp base installs at omp's project scope only with an
+                      explicit --project (never at \$HOME).
+  --global            Scope-capable steps write into user-global config. Pass
+                      it to keep the pre-project-scope settings behavior.
   --hooks             install only: additive, also run the target's 'hooks'
                       step. Claude defaults to the native ycc-hooks plugin at
                       project scope; --global keeps its settings merge and
@@ -474,6 +524,8 @@ Target steps:
                       write doesn't pollute the committed source file. Edits
                       in ycc/ apply on /reload-plugins.
             settings: MERGE managed keys from ycc/settings/settings.json into
+                      <project>/.claude/settings.json (default; preference
+                      keys only, no statusline) or, with --global,
                       ~/.claude/settings.json and COPY statusline-command.sh.
                       Local edits and CLI-written marketplace entries are
                       preserved unless --force resolves a managed conflict.
@@ -502,8 +554,11 @@ Target steps:
             agents:   generate + install each agent into ~/.cursor/agents/.
             commands: install each command into ~/.cursor/commands/ (each
                       references its skill; missing skills fail closed).
-            settings: merge packages/cursor/installer-fallback/config/cli-config.json into
-                      ~/.cursor/cli-config.json (main CLI model preference).
+            settings: --global only (skipped otherwise): merge
+                      packages/cursor/installer-fallback/config/cli-config.json
+                      into ~/.cursor/cli-config.json (main CLI model
+                      preference). Cursor's project .cursor/cli.json carries
+                      permissions only.
             mcp:      merge mcp-configs/mcp.json mcpServers into
                       <project>/.cursor/mcp.json or ~/.cursor/mcp.json.
             rules:    print manual User Rules instructions (Settings → Rules).
@@ -526,9 +581,12 @@ Target steps:
                       link, cache or marketplace entry.
             agents:   generate + install each custom agent into ~/.codex/agents/.
             settings: MERGE managed keys from .codex-plugin/config/config.toml
-                      into ~/.codex/config.toml. Comments, trusted projects,
-                      MCP bearer tokens, connector entries and unknown tables
-                      are preserved; the 'plugins' intent maps here too.
+                      into <project>/.codex/config.toml (default; preference
+                      keys only, loaded only for trusted projects) or
+                      ~/.codex/config.toml (--global). Comments, trusted
+                      projects, MCP bearer tokens, connector entries and
+                      unknown tables are preserved; the 'plugins' intent maps
+                      here too (--global only).
             mcp:      merge [mcp_servers.*] from .codex-plugin/config/config.toml
                       into <project>/.codex/config.toml or ~/.codex/config.toml.
             rules:    symlink .codex-plugin/config/default.rules AND
@@ -540,9 +598,11 @@ Target steps:
             agents:   generate + install each agent into agents/.
             commands: generate + install each command into commands/.
             settings: MERGE managed keys from .opencode-plugin/opencode.json
-                      into ~/.config/opencode/opencode.json. Local model
+                      into <project>/opencode.json (default) or
+                      ~/.config/opencode/opencode.json (--global). Local model
                       choices, provider credentials and unknown keys are
-                      preserved; the 'plugins' intent maps here too.
+                      preserved; the 'plugins' intent maps here too (bundle
+                      plugins --global only; catalog plugins either scope).
             mcp:      merge mcp.servers from .opencode-plugin/opencode.json into
                       <project>/opencode.json or ~/.config/opencode/opencode.json.
             rules:    symlink .opencode-plugin/AGENTS.md into
@@ -573,10 +633,11 @@ Target steps:
                       skills are never touched. --only base skips it (and
                       prints the duplicates); remove --only dedupe takes the
                       entries back.
-            settings: opt-in, user scope only. MERGE the ycc-owned
-                      modelRoles, retry.fallbackChains and tools.approvalMode
-                      leaves from ycc/settings/omp/config.yml into
-                      <agentDir>/config.yml
+            settings: opt-in, user scope only, --global only (skipped
+                      otherwise; ycc never writes project .omp/config.yml).
+                      MERGE the ycc-owned modelRoles, retry.fallbackChains
+                      and tools.approvalMode leaves from
+                      ycc/settings/omp/config.yml into <agentDir>/config.yml
                       (needs PyYAML); local edits are kept unless --force.
             rules:    opt-in, user scope only. symlink
                       ycc/settings/rules/AGENTS.md into <agentDir>/.
@@ -587,9 +648,10 @@ Target steps:
 Examples:
   $(basename "$0") install --target claude                         # base only (register local marketplace)
   $(basename "$0") install --target claude --only base             # same, exclusive
-  $(basename "$0") install --target claude --settings --rules      # base + merge settings + link rules
+  $(basename "$0") install --target claude --settings --rules      # base + project settings + link rules
   $(basename "$0") install --target claude --settings --rules --mcp
-  $(basename "$0") install --target claude --only settings         # copy settings only
+  $(basename "$0") install --target claude --only settings         # <project>/.claude/settings.json only
+  $(basename "$0") install --target claude --only settings --global  # ~/.claude/settings.json + statusline
   $(basename "$0") install --target claude --only rules            # link rules only
   $(basename "$0") install --target claude --only mcp            # project .mcp.json
   $(basename "$0") install --target claude --only mcp --global   # ~/.claude.json
@@ -600,8 +662,9 @@ Examples:
   $(basename "$0") install --target cursor --mcp                   # base + mcp
   $(basename "$0") install --target cursor --rules                 # base + manual User Rules guidance
   $(basename "$0") install --target cursor --only rules            # rules only
-  $(basename "$0") install --target codex --settings --rules       # base + merge config + link rules
-  $(basename "$0") install --target codex --only settings          # merge config.toml only
+  $(basename "$0") install --target codex --settings --rules       # base + project config.toml + link rules
+  $(basename "$0") install --target codex --only settings          # <project>/.codex/config.toml only
+  $(basename "$0") install --target codex --only settings --global # ~/.codex/config.toml only
   $(basename "$0") install --target codex --only rules             # link default.rules + AGENTS.md
   $(basename "$0") install --target opencode                       # base only
   $(basename "$0") install --target opencode --settings --rules    # base + merge opencode.json + link AGENTS.md
@@ -610,7 +673,8 @@ Examples:
   $(basename "$0") install --target codex,opencode --skills-home agents  # skills shared via ~/.agents/skills
   $(basename "$0") install --target codex --only agents            # just ~/.codex/agents
   $(basename "$0") install --target all --only agents              # agents everywhere, no plugins
-  $(basename "$0") install --target all --settings --rules --mcp
+  $(basename "$0") install --target all --settings --rules --mcp   # project settings (cursor/omp skip)
+  $(basename "$0") install --target all --settings --rules --global  # new machine: user-global settings
   $(basename "$0") install --target claude,codex --only rules      # rules for two targets
   $(basename "$0") install --target all --rules --force            # force-replace user-authored rules files
 
@@ -635,7 +699,7 @@ Examples:
   $(basename "$0") install --target omp --project                  # omp project scope (not at \$HOME)
   $(basename "$0") install --target omp --force                    # reinstall the ycc-owned packages
   $(basename "$0") remove  --target omp --only base                # uninstall what ycc installed
-  $(basename "$0") install --target omp --settings --rules         # ycc model roles + approvals, AGENTS.md (user scope)
+  $(basename "$0") install --target omp --settings --rules --global  # ycc model roles + approvals, AGENTS.md (user scope)
   $(basename "$0") migrate --target omp                            # report legacy ycc skills in ~/.agents/skills
 EOF
 }

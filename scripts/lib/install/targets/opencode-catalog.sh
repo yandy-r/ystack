@@ -39,33 +39,39 @@ opencode_settings_paths() {
         root="$(project_root)"
         OPENCODE_SETTINGS_FILE="${root}/opencode.json"
         OPENCODE_COMPANION_DIR="${root}/.opencode"
+        # The project root itself can be ~/.config/opencode when that
+        # directory is versioned as its own repo; then the "project" file IS
+        # the global file, and companions must not land in a nested
+        # .opencode/ directory. Fall back to the global paths.
+        if [[ "${OPENCODE_SETTINGS_FILE}" == "$(opencode_settings_global_dest)" ]]; then
+            OPENCODE_SETTINGS_FILE="$(opencode_settings_global_dest)"
+            OPENCODE_COMPANION_DIR="${HOME}/.config/opencode"
+        fi
     else
         OPENCODE_SETTINGS_FILE="${HOME}/.config/opencode/opencode.json"
         OPENCODE_COMPANION_DIR="${HOME}/.config/opencode"
     fi
 }
 
-# opencode_preflight — project scope merges catalog plugins only: the bundle
-# settings, bundle plugins and the guard directory are global-only.
+# opencode_preflight — with --project, a plugins selection must name catalog
+# plugins only: the bundle plugins and the guard directory are global-only
+# (the bundle settings group is project-capable since the settings step now
+# defaults to project scope).
 opencode_preflight() {
     [[ "${SCOPE}" == "project" ]] || return 0
     target_runs_step opencode settings || return 0
-    local name bundle="" catalog=""
-    if has_selection plugins; then
-        local -a names=()
-        mapfile -t names < <(opencode_catalog_names)
-        for name in $(selection_for_target plugins opencode | tr ',' ' '); do
-            if [[ " ${names[*]} " == *" ${name} "* ]]; then
-                catalog+="${catalog:+,}${name}"
-            else
-                bundle+="${bundle:+,}${name}"
-            fi
-        done
-    fi
-    if target_merges_group opencode settings || ! target_merges_group opencode plugins \
-        || [[ -z "${catalog}" || -n "${bundle}" ]]; then
-        err "--project for opencode settings supports catalog plugins only (the bundle settings and plugins are global-only)"
-        [[ -n "${bundle}" ]] && err "  bundle plugins selected: ${bundle//,/, }"
+    target_merges_group opencode plugins || return 0
+    has_selection plugins || return 0
+    local name bundle=""
+    local -a names=()
+    mapfile -t names < <(opencode_catalog_names)
+    for name in $(selection_for_target plugins opencode | tr ',' ' '); do
+        [[ -n "${name}" ]] || continue
+        [[ " ${names[*]} " == *" ${name} "* ]] || bundle+="${bundle:+,}${name}"
+    done
+    if [[ -n "${bundle}" ]]; then
+        err "--project for opencode plugins supports catalog plugins only (the bundle plugins and the guard directory are global-only)"
+        err "  bundle plugins selected: ${bundle//,/, }"
         err "  e.g. ${CLI_NAME} sync --target opencode --intent plugins --plugins <catalog names> --project"
         err "  catalog names: $(opencode_catalog_names | paste -sd, - | sed 's/,/, /g')"
         exit 1
@@ -188,16 +194,24 @@ opencode_config_loads_after_remove() {
 # opencode_catalog_has_state <name> <opencode.json> — true when the managed
 # config state records a catalog merge of <name> into <opencode.json>.
 opencode_catalog_has_state() {
-    local state="${YCC_MANAGED_CONFIG_STATE:-${XDG_CONFIG_HOME:-${HOME}/.config}/ycc/managed-config-state.json}"
-    [[ -f "${state}" ]] || return 1
-    python3 - "${state}" "opencode-catalog[$1]:$2" <<'PY'
-import json
-import sys
+    python3 "${CONFIG_MERGE_HELPER}" --profile opencode-catalog --destination "$2" \
+        --state-scope "$1" --has-state >/dev/null 2>&1
+}
 
-try:
-    state = json.load(open(sys.argv[1], encoding="utf-8"))
-except (OSError, ValueError):
-    sys.exit(1)
-sys.exit(0 if isinstance(state, dict) and state.get(sys.argv[2]) else 1)
-PY
+# opencode_catalog_legacy_hint <sync|remove> — the settings legacy hint covers
+# the opencode-config profile only; a catalog-only install
+# (--intent plugins --plugins <name> --global) leaves opencode-catalog[NAME]
+# state instead, so check that too, for the selected or recorded names.
+opencode_catalog_legacy_hint() {
+    [[ -z "${SCOPE}" && -z "${PACKAGE:-}" ]] || return 0
+    [[ "$(step_scope opencode settings)" == "project" ]] || return 0
+    [[ -z "${SETTINGS_LEGACY_HINT_SHOWN[opencode]:-}" ]] || return 0
+    local name
+    for name in $(opencode_catalog_names); do
+        if opencode_catalog_has_state "${name}" "$(opencode_settings_global_dest)"; then
+            warn "opencode: settings now default to project scope; $(opencode_settings_global_dest) still holds ycc-managed keys from earlier syncs — pass --global to update or remove them."
+            SETTINGS_LEGACY_HINT_SHOWN[opencode]=1
+            return 0
+        fi
+    done
 }
