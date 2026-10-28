@@ -1736,6 +1736,8 @@ def run_remove(
     if args.dry_run:
         for path in removed:
             print(f"  would remove {pointer(path)}")
+        if rendered is not None and rendered_is_empty(profile, rendered):
+            print(f"  would remove {destination_path}")
         return 0
 
     for key in stale_keys:

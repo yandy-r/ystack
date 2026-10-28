@@ -226,7 +226,31 @@ class CompanionTestCase(CatalogBase):
         self.assertIn("[ok] removed", self.companions("remove"))
         self.assertFalse(self.dest.exists())
         self.assertEqual(self.owned(), {})
-        self.assertEqual(self.companions("remove"), "")
+
+    def test_dry_run_sync_creates_no_destination_or_state(self) -> None:
+        output = self.companions("sync", "--dry-run")
+        self.assertIn(f"would copy {self.dest}", output)
+        self.assertFalse(self.dest_dir.exists())
+        self.assertEqual(self.owned(), {})
+
+    def test_dry_run_does_not_adopt_identical_file(self) -> None:
+        self.dest_dir.mkdir(parents=True)
+        self.dest.write_bytes(COMPANION)
+        self.assertIn("up to date", self.companions("sync", "--dry-run"))
+        self.assertEqual(self.dest.read_bytes(), COMPANION)
+        self.assertEqual(self.owned(), {})
+
+    def test_dry_run_update_and_remove_preserve_bytes_and_state(self) -> None:
+        self.companions("sync")
+        state = self.state.parent / "opencode-plugin-files.json"
+        before = state.read_bytes()
+        self.companion_source.write_bytes(b'{"preset": "new"}\n')
+        self.assertIn(f"would copy {self.dest}", self.companions("sync", "--dry-run"))
+        self.assertEqual(self.dest.read_bytes(), COMPANION)
+        self.assertEqual(state.read_bytes(), before)
+        self.assertIn(f"would remove {self.dest}", self.companions("remove", "--dry-run"))
+        self.assertEqual(self.dest.read_bytes(), COMPANION)
+        self.assertEqual(state.read_bytes(), before)
 
 
 class PurgeCacheTestCase(CatalogBase):
@@ -298,6 +322,14 @@ class PurgeCacheTestCase(CatalogBase):
         self.assertTrue(precious.is_dir())
         self.assertTrue((self.cache / "node_modules" / "a").is_dir())
 
+    def test_dry_run_keeps_cached_copies(self) -> None:
+        paths = [self.make("npm/demo-plugin@1.2.3"), self.make("node_modules/demo-plugin")]
+        result = self.run_cli("purge-cache", "--names", "demo-plugin", "--cache-dir", str(self.cache), "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for path in paths:
+            self.assertTrue(path.is_dir())
+            self.assertIn(f"would remove {path}", result.stdout)
+
     def test_containment_checks_the_path_itself(self) -> None:
         sys.path.insert(0, str(CLI.parent))
         from opencode_plugin_catalog import contained
@@ -324,6 +356,54 @@ class PurgeCacheTestCase(CatalogBase):
         self.assertIn("[!!] refused", result.stdout)
         self.assertTrue((outside / "demo-plugin@1.2.3").is_dir())
         self.assertTrue((legacy_outside / "tool").is_dir())
+
+
+class LoadsAfterRemoveTestCase(CatalogBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.destination = self.tmp / "opencode.json"
+        self.source = self.tmp / "source.json"
+        self.run_cli("source", "--names", "demo-plugin", "--out", str(self.source))
+
+    def loads_after_remove(self) -> subprocess.CompletedProcess[str]:
+        return self.run_cli(
+            "loads-after-remove", "--destination", str(self.destination), "--name", "demo-plugin",
+            "--source", str(self.source), "--profile", "opencode-catalog", "--groups", "plugins,agents",
+            "--state-scope", "demo-plugin",
+        )  # fmt: skip
+
+    def test_owned_plugin_is_removed_from_projection_without_writes(self) -> None:
+        env = {**os.environ, "YCC_MANAGED_CONFIG_STATE": str(self.state)}
+        argv = [
+            sys.executable, str(HELPER), "--profile", "opencode-catalog", "--source", str(self.source),
+            "--destination", str(self.destination), "--groups", "plugins,agents", "--state-scope", "demo-plugin",
+        ]  # fmt: skip
+        merge = subprocess.run(argv, capture_output=True, text=True, env=env)
+        self.assertEqual(merge.returncode, 0, merge.stderr)
+        before = self.destination.read_bytes(), self.state.read_bytes()
+        result = self.loads_after_remove()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual((self.destination.read_bytes(), self.state.read_bytes()), before)
+
+    def test_local_plugin_or_projection_error_stays_loaded(self) -> None:
+        self.destination.write_text('{"plugins": ["demo-plugin@1.2.3"]}\n', encoding="utf-8")
+        result = self.loads_after_remove()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.destination.write_text("not json", encoding="utf-8")
+        result = self.loads_after_remove()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_missing_destination_does_not_load(self) -> None:
+        result = self.loads_after_remove()
+        self.assertEqual(result.returncode, 1, result.stderr)
+
+    def test_absent_entry_with_nothing_owned_does_not_load(self) -> None:
+        self.destination.write_text('{"plugins": ["user-plugin"]}\n', encoding="utf-8")
+        result = self.loads_after_remove()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.destination.write_text('{\n  // note\n  "plugins": ["user-plugin",],\n}\n', encoding="utf-8")
+        result = self.loads_after_remove()
+        self.assertEqual(result.returncode, 1, result.stderr)
 
 
 class StateScopeTestCase(unittest.TestCase):

@@ -30,8 +30,13 @@ OPENCODE_BUNDLE_UNITS=(skills agents commands shared ycc-sensitive-guard)
 # opencode_valid_steps — comma-separated steps opencode accepts for --only.
 opencode_valid_steps() { echo "base,skills,agents,commands,settings,rules,mcp"; }
 
-# opencode_dry_run_steps — steps --dry-run can preview (merge helper only).
-opencode_dry_run_steps() { echo "mcp"; }
+# Base installation builds bundles; removal is a read-only entry preview.
+opencode_dry_run_steps() {
+    printf 'mcp,settings,rules'
+    # shellcheck disable=SC2153  # COMMAND is install.sh's subcommand global.
+    [[ "${COMMAND}" != remove ]] || printf ',base'
+    echo
+}
 
 # opencode_intent_steps <intent> — steps <intent> maps to; empty means no-op.
 opencode_intent_steps() {
@@ -159,7 +164,7 @@ sync_opencode_target() {
         step=$((step + 1))
         opencode_settings_paths
         printf '\n%s[%d/%d] Merge opencode config (%s)%s\n' "${BOLD}" "$step" "$total" "${OPENCODE_SETTINGS_FILE}" "${NC}"
-        mkdir -p "$(dirname "${OPENCODE_SETTINGS_FILE}")"
+        [[ "${DRY_RUN:-0}" == "1" ]] || mkdir -p "$(dirname "${OPENCODE_SETTINGS_FILE}")"
         # Merge managed keys only: per-machine model overrides, provider
         # credentials and unknown keys in the user's opencode.json are kept.
         # Project scope (opencode_preflight) carries catalog plugins only.
@@ -184,7 +189,6 @@ sync_opencode_target() {
     if [[ $do_rules -eq 1 ]]; then
         step=$((step + 1))
         printf '\n%s[%d/%d] Link opencode rules (AGENTS.md)%s\n' "${BOLD}" "$step" "$total" "${NC}"
-        mkdir -p "${opencode_dir}"
         # Native global rules path: https://opencode.ai/docs/rules
         # The generator copies the tool-neutral source verbatim behind a header.
         link_rules_file "${OPENCODE_PLUGIN_DIR}/AGENTS.md" "${opencode_dir}/AGENTS.md"
@@ -229,7 +233,7 @@ remove_opencode_target() {
         # The guard plugin goes with the `plugins` entry that loads it; an
         # entry kept as a local edit still loads it, so the directory stays.
         if opencode_guard_selected && ! step_enabled base \
-            && ! opencode_config_loads_guard "${opencode_dir}/opencode.json"; then
+            && ! opencode_guard_remains "${opencode_dir}/opencode.json"; then
             remove_mirrored_entries "${OPENCODE_PLUGIN_DIR}/ycc-sensitive-guard" "${opencode_dir}/ycc-sensitive-guard"
         fi
     fi
@@ -239,7 +243,7 @@ remove_opencode_target() {
         local unit
         for unit in "${OPENCODE_BUNDLE_UNITS[@]}"; do
             # Keep the guard while opencode.json still loads it (settings kept).
-            if [[ "${unit}" == "ycc-sensitive-guard" ]] && opencode_config_loads_guard "${opencode_dir}/opencode.json"; then
+            if [[ "${unit}" == "ycc-sensitive-guard" ]] && opencode_guard_remains "${opencode_dir}/opencode.json"; then
                 info "kept ${opencode_dir}/${unit}: opencode.json still loads ./${unit}"
                 continue
             fi
@@ -261,6 +265,16 @@ opencode_guard_selected() {
 # still names the bundle's "./ycc-sensitive-guard" entry.
 opencode_config_loads_guard() {
     opencode_config_loads "$1" ./ycc-sensitive-guard
+}
+
+# Preview the post-removal config rather than inspecting unchanged live bytes.
+opencode_guard_remains() {
+    if [[ "${DRY_RUN:-0}" == "1" ]] && step_enabled settings && opencode_guard_selected; then
+        opencode_config_loads_after_remove "$1" ./ycc-sensitive-guard \
+            "${OPENCODE_PLUGIN_DIR}/opencode.json" opencode-config "${CONFIG_GROUPS}"
+    else
+        opencode_config_loads_guard "$1"
+    fi
 }
 
 # opencode_config_loads <opencode.json> <name> — true when its `plugins` list

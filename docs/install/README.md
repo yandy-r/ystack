@@ -644,12 +644,18 @@ taken back:
 ```bash
 ./install.sh remove --target all --only mcp --dry-run
 ./install.sh sync --target claude,codex --intent mcp --global --dry-run
+./install.sh remove --target claude --intent settings,hooks,rules --dry-run
+./install.sh remove --target claude,cursor,codex,opencode --only base --dry-run
 ```
 
 `--dry-run` works with `install`, `sync` and `remove` on every target and
-writes no config, file or ownership state. The `mcp` step prints each
-`would set` / `would remove` change. On omp every step previews itself (see
-the [OMP guide](omp.md)). Any other step prints
+writes no config, file or ownership state. On Claude, Cursor, Codex and opencode,
+`settings` (including its plugin/hook config groups), `rules` and `mcp` preview
+their managed-key and file/link changes. Claude and Cursor also preview `hooks`.
+`remove --only base` previews owned bundle entries and CLI removals on these four
+targets; installing `base` still skips because building or registering plugins
+cannot be safely previewed. On omp every step previews itself (see the
+[OMP guide](omp.md)). Any step without a preview prints
 `dry-run: <target> <step> step has no preview — skipped` and does not run.
 
 ### Legacy Flag Form

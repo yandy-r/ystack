@@ -397,13 +397,12 @@ Options:
                       elsewhere (the ycc plugin, your own entries) unless ycc
                       owns them. Prints '<target>: --with-deps adds ...'.
   --dry-run           install / sync / remove: preview without writing any
-                      config, file or ownership state. The mcp step (claude,
-                      cursor, codex, opencode) prints each 'would set' /
-                      'would remove'. omp previews every step: each 'omp
-                      plugin' call (omp's own --dry-run where it has one) and
-                      the planned --settings merge and --rules link, without
-                      building or exporting. Every other step says it has no
-                      preview and is skipped (nothing runs).
+                      config, file or ownership state. On claude, cursor,
+                      codex and opencode, settings (including their config
+                      groups), rules and mcp preview changes; claude/cursor
+                      hooks and remove-only base also preview. Install base
+                      still skips. omp previews every step without building
+                      or exporting. Steps without a preview say so and skip.
   --only <steps>      Exclusive: run only the comma-separated steps
                       (e.g. --only settings, --only rules,settings).
                       Overrides defaults and --settings/--rules/--mcp/--hooks.

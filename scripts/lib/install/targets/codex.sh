@@ -13,8 +13,14 @@ CODEX_AGENTS_DIR="${SCRIPT_DIR}/.codex-plugin/agents"
 # codex_valid_steps — comma-separated steps Codex accepts for --only.
 codex_valid_steps() { echo "base,skills,agents,settings,rules,mcp"; }
 
-# codex_dry_run_steps — steps --dry-run can preview (merge helper only).
-codex_dry_run_steps() { echo "mcp"; }
+# codex_dry_run_steps — base preview is removal-only; installs need native builds/CLI.
+codex_dry_run_steps() {
+    if [[ "${COMMAND:-}" == remove ]]; then
+        echo "base,settings,rules,mcp"
+    else
+        echo "settings,rules,mcp"
+    fi
+}
 
 # codex_intent_steps <intent> — steps <intent> maps to; empty means no-op.
 codex_intent_steps() {
@@ -74,11 +80,13 @@ codex_native_settings() {
     local -a command=(python3 "${SCRIPT_DIR}/scripts/codex_install.py" settings --groups "${CONFIG_GROUPS}" "$@")
     [[ -n "${CONFIG_GROUP_ENTRIES[plugins]:-}" ]] && command+=(--entries "${CONFIG_GROUP_ENTRIES[plugins]}")
     [[ "${FORCE:-0}" == 1 ]] && command+=(--force)
+    [[ "${DRY_RUN:-0}" == 1 ]] && command+=(--dry-run)
     "${command[@]}"
 }
 
 run_native_codex_install() {
     local -a command=(python3 "${SCRIPT_DIR}/scripts/codex_install.py" "$1" --mode "${MODE:-local}")
+    [[ "${DRY_RUN:-0}" == 1 ]] && command+=(--dry-run)
     codex_plugin_cli_supported && command+=(--cli)
     "${command[@]}"
 }
@@ -189,6 +197,10 @@ enable_local_codex_plugin_leaf() {
 uninstall_codex_plugin() {
     codex_plugin_cli_supported || return 0
     [[ -f "${CODEX_MARKETPLACE_JSON}" ]] || return 0
+    if [[ "${DRY_RUN:-0}" == 1 ]]; then
+        dry_run_note "run:" "codex plugin remove ycc@$(codex_marketplace_name)"
+        return 0
+    fi
     local selector
     selector="ycc@$(codex_marketplace_name)"
     info "Running: codex plugin remove ${selector}"
@@ -497,7 +509,61 @@ sync_codex_target() {
 remove_codex_marketplace_entry() {
     local dest="${HOME}/.agents/plugins/marketplace.json"
     [[ -f "${dest}" ]] || { info "nothing to remove: ${dest}"; return 0; }
-    python3 "${SCRIPT_DIR}/scripts/codex_marketplace.py" remove "${dest}"
+    local -a flags=()
+    [[ "${DRY_RUN:-0}" == 1 ]] && flags+=(--dry-run)
+    python3 "${SCRIPT_DIR}/scripts/codex_marketplace.py" remove "${flags[@]}" "${dest}"
+}
+
+# codex_remove_cache_parent — drop the marketplace cache directory once the
+# ycc cache inside it is gone (a dry run previews it when ycc is all it holds).
+codex_remove_cache_parent() {
+    local parent entry
+    parent="$(dirname "${CODEX_PLUGIN_CACHE}")"
+    if [[ "${DRY_RUN:-0}" != 1 ]]; then
+        rmdir "${parent}" 2>/dev/null || true
+        return 0
+    fi
+    [[ -d "${parent}" && ! -L "${parent}" ]] || return 0
+    for entry in "${parent}"/* "${parent}"/.[!.]* "${parent}"/..?*; do
+        [[ -e "${entry}" || -L "${entry}" ]] || continue
+        [[ "${entry}" == "${CODEX_PLUGIN_CACHE}" ]] || return 0
+    done
+    dry_run_note remove "${parent}"
+}
+
+# codex_remove_agents <codex agents dir> — the tracked agents first (unless the
+# agents step just removed all of them; base is never narrowed by --agents),
+# then whatever an older untracked mirror left under shipped names. A dry run
+# lists each path once: the mirror preview skips paths the slice already named.
+codex_remove_agents() {
+    local dest="$1"
+    local slice_ran=0
+    { step_enabled agents && ! has_selection agents; } || slice_ran=1
+    if [[ "${DRY_RUN:-0}" != 1 ]]; then
+        [[ ${slice_ran} -eq 0 ]] || run_slice codex agents
+        remove_mirrored_entries "${CODEX_AGENTS_DIR}" "${dest}"
+        return 0
+    fi
+    local sliced="" mirrored="" line path
+    local -A named=()
+    if [[ ${slice_ran} -eq 1 ]]; then
+        sliced="$(run_slice codex agents)" || return $?
+        [[ -z "${sliced}" ]] || printf '%s\n' "${sliced}"
+    fi
+    mirrored="$(remove_mirrored_entries "${CODEX_AGENTS_DIR}" "${dest}")" || return $?
+    while IFS= read -r line; do
+        [[ "${line}" == *"would remove "* ]] || continue
+        path="${line##*would remove }"
+        named["${path#empty directory }"]=1
+    done <<< "${sliced}"
+    while IFS= read -r line; do
+        [[ -n "${line}" ]] || continue
+        path="${line##*would remove }"
+        path="${path#empty directory }"
+        if [[ "${line}" != *"would remove "* || -z "${named[${path}]:-}" ]]; then
+            printf '%s\n' "${line}"
+        fi
+    done <<< "${mirrored}"
 }
 
 remove_codex_target() {
@@ -543,15 +609,13 @@ remove_codex_target() {
         # Whatever cache is left (the legacy hand-written copy, or a snapshot
         # the CLI could not remove) belongs to this marketplace entry.
         if [[ -e "${CODEX_PLUGIN_CACHE}" || -L "${CODEX_PLUGIN_CACHE}" ]]; then
-            rm -rf "${CODEX_PLUGIN_CACHE}"
-            info "removed ${CODEX_PLUGIN_CACHE}"
+            if ! dry_run_note remove "${CODEX_PLUGIN_CACHE}"; then
+                rm -rf "${CODEX_PLUGIN_CACHE}"
+                info "removed ${CODEX_PLUGIN_CACHE}"
+            fi
         fi
-        rmdir "$(dirname "${CODEX_PLUGIN_CACHE}")" 2>/dev/null || true
-        # The tracked agents first (unless the agents step just removed all of
-        # them; base is never narrowed by --agents),
-        # then whatever an older untracked mirror left under shipped names.
-        { step_enabled agents && ! has_selection agents; } || run_slice codex agents
-        remove_mirrored_entries "${CODEX_AGENTS_DIR}" "${codex_dir}/agents"
+        codex_remove_cache_parent
+        codex_remove_agents "${codex_dir}/agents"
         remove_codex_marketplace_entry
     fi
     printf '\n%sCodex remove complete.%s\n' "${BOLD}" "${NC}"

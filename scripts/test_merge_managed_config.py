@@ -889,6 +889,7 @@ class MergeHelperTestCase(MergeBase):
         result = self.remove(source, destination, "--dry-run")
 
         self.assertIn("would remove /mcpServers/svc", result.stdout)
+        self.assertIn(f"would remove {destination}", result.stdout)
         self.assertEqual(destination.read_text(), before)
 
     def test_remove_toml_keeps_comments_and_user_tables(self) -> None:

@@ -22,7 +22,7 @@ from urllib.parse import unquote, urlsplit
 MARKETPLACE_NAME = "local-ycc-plugins"
 INTERFACE = {"displayName": "Local YCC Plugins"}
 SCAFFOLD = {"name": MARKETPLACE_NAME, "interface": INTERFACE, "plugins": []}
-USAGE = "usage: codex_marketplace.py merge <dest> <local|repo> [<plugin_src>] | remove <dest>"
+USAGE = "usage: codex_marketplace.py merge <dest> <local|repo> [<plugin_src>] | remove [--dry-run] <dest>"
 SOURCE_FIELDS: dict[str, frozenset[str]] = {
     "local": frozenset({"path"}),
     "url": frozenset({"url", "path", "ref", "sha"}),
@@ -257,14 +257,20 @@ def merge(dest_path: Path, mode: str, plugin_src: str) -> None:
         handle.write("\n")
 
 
-def remove(path: Path) -> None:
+def remove(path: Path, dry_run: bool = False) -> None:
     data = json.loads(path.read_text(encoding="utf-8"))
     plugins = data.get("plugins") if isinstance(data, dict) else None
     if not isinstance(plugins, list) or not any(_is_ycc(p) for p in plugins):
         print(f"  [ok] nothing to remove: {path}")
         return
     data["plugins"] = [p for p in plugins if not _is_ycc(p)]
-    if data == SCAFFOLD:
+    scaffold_only = data == SCAFFOLD
+    if dry_run:
+        if scaffold_only:
+            print(f"[dry-run] would remove {path} (only the ycc entry was left)")
+        else:
+            print(f"[dry-run] would remove marketplace entry ycc from {path}")
+    elif scaffold_only:
         path.unlink()
         print(f"  [ok] removed {path} (only the ycc entry was left)")
     else:
@@ -282,6 +288,9 @@ def main(argv: list[str]) -> int:
         return 0
     if len(argv) == 2 and argv[0] == "remove":
         remove(Path(argv[1]))
+        return 0
+    if len(argv) == 3 and argv[0] == "remove" and argv[1] == "--dry-run":
+        remove(Path(argv[2]), dry_run=True)
         return 0
     sys.stderr.write(USAGE + "\n")
     return 2

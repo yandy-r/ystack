@@ -56,6 +56,7 @@ run_slice() {
     [[ "${COMMAND}" == "remove" ]] && action="remove"
     local -a command=(python3 "${SLICE_HELPER}" "${action}" --target "${target}" --slice "${slice}")
     [[ "${FORCE:-0}" == "1" ]] && command+=(--force)
+    [[ "${DRY_RUN:-0}" == "1" ]] && command+=(--dry-run)
     local -a kinds=()
     [[ "${3:-}" == "select" ]] && read -r -a kinds <<< "$(slice_selection_kinds "${target}" "${slice}")"
     # Claude remove: --commands names legacy wrappers to retire, not skills;
@@ -156,12 +157,27 @@ sync_bundle_units() {
         src_unit="${src_root}/${unit}/"
         dest_unit="${dest_root}/${unit}/"
         if [[ -d "${src_unit}" ]]; then
+            if dry_run_note copy "${src_unit}" "${dest_unit}"; then
+                if [[ -d "${dest_unit}" ]]; then
+                    local itemized line pruned
+                    itemized="$(rsync -an --delete --itemize-changes "${src_unit}" "${dest_unit}")"
+                    while IFS= read -r line; do
+                        [[ "${line}" == '*deleting'* ]] || continue
+                        pruned="${line#'*deleting'}"
+                        pruned="${pruned#"${pruned%%[![:space:]]*}"}"
+                        info "[dry-run] would remove ${dest_unit}${pruned}"
+                    done <<< "${itemized}"
+                fi
+                continue
+            fi
             mkdir -p "${dest_unit}"
             rsync -av --delete "${src_unit}" "${dest_unit}"
             info "Synced ${unit}/ → ${dest_unit}"
         elif [[ -d "${dest_unit}" ]]; then
-            rm -rf "${dest_unit}"
-            warn "Removed ${dest_unit} (missing from $(basename "${src_root}"))"
+            if ! dry_run_note remove "${dest_unit}"; then
+                rm -rf "${dest_unit}"
+                warn "Removed ${dest_unit} (missing from $(basename "${src_root}"))"
+            fi
         else
             warn "Source not found, skipping: ${src_unit}"
         fi
@@ -183,10 +199,23 @@ remove_mirrored_entries() {
         [[ -e "${entry}" || -L "${entry}" ]] || continue
         name="$(basename "${entry}")"
         if [[ -e "${dest_dir}/${name}" || -L "${dest_dir}/${name}" ]]; then
-            rm -rf "${dest_dir:?}/${name}"
+            dry_run_note remove "${dest_dir}/${name}" || rm -rf "${dest_dir:?}/${name}"
             count=$((count + 1))
         fi
     done
+    if [[ "${DRY_RUN:-0}" == "1" ]]; then
+        local retained=0
+        for entry in "${dest_dir}"/* "${dest_dir}"/.[!.]* "${dest_dir}"/..?*; do
+            [[ -e "${entry}" || -L "${entry}" ]] || continue
+            name="$(basename "${entry}")"
+            if [[ ! -e "${src_dir}/${name}" && ! -L "${src_dir}/${name}" ]]; then
+                retained=1
+                break
+            fi
+        done
+        [[ ${retained} -eq 1 ]] || dry_run_note remove "${dest_dir}"
+        return 0
+    fi
     info "removed ${count} bundle entr$([[ ${count} -eq 1 ]] && echo y || echo ies) from ${dest_dir}"
     if rmdir "${dest_dir}" 2>/dev/null; then
         info "removed empty directory ${dest_dir}"

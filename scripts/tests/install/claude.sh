@@ -495,7 +495,7 @@ assert_not_contains "$(cat "${home}/.claude/settings.json" 2>/dev/null)" '"hooks
 home="$(new_home)"
 out="$(CLAUDE_STUB_VERSION='2.1.200 (Claude Code)' run_install "${home}" sync --target claude --intent hooks --dry-run)"
 assert_not_contains "${out}" "ycc-hooks needs Claude Code" "project hooks dry-run skips the Claude version check"
-assert_contains "${out}" "dry-run: claude hooks step has no preview" "project hooks dry-run skips the native install"
+assert_contains "${out}" "would run: claude plugin install ycc-hooks@ycc --scope project" "project hooks dry-run previews the native install"
 assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin install" "project hooks dry-run calls no native install"
 
 echo "== install.sh remove: settings, rules, hooks, plugins =="

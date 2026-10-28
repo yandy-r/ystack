@@ -92,6 +92,75 @@ class SelectionTest(unittest.TestCase):
         self.assertEqual(self.units()[str(agents)], ["code-reviewer.toml"])
         self.assertEqual([p.name for p in agents.iterdir()], ["code-reviewer.toml"])
 
+    def test_codex_agents_remove_dry_run_preserves_selected_entries_and_state(self) -> None:
+        args = ("--target", "codex", "--slice", "agents")
+        self.assertEqual(self.run_cli("install", *args, "--entries", "implementor,code-reviewer")[0], 0)
+        agents = self.home / ".codex/agents"
+        before = {path: path.read_bytes() for path in self.home.rglob("*") if path.is_file()}
+        paths = set(self.home.rglob("*"))
+        rc, out, err = self.run_cli("remove", *args, "--entries", "implementor", "--dry-run")
+        self.assertEqual(rc, 0, err)
+        self.assertIn(f"[dry-run] would remove {agents / 'implementor.toml'}", out)
+        self.assertNotIn(f"would remove {agents / 'code-reviewer.toml'}", out)
+        self.assertNotIn("would remove empty directory", out)
+        self.assertEqual({path: path.read_bytes() for path in self.home.rglob("*") if path.is_file()}, before)
+        self.assertEqual(set(self.home.rglob("*")), paths)
+        rc, out, err = self.run_cli("remove", *args, "--dry-run")
+        self.assertEqual(rc, 0, err)
+        self.assertIn(f"would remove empty directory {agents}", out)
+        self.assertEqual({path: path.read_bytes() for path in self.home.rglob("*") if path.is_file()}, before)
+
+    def test_codex_agents_remove_dry_run_matches_untracked_base_and_retains_foreign(self) -> None:
+        agents = self.home / ".codex/agents"
+        agents.mkdir(parents=True)
+        source = install_slices.REPO_ROOT / ".codex-plugin/agents/implementor.toml"
+        shutil.copy2(source, agents / source.name)
+        foreign = agents / "code-reviewer.toml"
+        foreign.write_text("user agent\n", encoding="utf-8")
+        before = {path: path.read_bytes() for path in agents.iterdir()}
+        rc, out, err = self.run_cli("remove", "--target", "codex", "--slice", "agents", "--dry-run")
+        self.assertEqual(rc, 0, err)
+        self.assertIn(f"would remove {agents / source.name}", out)
+        self.assertIn(f"kept {foreign}: not installed by ycc", out)
+        self.assertNotIn(f"would remove {foreign}", out)
+        self.assertEqual({path: path.read_bytes() for path in agents.iterdir()}, before)
+        self.assertFalse(self.state_file.exists())
+
+    def test_cursor_hooks_dry_run_previews_copy_and_removal_without_writing(self) -> None:
+        args = ("--target", "cursor", "--slice", "hooks")
+        hooks = self.home / ".cursor/hooks"
+        script = hooks / "herdr-session-start.sh"
+        rc, out, err = self.run_cli("install", *args, "--dry-run")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("[dry-run] would copy ", out)
+        self.assertIn(f"-> {script}", out)
+        self.assertFalse(hooks.exists())
+        self.assertFalse(self.state_file.exists())
+        self.assertEqual(self.run_cli("install", *args)[0], 0)
+        before = {path: path.read_bytes() for path in self.home.rglob("*") if path.is_file()}
+        rc, out, err = self.run_cli("remove", *args, "--dry-run")
+        self.assertEqual(rc, 0, err)
+        self.assertIn(f"[dry-run] would remove {script}", out)
+        self.assertIn(f"[dry-run] would remove empty directory {hooks}", out)
+        self.assertEqual({path: path.read_bytes() for path in self.home.rglob("*") if path.is_file()}, before)
+        self.assertTrue(script.is_file())
+
+    def test_nonstrict_remove_dry_run_preserves_context_with_missing_destination(self) -> None:
+        unit = install_slices.SPECS[("codex", "agents")][0]
+        key = str(self.home / unit.dest)
+        ctx = install_slices.Context(self.home, False, [], None, {key: ["implementor.toml"]}, dry_run=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(install_slices.remove_unit(unit, ctx), 0)
+        self.assertEqual(ctx.state, {key: ["implementor.toml"]})
+        self.assertFalse((self.home / unit.dest).exists())
+
+    def test_nonstrict_install_dry_run_remains_unsupported(self) -> None:
+        with self.assertRaises(SystemExit) as caught:
+            self.run_cli("install", "--target", "codex", "--slice", "agents", "--dry-run")
+        self.assertEqual(caught.exception.code, 2)
+        self.assertFalse((self.home / ".codex").exists())
+        self.assertFalse(self.state_file.exists())
+
     def test_remove_keeps_helpers_until_last_owned_entry(self) -> None:
         base = ("--target", "codex", "--slice", "skills", "--entries")
         self.assertEqual(self.run_cli("install", *base, "code-review,quick-review")[0], 0)

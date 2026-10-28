@@ -21,6 +21,12 @@ info()  { printf "${GREEN}[ok]${NC}  %s\n" "$1"; }
 warn()  { printf "${YELLOW}[!!]${NC}  %s\n" "$1"; }
 err()   { printf "${RED}[err]${NC} %s\n" "$1" >&2; }
 
+# dry_run_note <verb> <dest> [src] — true when the mutation was previewed.
+dry_run_note() {
+    [[ "${DRY_RUN:-0}" == "1" ]] || return 1
+    info "[dry-run] would $1 $2${3:+ -> $3}"
+}
+
 # link_file <src> <dest>
 # - Ensures parent of <dest> exists.
 # - If <dest> is already a symlink pointing at <src>, does nothing.
@@ -34,11 +40,12 @@ link_file() {
         err "refusing to replace directory with symlink: $dest"
         exit 1
     fi
-    mkdir -p "$(dirname "$dest")"
     if [[ -L "$dest" && "$(readlink "$dest")" == "$src" ]]; then
         info "link up-to-date: $dest -> $src"
         return 0
     fi
+    dry_run_note link "${dest}" "${src}" && return 0
+    mkdir -p "$(dirname "$dest")"
     ln -sfn "$src" "$dest"
     info "linked $dest -> $src"
 }
@@ -84,12 +91,10 @@ copy_settings_file() {
         err "refusing to replace directory with file: $dest"
         exit 1
     fi
-    mkdir -p "$(dirname "$dest")"
     if [[ -L "$dest" ]]; then
         local link_target
         link_target="$(readlink "$dest")"
         warn "replacing symlink with copy: $dest -> $link_target"
-        rm "$dest"
     elif [[ -f "$dest" ]]; then
         if cmp -s "$src" "$dest"; then
             info "copy up-to-date: $dest"
@@ -101,6 +106,12 @@ copy_settings_file() {
             exit 1
         fi
     fi
+    if [[ "${DRY_RUN:-0}" == "1" ]]; then
+        info "[dry-run] would copy ${src} -> ${dest}"
+        return 0
+    fi
+    mkdir -p "$(dirname "$dest")"
+    [[ ! -L "${dest}" ]] || rm "${dest}"
     cp -p "$src" "$dest"
     info "copied $src -> $dest"
 }
@@ -138,6 +149,7 @@ unlink_owned_link() {
     if [[ ! -e "${dest}" && ! -L "${dest}" ]]; then
         info "nothing to remove: ${dest}"
     elif [[ -L "${dest}" && "$(readlink "${dest}")" == "${src}" ]]; then
+        dry_run_note unlink "${dest}" "${src}" && return 0
         rm "${dest}"
         info "removed link ${dest}"
     else
@@ -162,6 +174,7 @@ remove_copied_file() {
         fi
     fi
     if [[ ${ours} -eq 1 ]]; then
+        dry_run_note remove "${dest}" && return 0
         rm "${dest}"
         info "removed ${dest}"
     else
@@ -408,6 +421,7 @@ run_mcp_step() {
         info "MCP servers: ${selection//,/, }"
     fi
 
+    # shellcheck disable=SC2153  # COMMAND is install.sh's subcommand global.
     if [[ "${COMMAND}" == "remove" ]]; then
         info "Removing managed MCP servers from ${dest}"
         merge_settings_config "${profile}" "${src}" "${dest}" "mcp" --remove "${select[@]}"

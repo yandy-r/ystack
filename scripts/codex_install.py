@@ -5,6 +5,8 @@ The shell owns build/step selection. This helper owns native marketplace
 registration, the versioned cache fallback for a missing plugin CLI, scoped
 plugin enablement, and the ownership record that makes base removal safe.
 Legacy links, caches and config are retired only by ``install.sh migrate``.
+Settings and removal accept ``--dry-run`` to report ownership-aware changes
+without updating config, native caches, backups, or ownership state.
 """
 
 from __future__ import annotations
@@ -125,7 +127,9 @@ def cli_written_snapshot(package_root: Path, package: str, output: str) -> Path:
     return snapshot
 
 
-def merge_config(groups: str, source_text: str, entries: list[str] | None, *, remove: bool, force: bool) -> None:
+def merge_config(
+    groups: str, source_text: str, entries: list[str] | None, *, remove: bool, force: bool, dry_run: bool = False
+) -> None:
     """Run the managed TOML merge for ``source_text``, narrowed to ``entries``."""
     with tempfile.TemporaryDirectory(prefix="ycc-codex-config-") as temporary:
         source = Path(temporary) / "config.toml"
@@ -149,6 +153,8 @@ def merge_config(groups: str, source_text: str, entries: list[str] | None, *, re
             command.append("--remove")
         if force:
             command.append("--force")
+        if dry_run:
+            command.append("--dry-run")
         subprocess.run(command, check=True)
 
 
@@ -300,7 +306,8 @@ def install(mode: str, use_cli: bool) -> None:
     )
 
 
-def remove(use_cli: bool) -> None:
+def remove(use_cli: bool, *, dry_run: bool = False) -> None:
+    """Remove owned native packages, or preview the same ownership decisions without writes."""
     if not state_path().exists():
         return
     state = load_state()
@@ -309,6 +316,7 @@ def remove(use_cli: bool) -> None:
     config(destination)
     kept: dict[str, Any] = {}
     kept_packages: set[str] = set()
+    removed_paths: set[Path] = set()
     for relative, expected in state["caches"].items():
         rel = validate_cache_path(relative)
         cache = home / rel
@@ -323,40 +331,60 @@ def remove(use_cli: bool) -> None:
             kept[relative] = expected
             kept_packages.add(rel.parts[3])
             continue
-        shutil.rmtree(cache)
-        print(f"[ok] removed native cache {cache}")
+        if dry_run:
+            print(f"[dry-run] would remove native cache {cache}")
+        else:
+            shutil.rmtree(cache)
+            print(f"[ok] removed native cache {cache}")
+        removed_paths.add(cache)
         # Only empty package/marketplace containers; never foreign versions.
         for parent in (cache.parent, cache.parent.parent):
-            try:
-                parent.rmdir()
-            except OSError:
-                break
+            if dry_run:
+                if any(child not in removed_paths for child in parent.iterdir()):
+                    break
+                removed_paths.add(parent)
+            else:
+                try:
+                    parent.rmdir()
+                except OSError:
+                    break
     plugins = config(destination).get("plugins", {})
     for package in state["packages"]:
         selector = f"{package}@ycc"
-        if (home / "plugins/cache/ycc" / package).exists():
+        package_root = home / "plugins/cache/ycc" / package
+        if package_root.exists() and package_root not in removed_paths:
             kept_packages.add(package)
         elif use_cli and plugins.get(selector, {"enabled": True}) == {"enabled": True}:
-            cli("plugin", "remove", selector, check=False)
+            if dry_run:
+                print(f"[dry-run] would run: codex plugin remove {selector}")
+            else:
+                cli("plugin", "remove", selector, check=False)
     removable = [f"{package}@ycc" for package in MIGRATION_PACKAGES if package not in kept_packages]
     if removable:
-        merge_config("plugins", enablement_text(), removable, remove=True, force=False)
+        merge_config("plugins", enablement_text(), removable, remove=True, force=False, dry_run=dry_run)
     registered = config(destination).get("marketplaces", {}).get("ycc")
     owned_marketplace = state.get("marketplace")
-    retained_caches = bool(kept or kept_packages or (home / "plugins/cache/ycc").exists())
+    cache_root = home / "plugins/cache/ycc"
+    retained_caches = bool(kept or kept_packages or (cache_root.exists() and cache_root not in removed_paths))
     if (
         owned_marketplace is not None
         and not retained_caches
         and (registered == owned_marketplace or (registered is None and use_cli))
     ):
         if use_cli:
-            cli("plugin", "marketplace", "remove", "ycc")
-        if registered == owned_marketplace and destination.exists():
-            updated = delete_toml_entries(destination.read_text(encoding="utf-8"), [["marketplaces", "ycc"]])
-            if updated.strip():
-                write_verified_toml(destination, updated)
+            if dry_run:
+                print("[dry-run] would run: codex plugin marketplace remove ycc")
             else:
-                destination.unlink()
+                cli("plugin", "marketplace", "remove", "ycc")
+        if registered == owned_marketplace and destination.exists():
+            if dry_run:
+                print(f"[dry-run] would remove /marketplaces/ycc from {destination}")
+            else:
+                updated = delete_toml_entries(destination.read_text(encoding="utf-8"), [["marketplaces", "ycc"]])
+                if updated.strip():
+                    write_verified_toml(destination, updated)
+                else:
+                    destination.unlink()
         state.pop("marketplace", None)
     elif registered is None and not retained_caches:
         state.pop("marketplace", None)
@@ -364,6 +392,10 @@ def remove(use_cli: bool) -> None:
         print("[!!] kept marketplace ycc: edited registration or retained native snapshots")
     state["caches"] = kept
     state["packages"] = [package for package in state["packages"] if package in kept_packages]
+    if dry_run:
+        action = "update" if kept or state["packages"] or "marketplace" in state else "remove"
+        print(f"[dry-run] would {action} ownership state {state_path()}")
+        return
     if kept or state["packages"] or "marketplace" in state:
         save_state(state)
     else:
@@ -378,7 +410,13 @@ def native_plugin_keys() -> tuple[str, list[str]]:
 
 
 def settings(
-    groups: str, *, remove: bool, force: bool, entries: list[str] | None = None, list_only: bool = False
+    groups: str,
+    *,
+    remove: bool,
+    force: bool,
+    entries: list[str] | None = None,
+    list_only: bool = False,
+    dry_run: bool = False,
 ) -> None:
     """Merge shipped settings, swapping the legacy plugin selector for the native pair.
 
@@ -401,7 +439,7 @@ def settings(
                 f"(managed: {', '.join(keys) or 'none'})"
             )
     selected = (entries if entries is not None else keys) if with_plugins else None
-    merge_config(groups, text, selected, remove=remove, force=force)
+    merge_config(groups, text, selected, remove=remove, force=force, dry_run=dry_run)
 
 
 def main() -> int:
@@ -414,17 +452,27 @@ def main() -> int:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--entries", help="Comma-separated plugin keys to restrict the plugins group to")
     parser.add_argument("--list-entries", action="store_true", help="Print the managed plugin keys and exit")
+    parser.add_argument("--dry-run", action="store_true", help="Preview settings or removal without writing")
     args = parser.parse_args()
     entries = None if args.entries is None else [name.strip() for name in args.entries.split(",") if name.strip()]
     try:
         if args.command == "enabled":
             return 0 if repository_native_enabled(load_package_model().packages) else 1
         if args.command == "install":
+            if args.dry_run:
+                raise ValueError("native base installation does not support --dry-run")
             install(args.mode, args.cli)
         elif args.command == "remove":
-            remove(args.cli)
+            remove(args.cli, dry_run=args.dry_run)
         else:
-            settings(args.groups, remove=args.remove, force=args.force, entries=entries, list_only=args.list_entries)
+            settings(
+                args.groups,
+                remove=args.remove,
+                force=args.force,
+                entries=entries,
+                list_only=args.list_entries,
+                dry_run=args.dry_run,
+            )
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"[err] native Codex install stopped: {error}", file=sys.stderr)
         return 2

@@ -270,7 +270,7 @@ def install_unit(unit: Unit, ctx: Context, pick: frozenset[str] | None = None) -
 
 
 def remove_unit(unit: Unit, ctx: Context, pick: frozenset[str] | None = None) -> int:
-    """Remove the unit's entries; with pick, only those names (state drops only them)."""
+    """Remove owned or matching entries, or preview without changing entries or state."""
     if unit.strict:
         return strict_unit(unit, ctx, False, pick, shipped_entries, stage)
     dest = ctx.home / unit.dest
@@ -279,10 +279,12 @@ def remove_unit(unit: Unit, ctx: Context, pick: frozenset[str] | None = None) ->
     left = sorted(owned - pick) if pick is not None else []
     if not dest.is_dir():
         print(f"[ok]  nothing to remove: {dest}")
-        ctx.state[key] = left  # save_state drops empty lists
+        if not ctx.dry_run:
+            ctx.state[key] = left  # save_state drops empty lists
         return 0
     entries = shipped_entries(unit)
     removed = 0
+    removed_paths: set[Path] = set()
     with tempfile.TemporaryDirectory() as tmp:
         staging = Path(tmp)
         for name in sorted(owned | set(entries) if pick is None else pick):
@@ -300,10 +302,18 @@ def remove_unit(unit: Unit, ctx: Context, pick: frozenset[str] | None = None) ->
                     or same_entry(stage(name, entries[name], staging, ctx.rewrites, ctx.pattern), target)
                 )
             if ours:
-                delete_entry(target)
+                if ctx.dry_run:
+                    print(f"[dry-run] would remove {target}")
+                else:
+                    delete_entry(target)
+                removed_paths.add(target)
                 removed += 1
             else:
                 print(f"[!!]  kept {target}: not installed by ycc (re-run with --force to remove it)")
+    if ctx.dry_run:
+        if dest != ctx.home and all(child in removed_paths for child in dest.iterdir()):
+            print(f"[dry-run] would remove empty directory {dest}")
+        return 0
     ctx.state[key] = left
     print(f"[ok]  removed {removed} entr{'y' if removed == 1 else 'ies'} from {dest}")
     if dest != ctx.home and not any(dest.iterdir()):
@@ -320,7 +330,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--entries", help="Comma-separated names to install or remove (see 'list'); helpers follow")
     parser.add_argument(
-        "--dry-run", action="store_true", help="Preflight strict Cursor carrier ownership without writing"
+        "--dry-run", action="store_true", help="Preview removals or preflight strict Cursor installs without writing"
     )
     parser.add_argument(
         "--skills-dir",
@@ -357,8 +367,10 @@ def main(argv: list[str] | None = None) -> int:
     if units is None:
         print(f"[err] target '{args.target}' has no '{args.slice}' slice", file=sys.stderr)
         return 1
-    if args.dry_run and any(not unit.strict for unit in units):
-        parser.error("--dry-run is supported for strict Cursor commands/hooks carriers only")
+    if args.dry_run and install and any(not unit.strict for unit in units):
+        parser.error("--dry-run installation is supported for strict Cursor commands/hooks carriers only")
+    if args.dry_run and claude_commands and not install:
+        parser.error("--dry-run does not support legacy Claude command wrappers")
     home = Path.home()
     path = state_path()
     hashes = json.loads(path.read_text(encoding="utf-8")).get("sha256", {}) if path.is_file() else {}

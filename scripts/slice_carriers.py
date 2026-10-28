@@ -163,6 +163,13 @@ def strict_unit(
             elif install and name in entries:
                 actions.append(name)
         if ctx.dry_run:
+            for name in actions:
+                if install and name in staged:
+                    print(f"[dry-run] would copy {entries[name]} -> {dest / name}")
+                else:
+                    print(f"[dry-run] would remove {dest / name}")
+            if not install and dest.is_dir() and set(os.listdir(dest)) <= set(actions):
+                print(f"[dry-run] would remove empty directory {dest}")
             return 0
         if install:
             dest.mkdir(parents=True, exist_ok=True)

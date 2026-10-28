@@ -14,8 +14,12 @@ source "${SCRIPT_DIR}/scripts/lib/install/targets/claude-mods.sh"
 # claude_valid_steps — comma-separated steps Claude accepts for --only.
 claude_valid_steps() { echo "base,skills,agents,commands,settings,rules,mcp,hooks,mods"; }
 
-# claude_dry_run_steps — steps --dry-run can preview (merge helper only).
-claude_dry_run_steps() { echo "mcp"; }
+# Base installation still needs the CLI; only its removal can be previewed.
+claude_dry_run_steps() {
+    printf 'mcp,settings,rules,hooks'
+    [[ "${COMMAND}" != remove ]] || printf ',base'
+    echo
+}
 
 # claude_intent_steps <intent> — steps <intent> maps to; empty means no-op.
 claude_intent_steps() {
@@ -220,6 +224,13 @@ claude_project_install_plugin() {
     local plugin="$1" root declaration_line declaration declared_source declared_exact registration
     local user_declared=0 user_source="" source_arg marketplace_scope declared_file
     root="$(project_root)"
+    if [[ "${DRY_RUN:-0}" == "1" ]]; then
+        marketplace_scope=project
+        [[ "${MODE:-local}" != local ]] || marketplace_scope=local
+        dry_run_note "run:" "claude plugin marketplace add $(claude_marketplace_source) --scope ${marketplace_scope} (if registration is needed)"
+        dry_run_note "run:" "claude plugin install ${plugin}@ycc --scope project"
+        return 0
+    fi
     require_claude_cli
     command -v python3 >/dev/null 2>&1 || { err "python3 is required but not found"; exit 1; }
     (
@@ -423,6 +434,7 @@ claude_project_hooks_unavailable_reason() {
     root="$(cd "$(project_root)" && pwd -P)"
     home="$(cd "${HOME}" && pwd -P)"
     if [[ "${root}" == "${home}" ]]; then
+        # shellcheck disable=SC2016  # Explain the literal HOME boundary.
         echo '--project at $HOME: claude project scope needs a project directory (cd into a project, or use --global)'
         return
     fi
@@ -715,6 +727,7 @@ sync_claude_target() {
 # run_claude_cli <args...> — a failed uninstall is reported, not fatal: the
 # plugin or marketplace may simply not be registered.
 run_claude_cli() {
+    dry_run_note "run:" "claude $*" && return 0
     info "Running: claude $*"
     claude "$@" || warn "'claude $*' returned non-zero — check 'claude plugin list'"
 }

@@ -29,7 +29,19 @@ json_query() {
     python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' "$1" "$2"
 }
 
-echo "== opencode catalog: list and default =="
+catalog_tree_digest() {
+    (cd "$1" && find . -path ./claude-calls.log -prune -o \( -type f -o -type l \) -print0 \
+	| sort -z | xargs -0r sha256sum)
+}
+
+catalog_assert_unchanged() {
+    local label="$1"
+    if [[ "$(catalog_tree_digest "${home}")" == "${before}" ]]; then
+        ok "${label}"
+    else
+        ko "${label}" "$(diff <(echo "${before}") <(catalog_tree_digest "${home}"))"
+    fi
+}
 
 home="$(new_home)"
 install_must_succeed "${home}" list plugins --target opencode
@@ -41,6 +53,40 @@ merged="$(cat "${home}/.config/opencode/opencode.json")"
 assert_contains "${merged}" "./ycc-sensitive-guard" "default --intent plugins merges the bundle plugins"
 assert_not_contains "${merged}" "${SLIM}" "default --intent plugins does not install a catalog plugin"
 if [[ ! -e "${home}/.config/opencode/${SLIM}.json" ]]; then ok "default run ships no catalog companion"; else ko "default run ships no catalog companion"; fi
+
+echo "== opencode catalog: dry-run settings =="
+
+home="$(new_home)"
+catalog_seed "${home}/.config/opencode/opencode.json"
+before="$(catalog_tree_digest "${home}")"
+install_must_succeed "${home}" sync --target opencode --intent plugins --plugins "${SLIM}" --dry-run
+assert_contains "${INSTALL_OUT}" "would set /plugins" "catalog sync dry-run previews the managed plugin entry"
+assert_contains "${INSTALL_OUT}" "would copy ${home}/.config/opencode/${SLIM}.json" "catalog sync dry-run previews the companion copy"
+assert_not_contains "${INSTALL_OUT}" "step has no preview" "catalog settings are previewable"
+catalog_assert_unchanged "catalog sync dry-run changes no HOME config, companion or state bytes"
+
+home="$(new_home)"
+install_must_succeed "${home}" sync --target opencode --intent plugins --plugins "${SLIM}"
+mkdir -p "${home}/.cache/opencode/npm/${SLIM_PKG}/1/node_modules/${SLIM}"
+before="$(catalog_tree_digest "${home}")"
+install_must_succeed "${home}" remove --target opencode --intent plugins --plugins "${SLIM}" --purge-cache --dry-run
+assert_contains "${INSTALL_OUT}" "would remove /plugins" "catalog remove dry-run previews the managed plugin removal"
+assert_contains "${INSTALL_OUT}" "would remove ${home}/.config/opencode/${SLIM}.json" "catalog remove dry-run uses the projected config to preview companion removal"
+assert_contains "${INSTALL_OUT}" "would remove ${home}/.cache/opencode/npm/${SLIM_PKG}" "catalog remove dry-run previews cache removal after the projected plugin removal"
+
+catalog_assert_unchanged "catalog remove dry-run changes no HOME config, companion, cache or state bytes"
+
+home="$(new_home)"
+mkdir -p "${home}/.config/opencode"
+printf '{"plugins": ["%s"]}\n' "${SLIM_PKG}" > "${home}/.config/opencode/opencode.json"
+cp "${SLIM_COMPANION_SRC}" "${home}/.config/opencode/${SLIM}.json"
+mkdir -p "${home}/.cache/opencode/npm/${SLIM_PKG}"
+before="$(catalog_tree_digest "${home}")"
+install_must_succeed "${home}" remove --target opencode --intent plugins --plugins "${SLIM}" --purge-cache --dry-run
+assert_contains "${INSTALL_OUT}" "would still load it" "catalog remove dry-run preserves companions for a locally owned plugin"
+assert_not_contains "${INSTALL_OUT}" "would remove ${home}/.config/opencode/${SLIM}.json" "catalog remove dry-run does not authorize local companion removal"
+assert_not_contains "${INSTALL_OUT}" "would remove ${home}/.cache/opencode/npm/${SLIM_PKG}" "catalog remove dry-run does not authorize local cache removal"
+catalog_assert_unchanged "catalog local-edit dry-run changes no HOME bytes"
 
 echo "== opencode catalog: sync --plugins ${SLIM} =="
 
@@ -73,6 +119,17 @@ printf '{"preset": "mine"}\n' > "${companion}"
 install_must_succeed "${home}" sync --target opencode --intent plugins --plugins "${SLIM}"
 assert_contains "${INSTALL_OUT}" "kept ${companion}: local edits" "catalog sync warns about a user-edited companion"
 assert_contains "$(cat "${companion}")" '"mine"' "catalog sync keeps a user-edited companion"
+
+# --force: sync replaces a user-edited companion; --force --dry-run previews
+# the replacement without touching it.
+printf '{"preset": "mine"}\n' > "${companion}"
+before="$(catalog_tree_digest "${home}")"
+install_must_succeed "${home}" sync --target opencode --intent plugins --plugins "${SLIM}" --force --dry-run
+assert_contains "${INSTALL_OUT}" "would copy ${companion}" "catalog sync --force --dry-run previews replacing a user-edited companion"
+assert_not_contains "${INSTALL_OUT}" "kept ${companion}" "catalog sync --force --dry-run does not report the edited companion as kept"
+catalog_assert_unchanged "catalog sync --force --dry-run leaves the edited companion bytes unchanged"
+install_must_succeed "${home}" sync --target opencode --intent plugins --plugins "${SLIM}" --force
+if cmp -s "${SLIM_COMPANION_SRC}" "${companion}"; then ok "catalog sync --force replaces a user-edited companion"; else ko "catalog sync --force replaces a user-edited companion" "$(cat "${companion}")"; fi
 
 echo "== opencode catalog: mixed bundle + catalog selection =="
 
