@@ -55,13 +55,15 @@ From a checkout, `install.sh` delivers the same content as files and config:
 
 ```bash
 ./install.sh install --target cursor
-./install.sh sync --target cursor --intent commands,settings,rules,mcp
+./install.sh sync --target cursor --intent commands,rules,mcp
+./install.sh sync --target cursor --intent settings --global
 ```
 
 This generates and rsyncs `packages/cursor/ycc/{skills,agents}` and
-`packages/cursor/ycc-rules/rules` into `~/.cursor/`, merges
+`packages/cursor/ycc-rules/rules` into `~/.cursor/`. The `settings` step merges
 `packages/cursor/installer-fallback/config/cli-config.json` into
-`~/.cursor/cli-config.json`, and merges MCP servers into
+`~/.cursor/cli-config.json` only with `--global`; without that flag it is
+skipped and writes nothing. MCP servers merge into
 `<project>/.cursor/mcp.json` (or `~/.cursor/mcp.json` with `--global`). User
 commands install into `~/.cursor/commands/` as an explicit `commands` step or
 package selection, and the optional `sessionStart` hook installs as an explicit
