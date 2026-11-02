@@ -13,15 +13,20 @@ stays the primary path. `install.sh migrate` rejects the `opencode` target and
 
 ```bash
 ./install.sh install --target opencode
-./install.sh sync --target opencode --intent base,settings,mcp,plugins,rules
+./install.sh sync --target opencode --intent base,settings,mcp,rules
+./install.sh sync --target opencode --intent settings,plugins --global
 ```
 
-This rsyncs `.opencode-plugin/{skills,agents,commands}/` into
-`~/.config/opencode/`, merges managed keys from `.opencode-plugin/opencode.json`
-into `~/.config/opencode/opencode.json`, merges MCP servers (project scope by
-default; `--global` for user config), and symlinks `.opencode-plugin/AGENTS.md`
-to `~/.config/opencode/AGENTS.md`. The file copy is **primary and unchanged** in
-v6; it is not a transitional route to be retired.
+`base` rsyncs `.opencode-plugin/{skills,agents,commands}/` into
+`~/.config/opencode/`. The `settings` step merges managed keys from
+`.opencode-plugin/opencode.json` into `<project>/opencode.json` by default, or
+into `~/.config/opencode/opencode.json` with `--global`. MCP servers follow the
+same split. `rules` symlinks `.opencode-plugin/AGENTS.md` to
+`~/.config/opencode/AGENTS.md`. Bundle `plugins` entries, including
+`./ycc-sensitive-guard`, are global-only: without `--global` that group is
+skipped and writes nothing. The file copy stays the **primary** path in v6; it
+is not a transitional route to be retired. See
+[opencode Install](../opencode.md#settings-scope).
 
 Current-state steps that keep working unchanged:
 
@@ -38,8 +43,10 @@ Current-state steps that keep working unchanged:
   ```
 
   Install the goal plugin's TUI half with `opencode2 plugin add @prevalentware/opencode-goal-plugin`
-  (idempotent; verify with `opencode2 plugin list`). `--settings` installs the
-  server-side half and the guard. The guard is its own installed directory,
+  (idempotent; verify with `opencode2 plugin list`). `base` mirrors the guard
+  directory; `--settings --global` (the `plugins` group) registers
+  `./ycc-sensitive-guard` in `~/.config/opencode/opencode.json` and installs the
+  server-side half. The guard is its own installed directory,
   `~/.config/opencode/ycc-sensitive-guard`, so `--skills-home agents` keeps it.
   It enforces a sensitive-file policy for restricted specialists, and the npm
   package ships and registers the same guard. See
