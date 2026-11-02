@@ -72,7 +72,22 @@ Outputs from the PRP (Product Requirements / Plan / Review) commands:
 
 PRP plans and specs are written to `docs/prps/plans/` and `docs/prps/specs/`
 on demand; those subdirectories appear once the corresponding command has
-been run.
+been run. Local filenames are `docs/prps/prds/<slug>.prd.md`,
+`docs/prps/specs/<slug>.spec.md`, and `docs/prps/plans/<slug>.plan.md`.
+
+## Planning artifacts
+
+Planning skills still write those local paths by default. Linear storage is
+opt-in. `/ycc:init --artifact-store` writes a committed root `.plans-config`
+(`store: local` or `store: linear`) and, for linear, a `.ycc/artifacts/`
+gitignore rule. With `store: linear`, or an explicit `--store=linear`, skills
+cache under `.ycc/artifacts/<slug>/` and save documents to Linear.
+
+`ycc:implement-plan` and `ycc:prp-implement` read that cache in linear mode and
+move the parent tracking issue and task issues through `started` and
+`completed` as batches run. `ycc:orchestrate` does that only when its input is
+a Linear issue reference. Local mode makes no Linear calls. The contract is
+[`../ycc/skills/_shared/references/artifact-store.md`](../ycc/skills/_shared/references/artifact-store.md).
 
 ## Other
 
