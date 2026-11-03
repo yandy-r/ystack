@@ -53,12 +53,15 @@ done
 # Accepted isolation, on executable (non-comment) lines only: clear
 # `git rev-parse --local-env-vars`, launch under `env -i VAR=...`, an `unset`
 # command naming GIT_DIR, or (Python) drop GIT_* keys from the child env.
+# grep -q exits on the first match; feed it from a process substitution so a
+# large file's writer never fails the pipeline with SIGPIPE under pipefail.
 isolates() {
-  grep -vE '^[[:space:]]*#' "$1" | grep -qE \
+  grep -qE \
     -e 'git"?,? *"?rev-parse"?,? *"?--local-env-vars' \
     -e '(^|[[:space:](])env -i( [A-Z_]+=| *\\?$)' \
     -e '^[[:space:]]*unset[[:space:]]+([A-Za-z_]+[[:space:]]+)*GIT_DIR([[:space:]]|$)' \
-    -e "startswith\\(['\"]GIT_['\"]\\)"
+    -e "startswith\\(['\"]GIT_['\"]\\)" \
+    < <(grep -vE '^[[:space:]]*#' "$1")
 }
 
 # Self-test: guard words that appear only in comments, strings, or this
