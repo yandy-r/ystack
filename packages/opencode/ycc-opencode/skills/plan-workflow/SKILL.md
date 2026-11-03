@@ -46,7 +46,7 @@ Parse flags first, then the feature name (first non-flag argument, required; art
 - **--optimized**: 7-agent unified deployment (default: 10-agent standard).
 - **--worktree**: legacy no-op (worktree annotations are the default; safe to omit).
 - **--no-worktree**: opt out of worktree annotations in the generated `parallel-plan.md`. No effect with `--research-only` (no plan file). Honored with `--plan-only`.
-- **--store=local|linear**: optional artifact-store override. Forward it to every artifact-store helper call. Local is the default; linear is opt-in.
+- **--store=local|linear**: optional artifact-store override. Forward it to every artifact-store helper call. Linear is the default; `local` opts out.
 - **--visual**: render the finished plan as an Agent-Native visual artifact (MDX) via `visual-plan`; local files by default, hosted link requires `--share`.
 
 If no feature name is provided, abort with the full usage instructions from `references/checkpoint-messages.md` — read when the feature name is missing ("Usage Instructions" section).
@@ -94,6 +94,8 @@ Parse and strip `--store=local|linear` before selecting the feature name. Set `S
    parallel_plan_file="$(bash "{{package-root}}/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=parallel-plan --slug="[feature-name]")"
    ```
 
+   If `STORE_FLAG` is empty, the printed `ARTIFACT_STORE_SOURCE` is `default`, and `bash "{{package-root}}/shared/scripts/resolve-artifact-store.sh" --store=local --kind=feature-dir --slug="[feature-name]"` already exists, set `STORE_FLAG=--store=local`, print `Using local plan at <that path>; pin with store: local in .plans-config`, and rerun the resolutions above (artifact-store.md **Implementation skills > Inputs**).
+
 2. For a non-dry linear run only, apply the **Linear call gate** in `{{package-root}}/shared/references/artifact-store.md` before any write or pull.
 3. Before Lookup/Load in that linear run, ensure the cache and gitignore rule:
 
@@ -109,7 +111,7 @@ Then use Lookup/Load to populate missing cached inputs before state detection. F
 {{package-root}}/skills/plan-workflow/scripts/check-state.sh "[feature-name]" ${STORE_FLAG}
 ```
 
-Set `STORE_FLAG=--store=local` or `--store=linear` only when that override was supplied; otherwise leave it empty so config/default resolution applies. Forward the same override to `check-prerequisites.sh` and to every path-taking validator below. Validators receive the resolved absolute artifact paths already shown.
+Set `STORE_FLAG=--store=local` or `--store=linear` only when that override was supplied (or the Step 2 local-plan rule chose `--store=local`); otherwise leave it empty so config/default resolution applies. Forward the same override to `check-prerequisites.sh` and to every path-taking validator below. Validators receive the resolved absolute artifact paths already shown.
 
 Reports whether `${feature_dir}/` exists, `shared.md`, `parallel-plan.md`, and any research files.
 
@@ -409,7 +411,7 @@ With `--optimized`, deploy 5 unified agents instead of separate research (4) + a
 
 ## Output Contract
 
-Files use the paths resolved in Phase 0: research files under `${research_dir}/`, shared at `${shared_file}`, analysis and plan under `${feature_dir}/`, with the final plan at `${parallel_plan_file}`. Local mode (default) preserves the filenames below and their existing paths; linear mode resolves under `.ycc/artifacts/<feature>/`.
+Files use the paths resolved in Phase 0: research files under `${research_dir}/`, shared at `${shared_file}`, analysis and plan under `${feature_dir}/`, with the final plan at `${parallel_plan_file}`. Linear mode (default) resolves under `.ycc/artifacts/<feature>/`; local mode preserves the filenames below and their existing paths.
 
 Before printing dry-run or completion templates, substitute `{{RESEARCH_DIR}}` with `${research_dir}` and `{{FEATURE_DIR}}` with `${feature_dir}`.
 
@@ -435,7 +437,7 @@ Contract rules:
 
 ## Monorepo Support
 
-In local mode (default), plans resolve through `resolve-artifact-store.sh` to the same git repository root `docs/plans/` as before, regardless of the subdirectory the skill runs from. A `.plans-config` file customizes it — repo root (`plans_dir: docs/plans`) for centralized plans, or package-level (`plans_dir: docs/plans` + `scope: local`) for local plans. In linear mode the same root resolution selects the `.ycc/artifacts/` cache; `store: linear` opts in.
+In local mode, plans resolve through `resolve-artifact-store.sh` to the same git repository root `docs/plans/` as before, regardless of the subdirectory the skill runs from. A `.plans-config` file customizes it — repo root (`plans_dir: docs/plans`) for centralized plans, or package-level (`plans_dir: docs/plans` + `scope: local`) for local plans. In linear mode (the default) the same root resolution selects the `.ycc/artifacts/` cache; `store: local` opts out.
 
 ## Notes
 

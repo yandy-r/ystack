@@ -91,11 +91,13 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/_shared/references/agent-team-dispatch.md` §
 
 ### Step 1: Validate Prerequisites
 
-First read `${CLAUDE_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md` **Implementation skills**, **Sync**, **Lookup**, and **Helper API**. Apply **Inputs** before resolution (including the local-plan-wins and `--store=local` conflict rules): when a Linear reference or linear plan path selects linear mode and `STORE_FLAG` is empty, set `STORE_FLAG=--store=linear` before the first resolver call and forward it to every later call, consistent with `references/plan-inputs.md`. Resolve and print the store (default `local`), retaining the printed mode and absolute paths across tool calls:
+First read `${CLAUDE_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md` **Implementation skills**, **Sync**, **Lookup**, and **Helper API**. Apply **Inputs** before resolution (including the local-plan-wins and `--store=local` conflict rules): when a Linear reference or linear plan path selects linear mode and `STORE_FLAG` is empty, set `STORE_FLAG=--store=linear` before the first resolver call and forward it to every later call, consistent with `references/plan-inputs.md`. Resolve and print the store (default `linear`), retaining the printed mode and absolute paths across tool calls:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
 ```
+
+If the printed `ARTIFACT_STORE_SOURCE` is `default` and `STORE_FLAG` is empty, apply the Inputs local-plan rule: an explicit plan path outside `.ycc/artifacts/`, or an existing `--store=local` feature directory (`bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" --store=local --kind=feature-dir --slug=<feature-name>`), sets `STORE_FLAG=--store=local`; print `Using local plan at <path>; pin with store: local in .plans-config` and resolve again with it.
 
 In linear mode, follow **Resolve and hydrate** (Lookup → Load `parallel-plan` and available `shared`) before prerequisites or branch preparation; retain absolute `PLAN_PATH` and `SHARED_PATH`. Follow `references/linear-sync.md` throughout this run. Local feature-name input keeps the existing prerequisite call:
 
@@ -103,7 +105,7 @@ In linear mode, follow **Resolve and hydrate** (Lookup → Load `parallel-plan` 
 ${CLAUDE_PLUGIN_ROOT}/skills/implement-plan/scripts/check-prerequisites.sh ${STORE_FLAG} [feature-name]
 ```
 
-For linear mode, call the helper with `${STORE_FLAG} --plan="${PLAN_PATH}" <resolved-slug>`; `PLAN_PATH` must be the absolute hydrated cache path. An explicit local plan path uses `${STORE_FLAG} --plan="${PLAN_PATH}" <feature-name>` without changing its store; with no store flag, the local feature-name call above is unchanged.
+For linear mode, call the helper with `${STORE_FLAG} --plan="${PLAN_PATH}" <resolved-slug>`; `PLAN_PATH` must be the absolute hydrated cache path. An explicit local plan path uses `${STORE_FLAG} --plan="${PLAN_PATH}" <feature-name>` with the store chosen above.
 
 If the script exits with error: display the error message and **STOP HERE** — do not proceed. In local mode, instruct the user to run `/parallel-plan` first; in linear mode, preserve Lookup's diagnostics rather than claiming no plan without querying Linear.
 

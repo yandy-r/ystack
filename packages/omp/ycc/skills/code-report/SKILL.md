@@ -2,14 +2,14 @@
 name: code-report
 description: Generates implementation reports from executed parallel plans. Use when
   documenting completed work, listing changed files, or recording test guidance.
-argument-hint: '[feature-name] [--dry-run]'
+argument-hint: '[feature-name] [--dry-run] [--store=local|linear]'
 ---
 
 # Code Report Generator
 
 Generate structured implementation reports documenting changes made during plan execution. This is an **optional Step 4** in the planning workflow, providing comprehensive documentation of what was implemented.
 
-**Operational context:** After implement-plan, write docs/plans/[feature-name]/report.md with an overview, changed files, implemented features, and test guidance; report generation is optional.
+**Operational context:** After implement-plan, write the feature's `report.md` (artifact-store kind `report`: `.ycc/artifacts/[feature-name]/report.md` in linear mode, `docs/plans/[feature-name]/report.md` in local mode) with an overview, changed files, implemented features, and test guidance; report generation is optional.
 
 ## Workflow Integration
 
@@ -32,13 +32,14 @@ This skill is the optional final step of the planning workflow. It requires `par
 
 Parse arguments:
 
-- **feature-name**: The name of the feature to report on (matches directory name in `docs/plans/`)
+- **feature-name**: The name of the feature to report on (its artifact-store feature directory)
 - **--dry-run**: Show what would be created without making changes
+- **--store=local|linear**: Optional artifact-store override; strip it into `STORE_FLAG` and forward it to every helper call. Full review/report routing is tracked in YAN-1156.
 
 If no feature name provided, abort with usage instructions:
 
 ```
-Usage: /code-report [feature-name] [--dry-run]
+Usage: /code-report [feature-name] [--dry-run] [--store=local|linear]
 
 Examples:
   /code-report user-authentication
@@ -55,10 +56,10 @@ Examples:
 
 Extract the feature name from `$ARGUMENTS` (first non-flag argument).
 
-Run the prerequisites check script in Step 1, before reading planning documents:
+Run the prerequisites check script in Step 1, before reading planning documents. It resolves the store (an existing local `docs/plans/[feature-name]/` keeps local mode under the default store) and prints `Store:` and `Target:`; retain both as `ARTIFACT_STORE` and the absolute `FEATURE_DIR` (the `Target:` directory) for every later step:
 
 ```bash
-skill://code-report/scripts/check-prerequisites.sh [feature-name]
+skill://code-report/scripts/check-prerequisites.sh ${STORE_FLAG} [feature-name]
 ```
 
 If the script exits with error:
@@ -69,7 +70,7 @@ If the script exits with error:
 
 ### Step 2: Verify Planning Documents
 
-Confirm which files exist in `docs/plans/[feature-name]/`:
+Confirm which files exist in `${FEATURE_DIR}/`:
 
 - `parallel-plan.md` (strongly recommended)
 - `shared.md` (optional but helpful)
@@ -83,9 +84,9 @@ Confirm which files exist in `docs/plans/[feature-name]/`:
 
 If they exist, read in this order:
 
-1. `docs/plans/[feature-name]/parallel-plan.md` - The implementation plan
-2. `docs/plans/[feature-name]/shared.md` - Architecture context
-3. Any other `.md` files in `docs/plans/[feature-name]/`
+1. `${FEATURE_DIR}/parallel-plan.md` - The implementation plan
+2. `${FEATURE_DIR}/shared.md` - Architecture context
+3. Any other `.md` files in `${FEATURE_DIR}/`
 
 ### Step 4: Identify Changed Files
 
@@ -133,7 +134,7 @@ Display:
 
 ## Report Location
 
-docs/plans/[feature-name]/report.md
+${FEATURE_DIR}/report.md
 
 ## Report Structure
 
@@ -166,7 +167,13 @@ cat skill://code-report/templates/report-structure.md
 
 ### Step 8: Generate Report Content
 
-Create `docs/plans/[feature-name]/report.md` with the following sections:
+Unless `--dry-run`, resolve the destination first. In linear mode apply the **Linear call gate** from `skill://ycc-shared/references/artifact-store.md` before this write; pass `--store=local` here when Step 1 printed `Store: local`:
+
+```bash
+OUT="$(bash "skill://ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=report --slug=[feature-name])"
+```
+
+Create `$OUT` with the following sections. In linear mode, follow artifact-store.md **Planning skills** (Lookup/Load identity, then Save) for kind `report`.
 
 #### Frontmatter
 
@@ -174,7 +181,7 @@ Create `docs/plans/[feature-name]/report.md` with the following sections:
 ---
 title: [Feature Name] Implementation Report
 date: [current date in mm/dd/yyyy format]
-original-plan: docs/plans/[feature-name]/parallel-plan.md
+original-plan: ${FEATURE_DIR}/parallel-plan.md
 ---
 ```
 
@@ -288,7 +295,7 @@ Provide completion summary:
 
 ## Location
 
-docs/plans/[feature-name]/report.md
+${OUT}
 
 ## Report Contents
 
@@ -313,7 +320,7 @@ docs/plans/[feature-name]/report.md
 
 ## Next Steps
 
-1. Review the report: docs/plans/[feature-name]/report.md
+1. Review the report: ${OUT}
 2. Share with QA team for testing guidance
 3. Use as reference for documentation updates
 4. Commit alongside implementation changes

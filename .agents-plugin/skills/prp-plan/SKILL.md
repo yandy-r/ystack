@@ -153,7 +153,7 @@ Derive `<slug>` from the feature name (kebab-case), not the cache filename `prp-
 2. For a real linear run, apply the **Linear call gate** from `~/.agents/ycc-shared/references/artifact-store.md` before any write, including a cache pull or research backstop.
 3. At the first permitted write, run the resolver with `${STORE_FLAG} --ensure --kind=<kind> --slug=<slug>` for that destination. Plan output is ensured only at Phase 6. Before loading a linear PRD/spec, ensure its source kind and slug, then apply Load; skip identity frontmatter when reading its body. Before research dispatch that writes backstops, ensure `prp-research`, then `mkdir -p "$RESEARCH_DIR"`; default sequential research creates no scratch directory.
 
-Local mode (default) keeps `docs/prps/plans/<slug>.plan.md` and `docs/prps/plans/.prp-research/<slug>/` under the current checkout's git toplevel, with no identity frontmatter. Linear research backstops remain local-only. Follow artifact-store.md **Planning skills** for identity Lookup/Load before writing and Save, including task sub-issues. Shell state does not persist across tool calls: retain the printed mode, absolute `OUT` and `RESEARCH_DIR`, and substitute them in all later commands and prompts.
+Local mode keeps `docs/prps/plans/<slug>.plan.md` and `docs/prps/plans/.prp-research/<slug>/` under the current checkout's git toplevel, with no identity frontmatter. Linear mode is the default; its research backstops remain local-only. Follow artifact-store.md **Planning skills** for identity Lookup/Load before writing and Save, including task sub-issues. Shell state does not persist across tool calls: retain the printed mode, absolute `OUT` and `RESEARCH_DIR`, and substitute them in all later commands and prompts.
 
 ---
 

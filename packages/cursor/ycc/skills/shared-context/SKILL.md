@@ -65,7 +65,7 @@ After creating the shared context files and displaying the summary, **STOP COMPL
 - **--team**: Optional. (Claude Code only) Deploy researchers as teammates. Default is standalone parallel sub-agents via the `Agent` tool. Cursor and Codex bundles lack team tools — do not pass `--team` there.
 - **--dry-run**: Show orchestration plan without creating files. Writes nothing.
 - **feature-name**: Required. Feature slug passed to canonical `plan-workflow` for artifact-store resolution (kebab-case).
-- **--store=local|linear**: Optional artifact-store override, forwarded to canonical `plan-workflow`. Local is the default.
+- **--store=local|linear**: Optional artifact-store override, forwarded to canonical `plan-workflow`. Linear is the default.
 
 If any unsupported flag is present (see Flag policy above), abort with a usage error and STOP:
 

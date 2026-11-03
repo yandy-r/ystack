@@ -32,17 +32,17 @@ It sources `resolve-plans-dir.sh` from its own directory. Sourcing resolves from
 
 ## Status
 
-Planning artifacts default to their existing local paths. Linear storage is opt-in until the default-store flip; see Store resolution.
+Planning artifacts default to Linear storage. Local mode keeps the existing local paths; see Store resolution for opting out.
 
-| Piece                                       | Issue    | State             |
-| ------------------------------------------- | -------- | ----------------- |
-| `resolve-artifact-store.sh`                 | YAN-1153 | Shipped           |
-| This reference                              | YAN-1152 | Shipped           |
-| Planning skills and validators              | YAN-1154 | Migrated (opt-in) |
-| Implementation skills and validators        | YAN-1155 | Migrated (opt-in) |
-| Review and report skills                    | YAN-1156 | Not migrated      |
-| Generators, capability matrix, `init`   | YAN-1157 | Shipped           |
-| Existing `docs/plans` and `docs/prps` trees | YAN-1158 | Leave in place    |
+| Piece                                       | Issue    | State          |
+| ------------------------------------------- | -------- | -------------- |
+| `resolve-artifact-store.sh`                 | YAN-1153 | Shipped        |
+| This reference                              | YAN-1152 | Shipped        |
+| Planning skills and validators              | YAN-1154 | Migrated       |
+| Implementation skills and validators        | YAN-1155 | Migrated       |
+| Review and report skills                    | YAN-1156 | Not migrated   |
+| Generators, capability matrix, `init`   | YAN-1157 | Shipped        |
+| Existing `docs/plans` and `docs/prps` trees | YAN-1158 | Leave in place |
 
 ## Kinds
 
@@ -94,7 +94,7 @@ Planning skills resolve artifact paths with the helper rather than constructing 
    OUT="$(bash "{{package-root}}/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=<kind> --slug=<slug>)"
    ```
 
-In local mode (the default), write `$OUT` at the existing local path, without identity frontmatter or Linear calls. In linear mode, prepare identity as described below before writing, then Save.
+In local mode, write `$OUT` at the existing local path, without identity frontmatter or Linear calls. In linear mode (the default), prepare identity as described below before writing, then Save.
 
 | Skill               | Kind or path operation                                                                                                                                                                                                                                                        |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -138,7 +138,9 @@ Each skill accepts, in addition to today's input (feature name, plan path, task 
 - A Linear reference: an issue key matching `^[A-Z][A-Z0-9]{1,9}-[0-9]+$` exactly (uppercase; when `ARTIFACT_LINEAR_TEAM` is set its prefix must equal that team), or a `linear.app` issue, Project or Document URL. A bare Project slug or Document id counts as a reference only with an explicit `--store=linear`.
 - A path to a cached plan. A file is a linear plan when it lies under `${ARTIFACT_ROOT}/.ycc/artifacts/` or its leading frontmatter has a `linear:` block or `pending: true`; any other path keeps local behavior unchanged and is never treated as a reference.
 
-A Linear reference or a linear plan path selects linear mode for the run: when `STORE_FLAG` is empty, set `STORE_FLAG=--store=linear` before the first resolver call and forward it to every later call. Combined with `--store=local`, abort with: `A Linear plan reference requires linear mode; drop --store=local.` Anything else (a feature name such as `oauth-2`, a local plan path) follows normal Store resolution, and an existing local `${PLANS_DIR}/<name>/` wins over reference parsing, so the default (`local`) keeps today's behavior byte-for-byte: same paths, archive, report, no Linear calls.
+A Linear reference or a linear plan path selects linear mode for the run: when `STORE_FLAG` is empty, set `STORE_FLAG=--store=linear` before the first resolver call and forward it to every later call. Combined with `--store=local`, abort with: `A Linear plan reference requires linear mode; drop --store=local.` Anything else (a feature name such as `oauth-2`, a local plan path) follows normal Store resolution, and an existing local `${PLANS_DIR}/<name>/` wins over reference parsing. Local mode keeps today's behavior byte-for-byte: same paths, archive, report, no Linear calls.
+
+Existing local plans keep local mode. When `STORE_FLAG` is empty and the printed `ARTIFACT_STORE_SOURCE=default`, set `STORE_FLAG=--store=local` (and forward it) if the input is a plan path that is not a linear plan path, or if `"$(resolve-artifact-store.sh --store=local)/<name>/"` already exists. Print one line: `Using local plan at <path>; pin with store: local in .plans-config`.
 
 ### Resolve and hydrate
 
@@ -313,7 +315,7 @@ Skills run these procedures; the helper never calls Linear.
 
 ### Linear call gate
 
-- Before any local write in linear mode, ensure a Linear MCP is installed and authorized. If not, stop and suggest `store: local`; do not create a cache, `.gitignore`, or perpetual pending file.
+- Before any local write in linear mode, ensure a Linear MCP is installed and authorized. If not, stop and suggest local mode: `--store=local` for this run, `store: local` in the repo `.plans-config`, or `store: local` in `${XDG_CONFIG_HOME:-$HOME/.config}/ycc/config` for every repo. Do not create a cache, `.gitignore`, or perpetual pending file.
 - Before any Linear call, confirm the connected workspace equals `ARTIFACT_LINEAR_WORKSPACE` when set. On mismatch, ask the user before proceeding.
 - Only temporary unreachability of an installed, authorized MCP follows Offline.
 
@@ -359,11 +361,11 @@ If the MCP fails during step 4 or 5, keep the local file and follow Offline.
 1. `--store=` argument → `ARTIFACT_STORE_SOURCE=flag`.
 2. Nearest in-scope `.plans-config` defining `store:` → `config`.
 3. `${XDG_CONFIG_HOME:-$HOME/.config}/ycc/config`, key `store:` → `global`.
-4. Default `local` → `default`.
+4. Default `linear` → `default`.
 
 An invalid value at the selected level does not fall through. An explicit resolve prints an error and returns 1; sourced auto-resolution prints `WARNING`, unsets every `ARTIFACT_*` variable, and does not fail the caller.
 
-The default is intentionally `local` until the default-store flip (YAN-1618). Linear mode is opt-in through `--store=linear` or `store: linear`; set it up for a repo with `init --artifact-store=linear` or `artifact-store-pointer.sh` (see Fresh clone). Local resolution and writes do not require a Linear MCP.
+The default is `linear`. Opt out with `--store=local`, `store: local` in `.plans-config`, or `store: local` in the global config; local mode needs no Linear MCP. Pin a repo to Linear for fresh clones with `init --artifact-store=linear` or `artifact-store-pointer.sh` (see Fresh clone). Resolution never writes files, whichever store is selected.
 
 The `store` and `linear_*` walks compare physical paths (`pwd -P`) and stop after the start directory's physical Git toplevel, or physical `PLANS_ROOT` without Git. Symlinked paths therefore cannot escape the boundary. The original start directory still goes to `resolve_plans_dir`, whose upward/topmost `PLANS_*` behavior is unchanged.
 

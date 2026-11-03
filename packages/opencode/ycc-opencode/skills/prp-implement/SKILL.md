@@ -38,6 +38,8 @@ Extract flags from `$ARGUMENTS` before treating the remainder as a plan path:
 
 Set `PARALLEL_FLAG=true|false`, ``, `WORKTREE_MODE=true|false`, `DRY_RUN=true|false`. The remaining text is the plan input: a plan path, a cached linear plan path, or a Linear reference. `{{package-root}}/shared/references/artifact-store.md` **Implementation skills > Inputs** defines issue keys, references, linear plan paths and which of them select linear mode (an existing local plan path wins). If the input is a Linear reference or linear plan path and `STORE_FLAG` is empty, set `STORE_FLAG=--store=linear` before the first resolver call and forward it to every later call, per that contract.
 
+Existing local plans keep local mode (Inputs): when `STORE_FLAG` is empty and `bash "{{package-root}}/shared/scripts/resolve-artifact-store.sh" --shell` prints `ARTIFACT_STORE_SOURCE=default`, a plan path that is not a linear plan path sets `STORE_FLAG=--store=local`; print `Using local plan at <path>; pin with store: local in .plans-config`.
+
 Validation (abort with these exact messages):
 
 - Both `--worktree` and `--no-worktree`: `--worktree and --no-worktree are mutually exclusive. Use --no-worktree to opt out of the default.`

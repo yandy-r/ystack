@@ -39,6 +39,7 @@ if [[ -z "$FEATURE_NAME" && -z "$PLAN_FILE" ]]; then
   echo 'Usage: check-prerequisites.sh <feature-name> [--store=linear|local] [--plan=<path>]' >&2
   exit 1
 fi
+EXPLICIT_PLAN=$PLAN_FILE
 if [[ -n "$PLAN_FILE" ]]; then
   PLAN_DIR=$(dirname "$PLAN_FILE")
   if [[ -d "$PLAN_DIR" ]]; then
@@ -52,33 +53,44 @@ else
   PLAN_DIR="$(get_plans_feature_dir "$FEATURE_NAME")" || exit 1
   PLAN_FILE="${PLAN_DIR}/parallel-plan.md"
 fi
-hydrate_message() {
-  echo 'Run Lookup and hydrate the plan from Linear before implementation.'
-  echo 'See artifact-store.md, Implementation skills (Resolve and hydrate).'
-}
-if [[ ! -d "$PLAN_DIR" ]]; then
-  echo "ERROR: Plan directory not found: $PLAN_DIR"
-  echo ""
-  if [[ "${ARTIFACT_STORE:-}" == linear ]]; then
-    hydrate_message
-  else
+# Guidance follows the input: an explicit plan outside the linear cache is a
+# local plan (artifact-store.md Inputs) even when the store resolves to linear.
+LINEAR_INPUT=0
+if [[ "${ARTIFACT_STORE:-}" == linear ]]; then
+  if [[ -z "$EXPLICIT_PLAN" || "$PLAN_DIR/" == "${ARTIFACT_DIR}/"* ]]; then LINEAR_INPUT=1; fi
+fi
+missing_guidance() {
+  if [[ "$LINEAR_INPUT" == 1 ]]; then
+    echo 'Run Lookup and hydrate the plan from Linear before implementation.'
+    echo 'See artifact-store.md, Implementation skills (Resolve and hydrate).'
+    local local_dir=''
+    if [[ -z "$EXPLICIT_PLAN" && "${ARTIFACT_STORE_SOURCE:-}" == default ]]; then
+      local_dir=$( (resolve_artifact_store "$PWD" --store=local && get_plans_feature_dir "$FEATURE_NAME") 2>/dev/null) || local_dir=''
+    fi
+    if [[ -n "$local_dir" && -d "$local_dir" ]]; then
+      echo "Local plan found at ${local_dir}; rerun with --store=local or set store: local in .plans-config."
+    fi
+  elif [[ "$1" == dir ]]; then
     echo "Create the planning documents first:"
     echo "  1. Run /shared-context ${FEATURE_NAME}"
     echo "  2. Run /parallel-plan ${FEATURE_NAME}"
-  fi
-  exit 1
-fi
-if [[ ! -f "$PLAN_FILE" ]]; then
-  echo "ERROR: ${PLAN_FILE} not found"
-  echo ""
-  if [[ "${ARTIFACT_STORE:-}" == linear ]]; then
-    hydrate_message
   else
     echo "The implementation requires a parallel plan to be created first."
     echo "Run: /parallel-plan ${FEATURE_NAME}"
     echo ""
     echo "This will create parallel-plan.md with detailed implementation tasks."
   fi
+}
+if [[ ! -d "$PLAN_DIR" ]]; then
+  echo "ERROR: Plan directory not found: $PLAN_DIR"
+  echo ""
+  missing_guidance dir
+  exit 1
+fi
+if [[ ! -f "$PLAN_FILE" ]]; then
+  echo "ERROR: ${PLAN_FILE} not found"
+  echo ""
+  missing_guidance file
   exit 1
 fi
 if [[ ! -f "${PLAN_DIR}/shared.md" ]]; then

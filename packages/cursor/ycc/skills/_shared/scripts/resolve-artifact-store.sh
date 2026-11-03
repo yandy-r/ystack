@@ -89,7 +89,7 @@ resolve_artifact_store() {
       if store=$(_artifact_config_value store "$global_config"); then
         source_name=global
       else
-        store=local
+        store=linear
         source_name=default
       fi
     fi

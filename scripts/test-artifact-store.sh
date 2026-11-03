@@ -66,14 +66,16 @@ field() { local dir="$1" key="$2"; shift 2; (CDPATH='' cd -- "$dir" >/dev/null &
 # Store precedence and sources; resolving and sourcing never create the cache.
 repo="${SCRATCH}/repo with space"
 make_repo "$repo"
-assert_eq 'default store' local "$(field "$repo" ARTIFACT_STORE)"
+assert_eq 'default store' linear "$(field "$repo" ARTIFACT_STORE)"
 assert_eq 'default source' default "$(field "$repo" ARTIFACT_STORE_SOURCE)"
-assert_eq 'default local plans path' "${repo}/docs/plans" "$(field "$repo" ARTIFACT_DIR)"
+assert_eq 'default linear cache path' "${repo}/.ycc/artifacts" "$(field "$repo" ARTIFACT_DIR)"
 assert_eq 'artifact root' "$repo" "$(field "$repo" ARTIFACT_ROOT)"
+"$BASH_BIN" "$HELPER" --shell "$repo" >/dev/null
 assert_ok 'resolution is read-only' test ! -e "${repo}/.ycc"
+assert_ok 'default resolution writes no gitignore' test ! -e "${repo}/.gitignore"
 assert_eq 'ancestor team outside repo ignored' '' "$(field "$repo" ARTIFACT_LINEAR_TEAM)"
 ln -s "$repo" "${SCRATCH}/repo-link"
-assert_eq 'symlink checkout ignores ancestor store' local "$(field "${SCRATCH}/repo-link" ARTIFACT_STORE)"
+assert_eq 'symlink checkout ignores ancestor store' linear "$(field "${SCRATCH}/repo-link" ARTIFACT_STORE)"
 assert_eq 'symlink checkout ignores ancestor team' '' "$(field "${SCRATCH}/repo-link" ARTIFACT_LINEAR_TEAM)"
 assert_eq 'symlink checkout local parity' "$(CDPATH='' cd -- "${SCRATCH}/repo-link" >/dev/null && "$BASH_BIN" "$PLANS")" "$(field "${SCRATCH}/repo-link" ARTIFACT_DIR --store=local)"
 printf 'store: local\n' >"${XDG_CONFIG_HOME}/ycc/config"
@@ -305,7 +307,7 @@ for slug in '' .. . -x ../bad bad/name 'white space'; do assert_bad "invalid slu
 assert_eq 'embedded dots in slug allowed' "${fresh}/.ycc/artifacts/v1..2" "$(run "$fresh" get_feature_artifact_dir v1..2)"
 assert_ok 'feature lookup remains pure' test ! -e "${fresh}/.ycc/artifacts/good-slug"
 path_repo="${SCRATCH}/artifact-paths"; make_repo "$path_repo"
-printf 'scope: local\nplans_dir: custom plans\n' >"${path_repo}/.plans-config"
+printf 'scope: local\nstore: local\nplans_dir: custom plans\n' >"${path_repo}/.plans-config"
 linear_base="${path_repo}/.ycc/artifacts/Feature_1"
 local_base="${path_repo}/custom plans/Feature_1"
 for pair in \

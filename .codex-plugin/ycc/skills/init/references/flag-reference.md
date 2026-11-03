@@ -160,7 +160,7 @@ $init --no-release-model
 
 ### `--artifact-store[=<store>]` / `--no-artifact-store`
 
-Phase 5.6 sets up the planning-artifact store pointer: the repo-root `.plans-config` that tells a fresh clone where planning artifacts live (see `_shared/references/artifact-store.md`). `local` stays the default store, so by default init only **offers** Linear setup, and only when a Linear MCP is available. Profile key: `artifact_store=linear|local|none`, read from the root `.plans-config` `store:` value.
+Phase 5.6 sets up the planning-artifact store pointer: the repo-root `.plans-config` that tells a fresh clone where planning artifacts live (see `_shared/references/artifact-store.md`). `linear` is the default store without a pointer; by default init only **offers** to commit a Linear pointer (recording workspace/team hints and pinning the store for fresh clones), and only when a Linear MCP is available. `--artifact-store=local` pins local mode. Profile key: `artifact_store=linear|local|none`, read from the root `.plans-config` `store:` value.
 
 First match wins:
 

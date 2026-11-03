@@ -47,9 +47,9 @@ Examples:
 
 ### Store and input resolution
 
-Read `${CLAUDE_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md` **Implementation skills > Inputs**, **Resolve and hydrate**, and **Store resolution**; Inputs defines what counts as an issue key, a Linear reference and a linear plan path, and that an existing local `${PLANS_DIR}/<name>/` wins over reference parsing. Strip `--store=local|linear` into `STORE_FLAG` and forward it on every resolver call. A Linear reference or linear plan path sets `STORE_FLAG=--store=linear`; combined with explicit `--store=local`, abort with: `A Linear plan reference requires linear mode; drop --store=local.` Anything else (including feature names such as `oauth-2`) follows normal store resolution; default local behavior is unchanged. A bare Project slug or Document id is a reference only with `--store=linear`; it is resolved through Lookup, not guessed from a missing local file.
+Read `${CLAUDE_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md` **Implementation skills > Inputs**, **Resolve and hydrate**, and **Store resolution**; Inputs defines what counts as an issue key, a Linear reference and a linear plan path, and that an existing local `${PLANS_DIR}/<name>/` wins over reference parsing. Strip `--store=local|linear` into `STORE_FLAG` and forward it on every resolver call. A Linear reference or linear plan path sets `STORE_FLAG=--store=linear`; combined with explicit `--store=local`, abort with: `A Linear plan reference requires linear mode; drop --store=local.` Anything else (including feature names such as `oauth-2`) follows normal store resolution (default `linear`); local-mode behavior is unchanged. A bare Project slug or Document id is a reference only with `--store=linear`; it is resolved through Lookup, not guessed from a missing local file.
 
-Resolve and print the mode, then in linear mode apply the Linear call gate and Lookup → Load for `parallel-plan` and available `shared`; use their absolute cache paths. Derive the feature slug from the selected Document/Project using the canonical contract. A missing `shared` Document warns; it does not block a plan. Rebuild a missing task map in memory from existing sub-issues; untracked tasks still run. Never create task issues during implementation. A dry run follows the contract's `--dry-run` rule (no `--ensure`, no cache write, no Linear writes). An explicit local plan path uses its absolute path and companion `shared.md`, retaining local behavior.
+Resolve and print the mode. When `STORE_FLAG` is empty and `ARTIFACT_STORE_SOURCE=default`, an explicit plan path outside `.ycc/artifacts/` or an existing `--store=local` feature directory sets `STORE_FLAG=--store=local` and prints `Using local plan at <path>; pin with store: local in .plans-config` (Inputs). Then in linear mode apply the Linear call gate and Lookup → Load for `parallel-plan` and available `shared`; use their absolute cache paths. Derive the feature slug from the selected Document/Project using the canonical contract. A missing `shared` Document warns; it does not block a plan. Rebuild a missing task map in memory from existing sub-issues; untracked tasks still run. Never create task issues during implementation. A dry run follows the contract's `--dry-run` rule (no `--ensure`, no cache write, no Linear writes). An explicit local plan path uses its absolute path and companion `shared.md`, retaining local behavior.
 
 ## Task parser output
 
@@ -107,7 +107,7 @@ TaskUpdate: taskId="<1.2 returned ID>", addBlockedBy=["<1.1 returned ID>"]
 
 In local mode, the skill detects and uses the correct plans directory in monorepo setups. Linear mode resolves `parallel-plan` and `shared` under `.ycc/artifacts/<slug>/` in the invoking checkout, independent of a package's local `docs/plans/`; see artifact-store.md **Worktrees**. The examples below retain local-mode behavior.
 
-Default behavior:
+Local-mode default:
 
 - Plans are read from the git repository root in `docs/plans/`.
 - Running the skill from any subdirectory (e.g., `packages/app1/`) still reads plans from the root.

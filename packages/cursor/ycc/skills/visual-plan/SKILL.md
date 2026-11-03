@@ -43,9 +43,9 @@ The non-negotiable invariants:
 
 - **Accept ANY plan path.** Never assume `docs/prps/plans` or any fixed
   location. The plan path is supplied by the caller and may live anywhere.
-- **Resolve `visual/` by store.** Local mode (default) keeps the sibling
-  `<dirname of plan>/visual/`. Linear mode writes under the resolved feature
-  cache's `visual/`, never beside a legacy or external source plan.
+- **Resolve `visual/` by store.** Local mode keeps the sibling
+  `<dirname of plan>/visual/`. Linear mode (default) writes under the resolved
+  feature cache's `visual/`, never beside a legacy or external source plan.
 - **NEVER edit the plan file.** Read it; write only into the derived `visual/`
   directory. The plan artifact stays byte-for-byte intact.
 - **NEVER re-run research or dispatch.** Only consume the existing plan.

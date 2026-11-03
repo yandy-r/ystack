@@ -158,15 +158,15 @@ EOF
 
 # plan_check <script> <plan-file> — runs a check-prerequisites.sh against a
 # scratch docs/plans/<feature>/ layout containing the given plan file. The
-# scratch root gets a local-scope .plans-config so resolve-plans-dir.sh never
-# walks up into a real checkout (TMPDIR may live under one) and redirect
-# PLANS_DIR.
+# scratch root gets a local-scope, local-store .plans-config so
+# resolve-plans-dir.sh never walks up into a real checkout (TMPDIR may live
+# under one) and the artifact store reads the docs/plans layout.
 plan_check() {
     local script="$1" plan_file="$2" name
     name="$(basename "$(dirname "$(dirname "$script")")")"
     local root="${SCRATCH}/planrun-${name}-${RANDOM}"
     mkdir -p "${root}/docs/plans/feat"
-    printf 'plans_dir: docs/plans\nscope: local\n' >"${root}/.plans-config"
+    printf 'plans_dir: docs/plans\nscope: local\nstore: local\n' >"${root}/.plans-config"
     cp "$plan_file" "${root}/docs/plans/feat/parallel-plan.md"
     printf 'shared context\n' >"${root}/docs/plans/feat/shared.md"
     run_capture "plan-${name}-${RANDOM}" -- bash -c "cd '${root}' && bash '${script}' feat"
@@ -223,7 +223,7 @@ assert_count_line "implement-plan: two matches -> 2" "$OUT" 'Tasks in plan: *' "
 if [[ "$CAN_CHMOD" -eq 1 ]]; then
     IP_LOCKED="${SCRATCH}/planrun-ip-locked"
     mkdir -p "${IP_LOCKED}/docs/plans/feat"
-    printf 'plans_dir: docs/plans\nscope: local\n' >"${IP_LOCKED}/.plans-config"
+    printf 'plans_dir: docs/plans\nscope: local\nstore: local\n' >"${IP_LOCKED}/.plans-config"
     cp "$PLAN_SOME" "${IP_LOCKED}/docs/plans/feat/parallel-plan.md"
     printf 'shared context\n' >"${IP_LOCKED}/docs/plans/feat/shared.md"
     chmod 000 "${IP_LOCKED}/docs/plans/feat/parallel-plan.md"

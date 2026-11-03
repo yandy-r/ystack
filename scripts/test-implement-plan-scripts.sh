@@ -24,7 +24,7 @@ run_check() { (CDPATH='' cd -- "$repo" >/dev/null && "$BASH_BIN" "$CHECK" "$@");
 repo="${SCRATCH}/repo with space"
 mkdir -p "$repo"
 git -C "$repo" init -q -b main
-printf 'scope: local\nplans_dir: custom plans\n' >"${repo}/.plans-config"
+printf 'scope: local\nstore: local\nplans_dir: custom plans\n' >"${repo}/.plans-config"
 local_dir="${repo}/custom plans/example"
 linear_dir="${repo}/.ycc/artifacts/example"
 mkdir -p "$local_dir" "$linear_dir"
@@ -109,6 +109,8 @@ expected_linear="Prerequisites satisfied
   Phases/Batches in plan: 2
   Independent tasks: 2"
 assert_eq 'linear flag resolves cache and counts body only' "$expected_linear" "$(run_check --store=linear example)"
+printf 'scope: local\nplans_dir: custom plans\n' >"${repo}/.plans-config"
+assert_eq 'default store resolves cache' "$expected_linear" "$(run_check example)"
 printf 'scope: local\nplans_dir: custom plans\nstore: linear\n' >"${repo}/.plans-config"
 assert_eq 'linear config resolves cache' "$expected_linear" "$(run_check example)"
 assert_eq 'local flag overrides linear config' "$expected_local" "$(run_check example --store=local)"
@@ -162,6 +164,19 @@ for kind in directory file; do
     PASS=$((PASS + 1)); printf 'PASS: missing linear %s suggests Lookup/hydrate\n' "$kind"
   else FAIL=$((FAIL + 1)); printf 'FAIL: missing linear %s guidance\n' "$kind" >&2; fi
 done
+# Without --store, guidance follows the input kind under the default linear store.
+printf 'scope: local\nplans_dir: custom plans\n' >"${repo}/.plans-config"
+if out=$(run_check --plan=missing.md); then rc=0; else rc=$?; fi
+assert_eq 'default-store missing explicit plan exits 1' 1 "$rc"
+if [[ "$out" == *"ERROR: ${repo}/missing.md not found"* && "$out" == *'Run: /parallel-plan repo with space'* && "$out" != *'Run Lookup'* ]]; then
+  PASS=$((PASS + 1)); printf 'PASS: default-store missing explicit plan keeps local guidance\n'
+else FAIL=$((FAIL + 1)); printf 'FAIL: default-store missing explicit plan guidance: %s\n' "$out" >&2; fi
+rm -rf "${repo}/.ycc/artifacts/missing"
+if out=$(run_check missing); then rc=0; else rc=$?; fi
+assert_eq 'default-store missing feature exits 1' 1 "$rc"
+if [[ "$out" == *'Run Lookup and hydrate the plan from Linear'* && "$out" == *"Local plan found at ${repo}/custom plans/missing; rerun with --store=local"* ]]; then
+  PASS=$((PASS + 1)); printf 'PASS: default-store missing feature names the local plan\n'
+else FAIL=$((FAIL + 1)); printf 'FAIL: default-store local plan hint: %s\n' "$out" >&2; fi
 for args in '--store=broken' '--plan=' '--unknown'; do
   if run_check example "$args" >"${SCRATCH}/out" 2>"${SCRATCH}/err"; then
     FAIL=$((FAIL + 1)); printf 'FAIL: invalid option %s succeeded\n' "$args" >&2

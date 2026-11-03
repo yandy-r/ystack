@@ -2,7 +2,7 @@
 
 This template defines the structure for `feature-spec.md` - the consolidated research document that serves as input for plan-workflow.
 
-Resolve research links for the active store: in linear mode use `./research/research-<lens>.md`; in local mode (default) use `./research-<lens>.md`.
+Resolve research links for the active store: in linear mode (default) use `./research/research-<lens>.md`; in local mode use `./research-<lens>.md`.
 
 ---
 
