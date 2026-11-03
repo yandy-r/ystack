@@ -40,16 +40,19 @@ fi
 
 if [[ -n "$STORE_FLAG" ]]; then
   resolve_artifact_store "$PWD" "$STORE_FLAG" || exit 1
-elif [[ "${ARTIFACT_STORE_SOURCE:-}" == default ]]; then
+else
   # Existing local plans keep local mode (artifact-store.md Inputs).
-  local_dir=$( (resolve_artifact_store "$PWD" --store=local && get_plans_feature_dir "$FEATURE_NAME") 2>/dev/null) || local_dir=''
-  if [[ -n "$local_dir" && -d "$local_dir" ]]; then
-    resolve_artifact_store "$PWD" --store=local || exit 1
-    echo "Using local plan at ${local_dir}; pin with store: local in .plans-config"
-  fi
+  select_local_plan_store "$FEATURE_NAME" || exit 1
 fi
 [[ -n "${ARTIFACT_STORE:-}" ]] || exit 1
 PLAN_DIR="$(get_plans_feature_dir "$FEATURE_NAME")" || exit 1
+# Local: <PLANS_DIR>/<name>/report.md, accepting legacy local names. Linear:
+# kind code-report, separate from implement-plan's run report.md.
+if [[ "$ARTIFACT_STORE" == linear ]]; then
+  REPORT_FILE="$(get_artifact_path code-report "$FEATURE_NAME")" || exit 1
+else
+  REPORT_FILE="${PLAN_DIR}/report.md"
+fi
 
 if [[ ! -d "$PLAN_DIR" ]]; then
   echo "ERROR: Plan directory not found: $PLAN_DIR"
@@ -85,7 +88,7 @@ fi
 
 echo "Report can be generated for: ${FEATURE_NAME}"
 echo "  Store: ${ARTIFACT_STORE}"
-echo "  Target: ${PLAN_DIR}/report.md"
+echo "  Target: ${REPORT_FILE}"
 
 if [[ -f "${PLAN_DIR}/parallel-plan.md" ]]; then
   echo "  Found: ${PLAN_DIR}/parallel-plan.md"
@@ -113,9 +116,9 @@ if [[ -f "${PLAN_DIR}/shared.md" ]]; then
 fi
 
 # Check if report already exists
-if [[ -f "${PLAN_DIR}/report.md" ]]; then
+if [[ -f "$REPORT_FILE" ]]; then
   echo ""
-  echo "NOTE: ${PLAN_DIR}/report.md already exists"
+  echo "NOTE: ${REPORT_FILE} already exists"
   echo "It will be overwritten if you proceed."
 fi
 

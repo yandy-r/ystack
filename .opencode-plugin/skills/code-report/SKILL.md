@@ -8,7 +8,7 @@ description: Generates implementation reports from executed parallel plans. Use 
 
 Generate structured implementation reports documenting changes made during plan execution. This is an **optional Step 4** in the planning workflow, providing comprehensive documentation of what was implemented.
 
-**Operational context:** After implement-plan, write the feature's `report.md` (artifact-store kind `report`: `.ycc/artifacts/[feature-name]/report.md` in linear mode, `docs/plans/[feature-name]/report.md` in local mode) with an overview, changed files, implemented features, and test guidance; report generation is optional.
+**Operational context:** After implement-plan, write the code report with an overview, changed files, implemented features, and test guidance: `docs/plans/[feature-name]/report.md` in local mode, or artifact-store kind `code-report` (`.ycc/artifacts/[feature-name]/code-report.md`, its own Linear Document) in linear mode, never implement-plan's run `report.md`. Report generation is optional.
 
 ## Workflow Integration
 
@@ -55,7 +55,7 @@ Examples:
 
 Extract the feature name from `$ARGUMENTS` (first non-flag argument).
 
-Run the prerequisites check script in Step 1, before reading planning documents. It resolves the store (an existing local `docs/plans/[feature-name]/` keeps local mode under the default store) and prints `Store:` and `Target:`; retain both as `ARTIFACT_STORE` and the absolute `FEATURE_DIR` (the `Target:` directory) for every later step:
+Run the prerequisites check script in Step 1, before reading planning documents. It resolves the store (an existing local `docs/plans/[feature-name]/` keeps local mode under the default store, including legacy local names such as `team/auth`) and prints `Store:` and `Target:`; retain `ARTIFACT_STORE`, the absolute report `Target:` path, and its directory as `FEATURE_DIR` for every later step:
 
 ```bash
 ~/.config/opencode/skills/code-report/scripts/check-prerequisites.sh ${STORE_FLAG} [feature-name]
@@ -133,7 +133,7 @@ Display:
 
 ## Report Location
 
-${FEATURE_DIR}/report.md
+[Step 1 Target: path]
 
 ## Report Structure
 
@@ -166,13 +166,18 @@ cat ~/.config/opencode/skills/code-report/templates/report-structure.md
 
 ### Step 8: Generate Report Content
 
-Unless `--dry-run`, resolve the destination first. In linear mode apply the **Linear call gate** from `~/.config/opencode/shared/references/artifact-store.md` before this write; pass `--store=local` here when Step 1 printed `Store: local`:
+Unless `--dry-run`, set the destination:
 
-```bash
-OUT="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=report --slug=[feature-name])"
-```
+- **Local mode** (`Store: local`): `OUT="${FEATURE_DIR}/report.md"` (the Step 1 `Target:`); create its parent with `mkdir -p "$(dirname "$OUT")"`. Write it as before, with no identity frontmatter or Linear calls.
+- **Linear mode**: apply the **Linear call gate** from `~/.config/opencode/shared/references/artifact-store.md`, then resolve kind `code-report`:
 
-Create `$OUT` with the following sections. In linear mode, follow artifact-store.md **Planning skills** (Lookup/Load identity, then Save) for kind `report`.
+  ```bash
+  OUT="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=code-report --slug=[feature-name])"
+  ```
+
+  Follow artifact-store.md **Planning skills** (Lookup/Load identity, then Save) for kind `code-report`: a Document titled `<slug> · code-report` on the feature Project. Never write `report.md` or touch `linear.statusUpdate`; those belong to implement-plan's run report.
+
+Create `$OUT` with the following sections.
 
 #### Frontmatter
 

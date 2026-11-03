@@ -50,26 +50,24 @@ if [[ -n "$PLAN_FILE" ]]; then
   PLAN_FILE="${PLAN_DIR}/$(basename "$PLAN_FILE")"
   FEATURE_NAME=${FEATURE_NAME:-${PLAN_DIR##*/}}
 else
+  # Default store: an existing local plan keeps local mode before the strict
+  # linear slug check could reject a legacy local name (team/auth, spaces).
+  if [[ -z "$STORE_FLAG" ]]; then select_local_plan_store "$FEATURE_NAME" || exit 1; fi
   PLAN_DIR="$(get_plans_feature_dir "$FEATURE_NAME")" || exit 1
   PLAN_FILE="${PLAN_DIR}/parallel-plan.md"
 fi
 # Guidance follows the input: an explicit plan outside the linear cache is a
 # local plan (artifact-store.md Inputs) even when the store resolves to linear.
+# Compare physical paths too: PLAN_DIR is canonical, ARTIFACT_DIR may be logical.
 LINEAR_INPUT=0
 if [[ "${ARTIFACT_STORE:-}" == linear ]]; then
-  if [[ -z "$EXPLICIT_PLAN" || "$PLAN_DIR/" == "${ARTIFACT_DIR}/"* ]]; then LINEAR_INPUT=1; fi
+  phys_artifact=$(CDPATH='' cd -- "$ARTIFACT_DIR" 2>/dev/null && pwd -P) || phys_artifact=$ARTIFACT_DIR
+  if [[ -z "$EXPLICIT_PLAN" || "$PLAN_DIR/" == "${ARTIFACT_DIR}/"* || "$PLAN_DIR/" == "${phys_artifact}/"* ]]; then LINEAR_INPUT=1; fi
 fi
 missing_guidance() {
   if [[ "$LINEAR_INPUT" == 1 ]]; then
     echo 'Run Lookup and hydrate the plan from Linear before implementation.'
     echo 'See artifact-store.md, Implementation skills (Resolve and hydrate).'
-    local local_dir=''
-    if [[ -z "$EXPLICIT_PLAN" && "${ARTIFACT_STORE_SOURCE:-}" == default ]]; then
-      local_dir=$( (resolve_artifact_store "$PWD" --store=local && get_plans_feature_dir "$FEATURE_NAME") 2>/dev/null) || local_dir=''
-    fi
-    if [[ -n "$local_dir" && -d "$local_dir" ]]; then
-      echo "Local plan found at ${local_dir}; rerun with --store=local or set store: local in .plans-config."
-    fi
   elif [[ "$1" == dir ]]; then
     echo "Create the planning documents first:"
     echo "  1. Run /shared-context ${FEATURE_NAME}"

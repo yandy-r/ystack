@@ -73,7 +73,7 @@ First read `{{package-root}}/shared/references/artifact-store.md` **Implementati
 bash "{{package-root}}/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
 ```
 
-If the printed `ARTIFACT_STORE_SOURCE` is `default` and `STORE_FLAG` is empty, apply the Inputs local-plan rule: an explicit plan path outside `.ycc/artifacts/`, or an existing `--store=local` feature directory (`bash "{{package-root}}/shared/scripts/resolve-artifact-store.sh" --store=local --kind=feature-dir --slug=<feature-name>`), sets `STORE_FLAG=--store=local`; print `Using local plan at <path>; pin with store: local in .plans-config` and resolve again with it.
+If the printed `ARTIFACT_STORE_SOURCE` is `default` and `STORE_FLAG` is empty, apply the Inputs local-plan rule: an explicit plan path outside `.ycc/artifacts/`, or an existing local feature directory (`test -d "$(bash "{{package-root}}/shared/scripts/resolve-artifact-store.sh" --store=local)/<feature-name>"`, which also accepts legacy local names such as `team/auth`), sets `STORE_FLAG=--store=local`; print `Using local plan at <path>; pin with store: local in .plans-config` and resolve again with it. `check-prerequisites.sh` applies the same feature-directory rule when called without a store flag.
 
 In linear mode, follow **Resolve and hydrate** (Lookup → Load `parallel-plan` and available `shared`) before prerequisites or branch preparation; retain absolute `PLAN_PATH` and `SHARED_PATH`. Follow `references/linear-sync.md` throughout this run. Local feature-name input keeps the existing prerequisite call:
 

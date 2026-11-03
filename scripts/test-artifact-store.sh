@@ -318,6 +318,7 @@ for pair in \
   "parallel-plan|${linear_base}/parallel-plan.md|${local_base}/parallel-plan.md" \
   "shared|${linear_base}/shared.md|${local_base}/shared.md" \
   "report|${linear_base}/report.md|${local_base}/report.md" \
+  "code-report|${linear_base}/code-report.md|${local_base}/report.md" \
   "prp-report|${linear_base}/report.md|${path_repo}/docs/prps/reports/Feature_1-report.md" \
   "research-external|${linear_base}/research/research-external.md|${local_base}/research-external.md" \
   "research-deep-research|${linear_base}/research/research-deep-research.md|${local_base}/research-deep-research.md" \
@@ -378,6 +379,8 @@ for kind in report prp-report; do
   assert_eq "linear ensure ${kind} returns report path" "${linear_base}/report.md" "$("$BASH_BIN" "$HELPER" --store=linear --ensure --kind="$kind" --slug=Feature_1 "$path_repo")"
   assert_ok "linear ensure ${kind} creates no file" test ! -e "${linear_base}/report.md"
 done
+assert_eq 'linear ensure code-report keeps its own file' "${linear_base}/code-report.md" "$("$BASH_BIN" "$HELPER" --store=linear --ensure --kind=code-report --slug=Feature_1 "$path_repo")"
+assert_ok 'linear ensure code-report creates no run report' test ! -e "${linear_base}/report.md"
 "$BASH_BIN" "$HELPER" --store=local --ensure --kind=shared --slug=Feature_1 "$path_repo" >/dev/null
 assert_ok 'local ensure shared creates feature dir' test -d "$local_base"
 assert_ok 'local ensure shared creates no file' test ! -e "${local_base}/shared.md"

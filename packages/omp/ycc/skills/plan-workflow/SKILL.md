@@ -100,7 +100,7 @@ Parse and strip `--store=local|linear` before selecting the feature name. Set `S
    parallel_plan_file="$(bash "skill://ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=parallel-plan --slug="[feature-name]")"
    ```
 
-   If `STORE_FLAG` is empty, the printed `ARTIFACT_STORE_SOURCE` is `default`, and `bash "skill://ycc-shared/scripts/resolve-artifact-store.sh" --store=local --kind=feature-dir --slug="[feature-name]"` already exists, set `STORE_FLAG=--store=local`, print `Using local plan at <that path>; pin with store: local in .plans-config`, and rerun the resolutions above (artifact-store.md **Implementation skills > Inputs**).
+   If `STORE_FLAG` is empty, the printed `ARTIFACT_STORE_SOURCE` is `default`, and `test -d "$(bash "skill://ycc-shared/scripts/resolve-artifact-store.sh" --store=local)/[feature-name]"` succeeds (legacy local names such as `team/auth` included), set `STORE_FLAG=--store=local`, print `Using local plan at <that path>; pin with store: local in .plans-config`, and rerun the resolutions above (artifact-store.md **Implementation skills > Inputs**).
 
 2. For a non-dry linear run only, apply the **Linear call gate** in `skill://ycc-shared/references/artifact-store.md` before any write or pull.
 3. Before Lookup/Load in that linear run, ensure the cache and gitignore rule:
