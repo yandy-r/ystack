@@ -413,7 +413,7 @@ In linear mode, `ARTIFACT_ROOT` is `PLANS_ROOT` unless `PLANS_ROOT` lies outside
 | `get_artifact_path <kind> <slug>`                            | Print the kind's absolute local or linear path. Validate the slug like `get_feature_artifact_dir` and research/analysis suffixes as lowercase kebab-case. No writes.                                         |
 | `select_local_plan_store <name>`                             | Under `ARTIFACT_STORE_SOURCE=default` only, re-resolve with `--store=local` when the local feature directory (legacy names allowed) exists, printing the Inputs line. Used by the read-only planning checks. |
 | `ensure_artifact_gitignore`                                  | Linear: ensure the repository gitignore rule. Local: return 0 without writing.                                                                                                                               |
-| `ensure_artifact_dir`                                        | Create `ARTIFACT_DIR`, then run `ensure_artifact_gitignore`; the write-on-first-save entry point.                                                                                                            |
+| `ensure_artifact_dir`                                        | Run `ensure_artifact_gitignore`, then create `ARTIFACT_DIR` only on success; a refused or failed check creates no `.ycc/artifacts/`. The write-on-first-save entry point.                                    |
 
 Pointer writer (not sourced; see Fresh clone for the CLI and exit codes):
 
@@ -483,6 +483,8 @@ The linear gitignore check returns without editing when either condition holds:
 - `${ARTIFACT_ROOT}/.gitignore` already contains `.ycc/artifacts/`, `/.ycc/artifacts/`, `.ycc/artifacts`, or `/.ycc/artifacts`.
 
 Matches from a global `core.excludesFile` or `.git/info/exclude` do not count because they are not portable; the repository rule is still appended. A negated (`!`) rule that re-includes one of those probe paths, from any source, refuses rather than being overridden. Directory-level exceptions such as `!.ycc/artifacts/feat/` are not reported by Git and are overridden by the appended rule.
+
+- A `!` line (after an optional UTF-8 BOM) in any `.gitignore` under `.ycc/`, in the working tree or its tracked index copy, also refuses: `check-ignore` cannot attribute it, and the deeper file would win over the root rule.
 
 Otherwise append `.ycc/artifacts/`, creating `.gitignore` if needed and adding a missing trailing newline before the entry. Skills call `--ensure` after the Linear gate and before the first cache write or pull; `artifact-store-pointer.sh` (run by `ycc:init --artifact-store=linear`) applies the same rule when it writes the committed pointer.
 
