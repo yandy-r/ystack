@@ -121,7 +121,7 @@ Check for related PRP artifacts:
 - `docs/prps/plans/` — Plans that were executed (including the `completed/` subfolder)
 - `docs/prps/prds/` — Related PRDs
 
-Reference these in the PR body if they exist. When the resolved store is `linear` (`bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" --shell`, reading `ARTIFACT_STORE=`; default `local`), list the Linear Project and plan Document URLs from the artifact cache identity instead of `docs/prps` paths, per artifact-store.md **PR linking**.
+Reference these in the PR body if they exist. When the resolved store is `linear` (`bash "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" --shell`, reading `ARTIFACT_STORE=`; default `linear`), list the Linear Project and plan Document URLs from the artifact cache identity instead of `docs/prps` paths, per artifact-store.md **PR linking**.
 
 ### Linear Issue Links
 

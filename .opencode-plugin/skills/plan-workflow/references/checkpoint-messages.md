@@ -366,7 +366,7 @@ Options:
   --worktree        (legacy — now default; safe to omit) Worktree annotations emitted by default
   --no-worktree     Opt out of worktree annotations in the generated parallel-plan.md
   --visual          Render the finished plan as a visual artifact via visual-plan (local-files by default; hosted link requires --share)
-  --store=local|linear  Optional artifact-store override (default: local)
+  --store=local|linear  Optional artifact-store override (default: linear)
 
 Examples:
   /plan-workflow user-authentication

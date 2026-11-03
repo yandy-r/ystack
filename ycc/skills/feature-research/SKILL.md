@@ -27,7 +27,7 @@ allowed-tools:
 
 Deep research skill for application features. Goes beyond codebase analysis to research external APIs, business logic, technical specifications, UX considerations, and generate actionable recommendations. Dispatches 7 researchers in parallel — standalone sub-agents by default, or an agent team with `--team` (Claude Code only) where teammates share findings with each other.
 
-**Operational context:** Dispatch api-researcher, business-analyzer, tech-designer, ux-researcher, security-researcher, practices-researcher, and recommendations-agent; write seven research-*.md files plus feature-spec.md at paths resolved through the artifact store, never docs/prps/. Local mode (default) keeps `docs/plans/[feature-name]/`; linear mode uses `.ycc/artifacts/[feature-name]/`. Use /ycc:prp-spec for lightweight single-pass PRP specs.
+**Operational context:** Dispatch api-researcher, business-analyzer, tech-designer, ux-researcher, security-researcher, practices-researcher, and recommendations-agent; write seven research-*.md files plus feature-spec.md at paths resolved through the artifact store, never docs/prps/. Linear mode (default) uses `.ycc/artifacts/[feature-name]/`; local mode keeps `docs/plans/[feature-name]/`. Use /ycc:prp-spec for lightweight single-pass PRP specs.
 
 ## Workflow Integration
 
@@ -73,7 +73,7 @@ Parse arguments (flags first, then the feature name):
 - **--description "..."**: Brief description of the feature (guides research agents)
 - **--dry-run**: Show execution plan without running. With `--team`, also prints the team name and 7-teammate roster.
 - **feature-name**: Required. Feature slug passed to the artifact-store resolver
-- **--store=local|linear**: Optional artifact-store override. Forward it to every helper call. Local is the default; linear is opt-in.
+- **--store=local|linear**: Optional artifact-store override. Forward it to every helper call. Linear is the default; `local` opts out.
 
 If no feature name provided, abort with usage instructions:
 
@@ -112,7 +112,7 @@ Validate the feature name: must be kebab-case, no special characters except hyph
 
 ### Step 2: Resolve Artifact Paths and Create Directories
 
-**CRITICAL**: Write only to paths returned by the artifact-store resolver — NEVER to `docs/prps/` or another directory, regardless of the current working directory. Local mode (default) preserves `docs/plans/[feature-name]/`; linear mode resolves under `.ycc/artifacts/[feature-name]/`.
+**CRITICAL**: Write only to paths returned by the artifact-store resolver — NEVER to `docs/prps/` or another directory, regardless of the current working directory. Linear mode (default) resolves under `.ycc/artifacts/[feature-name]/`; local mode preserves `docs/plans/[feature-name]/`.
 
 1. Print the mode and read `ARTIFACT_STORE=` from stdout; resolve paths without writes:
 

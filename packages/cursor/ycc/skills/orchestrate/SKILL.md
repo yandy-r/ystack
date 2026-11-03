@@ -46,7 +46,7 @@ Parse flags first, then treat the remainder as the task description:
 - `--sequential`: force single-task batches (tightly dependent tasks). With worktree mode active, all sequential tasks run in the single feature worktree.
 - `--worktree`: legacy, now default; accepted as a silent no-op.
 - `--no-worktree`: force worktree mode off. All tasks run in the current checkout; no feature worktree is created.
-- `--store=local|linear`: artifact-store override (see `${CURSOR_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md`, Implementation skills). Default `local`; `linear` is opt-in.
+- `--store=local|linear`: artifact-store override (see `${CURSOR_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md`, Implementation skills). Default `linear`; `local` opts out.
 - `<task-description>`: the task to orchestrate (required, may be multi-word), or a Linear issue reference (key like `YAN-123`, or issue URL) that selects linear mode (see Linear Mode).
 
 Strip flags from `$ARGUMENTS` and set `TEAM_FLAG=true|false`, `DRY_RUN=true|false`, `PLAN_ONLY=true|false`, `SEQUENTIAL=true|false`, `WORKTREE_MODE=true|false` (true unless `--no-worktree`), and `STORE_FLAG` (the stripped `--store=...` flag, empty when absent; pass `${STORE_FLAG}` to every resolver call). Join the remaining tokens into `TASK_DESCRIPTION`.
@@ -165,7 +165,7 @@ With `--team`, do not call `task registration`, `Agent`, or `SendMessage` in dry
 
 ## Linear Mode
 
-Contract: `${CURSOR_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md` (Implementation skills: Status sync, Report and completion, Orchestrate). Applies only when the input was a Linear issue reference (see Linear input under Current Task); otherwise skip this section entirely (default `local`: no Linear calls, no behavior change). Only this orchestrating skill calls Linear MCP; subagents never do, and agent prompts must not mention Linear tools.
+Contract: `${CURSOR_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md` (Implementation skills: Status sync, Report and completion, Orchestrate). Applies only when the input was a Linear issue reference (see Linear input under Current Task); otherwise skip this section entirely (a plain task description makes no Linear calls and has no behavior change, whatever the resolved store). Only this orchestrating skill calls Linear MCP; subagents never do, and agent prompts must not mention Linear tools.
 
 1. **Run start** (non-dry, non-plan-only, immediately before the first dispatch): move the issue to `started` only when it is `backlog`, `unstarted` or `triage`. Never move an issue backwards or touch other issues.
 2. **Failure**: leave the issue `started`; add one comment with the failed task id, failing check and a short excerpt (no secrets, no full logs).

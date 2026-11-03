@@ -66,14 +66,16 @@ field() { local dir="$1" key="$2"; shift 2; (CDPATH='' cd -- "$dir" >/dev/null &
 # Store precedence and sources; resolving and sourcing never create the cache.
 repo="${SCRATCH}/repo with space"
 make_repo "$repo"
-assert_eq 'default store' local "$(field "$repo" ARTIFACT_STORE)"
+assert_eq 'default store' linear "$(field "$repo" ARTIFACT_STORE)"
 assert_eq 'default source' default "$(field "$repo" ARTIFACT_STORE_SOURCE)"
-assert_eq 'default local plans path' "${repo}/docs/plans" "$(field "$repo" ARTIFACT_DIR)"
+assert_eq 'default linear cache path' "${repo}/.ycc/artifacts" "$(field "$repo" ARTIFACT_DIR)"
 assert_eq 'artifact root' "$repo" "$(field "$repo" ARTIFACT_ROOT)"
+"$BASH_BIN" "$HELPER" --shell "$repo" >/dev/null
 assert_ok 'resolution is read-only' test ! -e "${repo}/.ycc"
+assert_ok 'default resolution writes no gitignore' test ! -e "${repo}/.gitignore"
 assert_eq 'ancestor team outside repo ignored' '' "$(field "$repo" ARTIFACT_LINEAR_TEAM)"
 ln -s "$repo" "${SCRATCH}/repo-link"
-assert_eq 'symlink checkout ignores ancestor store' local "$(field "${SCRATCH}/repo-link" ARTIFACT_STORE)"
+assert_eq 'symlink checkout ignores ancestor store' linear "$(field "${SCRATCH}/repo-link" ARTIFACT_STORE)"
 assert_eq 'symlink checkout ignores ancestor team' '' "$(field "${SCRATCH}/repo-link" ARTIFACT_LINEAR_TEAM)"
 assert_eq 'symlink checkout local parity' "$(CDPATH='' cd -- "${SCRATCH}/repo-link" >/dev/null && "$BASH_BIN" "$PLANS")" "$(field "${SCRATCH}/repo-link" ARTIFACT_DIR --store=local)"
 printf 'store: local\n' >"${XDG_CONFIG_HOME}/ycc/config"
@@ -305,7 +307,7 @@ for slug in '' .. . -x ../bad bad/name 'white space'; do assert_bad "invalid slu
 assert_eq 'embedded dots in slug allowed' "${fresh}/.ycc/artifacts/v1..2" "$(run "$fresh" get_feature_artifact_dir v1..2)"
 assert_ok 'feature lookup remains pure' test ! -e "${fresh}/.ycc/artifacts/good-slug"
 path_repo="${SCRATCH}/artifact-paths"; make_repo "$path_repo"
-printf 'scope: local\nplans_dir: custom plans\n' >"${path_repo}/.plans-config"
+printf 'scope: local\nstore: local\nplans_dir: custom plans\n' >"${path_repo}/.plans-config"
 linear_base="${path_repo}/.ycc/artifacts/Feature_1"
 local_base="${path_repo}/custom plans/Feature_1"
 for pair in \
@@ -316,6 +318,7 @@ for pair in \
   "parallel-plan|${linear_base}/parallel-plan.md|${local_base}/parallel-plan.md" \
   "shared|${linear_base}/shared.md|${local_base}/shared.md" \
   "report|${linear_base}/report.md|${local_base}/report.md" \
+  "code-report|${linear_base}/code-report.md|${local_base}/report.md" \
   "prp-report|${linear_base}/report.md|${path_repo}/docs/prps/reports/Feature_1-report.md" \
   "research-external|${linear_base}/research/research-external.md|${local_base}/research-external.md" \
   "research-deep-research|${linear_base}/research/research-deep-research.md|${local_base}/research-deep-research.md" \
@@ -376,6 +379,8 @@ for kind in report prp-report; do
   assert_eq "linear ensure ${kind} returns report path" "${linear_base}/report.md" "$("$BASH_BIN" "$HELPER" --store=linear --ensure --kind="$kind" --slug=Feature_1 "$path_repo")"
   assert_ok "linear ensure ${kind} creates no file" test ! -e "${linear_base}/report.md"
 done
+assert_eq 'linear ensure code-report keeps its own file' "${linear_base}/code-report.md" "$("$BASH_BIN" "$HELPER" --store=linear --ensure --kind=code-report --slug=Feature_1 "$path_repo")"
+assert_ok 'linear ensure code-report creates no run report' test ! -e "${linear_base}/report.md"
 "$BASH_BIN" "$HELPER" --store=local --ensure --kind=shared --slug=Feature_1 "$path_repo" >/dev/null
 assert_ok 'local ensure shared creates feature dir' test -d "$local_base"
 assert_ok 'local ensure shared creates no file' test ! -e "${local_base}/shared.md"

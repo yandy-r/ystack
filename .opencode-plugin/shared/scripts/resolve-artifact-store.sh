@@ -89,7 +89,7 @@ resolve_artifact_store() {
       if store=$(_artifact_config_value store "$global_config"); then
         source_name=global
       else
-        store=local
+        store=linear
         source_name=default
       fi
     fi
@@ -169,6 +169,15 @@ get_artifact_path() {
         printf '%s/docs/prps/reports/%s-report.md\n' "$repo" "$slug"
       fi
       ;;
+    code-report)
+      # Local parity: code-report keeps <PLANS_DIR>/<slug>/report.md. Linear
+      # gets its own Document so it never replaces the run report.
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/code-report.md\n' "$base"
+      else
+        printf '%s/report.md\n' "$base"
+      fi
+      ;;
     research-dir)
       if [[ "$ARTIFACT_STORE" == linear ]]; then
         printf '%s/research\n' "$base"
@@ -242,6 +251,19 @@ get_plans_feature_dir() {
     return 1
   fi
   printf '%s/%s\n' "$PLANS_DIR" "$name"
+}
+
+# Read-only planning checks: under the default store only, an existing local
+# feature directory keeps local mode (artifact-store.md Implementation skills >
+# Inputs). Uses the legacy local name rules, so names such as team/auth work.
+# Prints the selection line when it switches; returns 1 only on resolver errors.
+select_local_plan_store() {
+  local name="${1:-}" local_dir
+  [[ "${ARTIFACT_STORE_SOURCE:-}" == default ]] || return 0
+  local_dir=$( (resolve_artifact_store --store=local && get_plans_feature_dir "$name") 2>/dev/null) || return 0
+  [[ -d "$local_dir" ]] || return 0
+  resolve_artifact_store --store=local || return 1
+  printf 'Using local plan at %s; pin with store: local in .plans-config\n' "$local_dir"
 }
 
 # Check before either write entry point so a non-repository cannot gain a cache.

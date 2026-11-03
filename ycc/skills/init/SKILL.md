@@ -195,7 +195,7 @@ Decide whether to create `RELEASING.md` (the project's branching and release rul
 
 ### Phase 5.6 — Artifact store
 
-Decide whether to write the committed artifact-store pointer (the root `.plans-config`; see `${CLAUDE_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md`), then resolve the `IF_ARTIFACT_STORE` blocks. This phase runs before Phase 6 so the pointer exists before `AGENTS.md` is applied. `local` stays the default store, so init only ever offers Linear.
+Decide whether to write the committed artifact-store pointer (the root `.plans-config`; see `${CLAUDE_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md`), then resolve the `IF_ARTIFACT_STORE` blocks. This phase runs before Phase 6 so the pointer exists before `AGENTS.md` is applied. `linear` is already the default store; the offered Linear pointer records workspace/team hints and pins the store for fresh clones, while `--artifact-store=local` pins local mode.
 
 1. **Choose the action** (first match wins):
    - The root pointer has effective `store: linear` AND is tracked (`git --literal-pathspecs -C <repo-root> ls-files --error-unmatch -- .plans-config` succeeds), unless `ARTIFACT_STORE_FLAG=local` → skip. An untracked linear pointer does not skip setup; reuse its existing values in Gather and rerun the helper when setup is chosen.
@@ -319,7 +319,7 @@ Produce a summary using `${CLAUDE_PLUGIN_ROOT}/skills/init/templates/workspace-r
 - No new agents are registered. `ycc:codebase-research-analyst` is called only once, conditionally, for large existing repos (>50 source files) when `--docs-only` is not set.
 - The MCP and agent selection flow is preserved unchanged behind `--docs-only`.
 - A missing `RELEASING.md` never blocks init. Phase 5.5 only offers `ycc:release-model`; `--release-model` runs it and `--no-release-model` silences the offer.
-- A missing artifact-store pointer never blocks init. `local` stays the default store; Phase 5.6 only offers Linear setup (interactive, Linear MCP available), `--artifact-store[=linear|local]` runs it without asking, and `--no-artifact-store` silences it.
+- A missing artifact-store pointer never blocks init. `linear` is the default store without one; Phase 5.6 only offers to commit a Linear pointer with workspace/team hints (interactive, Linear MCP available), `--artifact-store[=linear|local]` runs it without asking, and `--no-artifact-store` silences it.
 - For the full flag matrix with composability examples, see `references/flag-reference.md`.
 - Read `references/conventional-commits.md` only when the user asks for the full commit-type reference; the generated `AGENTS.md` carries a one-line rule, not the types table. Read `references/label-taxonomy.md` when rendering
   `.github/labels.md` (`--templates`).

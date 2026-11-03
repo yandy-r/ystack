@@ -106,6 +106,8 @@ fi
 
 # The resolver prints its own reason (invalid store config or feature name).
 if [[ -f "${SHARED_DIR}/resolve-artifact-store.sh" ]]; then
+  # Default store: an existing local plan keeps local mode (artifact-store.md Inputs).
+  if [[ -z "$STORE_FLAG" ]]; then select_local_plan_store "$FEATURE_NAME" || exit 1; fi
   PLAN_DIR="$(get_plans_feature_dir "$FEATURE_NAME")" || exit 1
 else
   PLAN_DIR="${PLANS_DIR}/${FEATURE_NAME}"

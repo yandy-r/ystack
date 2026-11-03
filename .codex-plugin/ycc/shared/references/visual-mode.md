@@ -111,9 +111,9 @@ Contract for `visual-plan`:
   fixed location. The plan path is supplied by the caller and may live anywhere
   (e.g. a local-mode `docs/prps/plans/<name>.plan.md`, a feature-dir
   `parallel-plan.md`, or a forced-write file from `plan`).
-- **Resolve `visual/` by store.** Local mode (default) keeps the sibling
-  `<dirname of plan>/visual/`. Linear mode resolves kind `feature-dir` for the
-  source feature slug and writes its `visual/` child, even if the input plan
+- **Resolve `visual/` by store.** Local mode keeps the sibling
+  `<dirname of plan>/visual/`. Linear mode (default) resolves kind `feature-dir`
+  for the source feature slug and writes its `visual/` child, even if the input plan
   lives elsewhere. Follow artifact-store.md **Size and diagrams**: visual
   surfaces are local-only, never uploaded, and never linked by editing the
   source plan.

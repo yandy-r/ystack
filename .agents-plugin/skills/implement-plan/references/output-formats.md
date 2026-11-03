@@ -147,7 +147,7 @@ Provide completion summary:
 3. Commit the changes when satisfied
 4. **Optional**: Generate implementation report:
 
-/code-report [feature-name]
+/code-report ${STORE_FLAG} [feature-name]
 
 ## Goal Signals (machine-readable — printed verbatim for /goal)
 
@@ -171,7 +171,7 @@ condition that references the Phase 4 Step 10 Goal Signals block rather than fil
 Recommended condition template:
 
 ```
-/goal Execute the parallel plan at docs/plans/<feature>/parallel-plan.md using the
+/goal Execute the parallel plan <feature> (resolved plan path) using the
 implement-plan workflow, continuing through every batch and the Phase 4 lint pass
 without returning control to me. Done when the transcript shows the Phase 4
 "# Implementation Complete" output followed by all three Goal Signals printed verbatim —

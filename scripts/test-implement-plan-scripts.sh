@@ -24,7 +24,7 @@ run_check() { (CDPATH='' cd -- "$repo" >/dev/null && "$BASH_BIN" "$CHECK" "$@");
 repo="${SCRATCH}/repo with space"
 mkdir -p "$repo"
 git -C "$repo" init -q -b main
-printf 'scope: local\nplans_dir: custom plans\n' >"${repo}/.plans-config"
+printf 'scope: local\nstore: local\nplans_dir: custom plans\n' >"${repo}/.plans-config"
 local_dir="${repo}/custom plans/example"
 linear_dir="${repo}/.ycc/artifacts/example"
 mkdir -p "$local_dir" "$linear_dir"
@@ -109,6 +109,12 @@ expected_linear="Prerequisites satisfied
   Phases/Batches in plan: 2
   Independent tasks: 2"
 assert_eq 'linear flag resolves cache and counts body only' "$expected_linear" "$(run_check --store=linear example)"
+printf 'scope: local\nplans_dir: custom plans\n' >"${repo}/.plans-config"
+assert_eq 'default store prefers an existing local plan' "Using local plan at ${local_dir}; pin with store: local in .plans-config
+${expected_local}" "$(run_check example)"
+mv "$local_dir" "${SCRATCH}/example-local"
+assert_eq 'default store resolves cache without a local plan' "$expected_linear" "$(run_check example)"
+mv "${SCRATCH}/example-local" "$local_dir"
 printf 'scope: local\nplans_dir: custom plans\nstore: linear\n' >"${repo}/.plans-config"
 assert_eq 'linear config resolves cache' "$expected_linear" "$(run_check example)"
 assert_eq 'local flag overrides linear config' "$expected_local" "$(run_check example --store=local)"
@@ -162,6 +168,41 @@ for kind in directory file; do
     PASS=$((PASS + 1)); printf 'PASS: missing linear %s suggests Lookup/hydrate\n' "$kind"
   else FAIL=$((FAIL + 1)); printf 'FAIL: missing linear %s guidance\n' "$kind" >&2; fi
 done
+# Without --store, guidance follows the input kind under the default linear store.
+printf 'scope: local\nplans_dir: custom plans\n' >"${repo}/.plans-config"
+if out=$(run_check --plan=missing.md); then rc=0; else rc=$?; fi
+assert_eq 'default-store missing explicit plan exits 1' 1 "$rc"
+if [[ "$out" == *"ERROR: ${repo}/missing.md not found"* && "$out" == *'Run: /parallel-plan repo with space'* && "$out" != *'Run Lookup'* ]]; then
+  PASS=$((PASS + 1)); printf 'PASS: default-store missing explicit plan keeps local guidance\n'
+else FAIL=$((FAIL + 1)); printf 'FAIL: default-store missing explicit plan guidance: %s\n' "$out" >&2; fi
+rm -rf "${repo}/.ycc/artifacts/missing"
+if out=$(run_check missing); then rc=0; else rc=$?; fi
+assert_eq 'default-store existing local feature dir exits 1 for missing plan' 1 "$rc"
+if [[ "$out" == "Using local plan at ${repo}/custom plans/missing; pin with store: local in .plans-config"* && "$out" == *'Run: /parallel-plan missing'* && "$out" != *'Run Lookup'* ]]; then
+  PASS=$((PASS + 1)); printf 'PASS: default-store existing local feature dir selects local\n'
+else FAIL=$((FAIL + 1)); printf 'FAIL: default-store local selection: %s\n' "$out" >&2; fi
+# Legacy local names (nested, spaces) that the strict linear slug rejects still
+# work under the default store when the local plan exists.
+mkdir -p "${repo}/custom plans/team/auth"
+cp "${SCRATCH}/body.md" "${repo}/custom plans/team/auth/parallel-plan.md"
+printf '# Shared\n' >"${repo}/custom plans/team/auth/shared.md"
+if out=$(run_check team/auth); then rc=0; else rc=$?; fi
+assert_eq 'default-store team/auth exits 0' 0 "$rc"
+assert_eq 'default-store team/auth uses local plan' "Using local plan at ${repo}/custom plans/team/auth; pin with store: local in .plans-config
+Prerequisites satisfied
+  Found: ${repo}/custom plans/team/auth/parallel-plan.md
+  Found: ${repo}/custom plans/team/auth/shared.md
+  Tasks in plan: 3
+  Phases/Batches in plan: 2
+  Independent tasks: 2" "$out"
+# A checkout reached through a symlink still classifies cache plans as linear.
+ln -s "$repo" "${SCRATCH}/repo-link"
+mkdir -p "${repo}/.ycc/artifacts/foo"
+if out=$( (CDPATH='' cd -- "${SCRATCH}/repo-link" >/dev/null && "$BASH_BIN" "$CHECK" --store=linear --plan=.ycc/artifacts/foo/parallel-plan.md) ); then rc=0; else rc=$?; fi
+assert_eq 'symlinked checkout missing cache plan exits 1' 1 "$rc"
+if [[ "$out" == *'Run Lookup and hydrate the plan from Linear'* && "$out" != *'Run: /parallel-plan'* ]]; then
+  PASS=$((PASS + 1)); printf 'PASS: symlinked checkout cache plan gets linear guidance\n'
+else FAIL=$((FAIL + 1)); printf 'FAIL: symlinked checkout guidance: %s\n' "$out" >&2; fi
 for args in '--store=broken' '--plan=' '--unknown'; do
   if run_check example "$args" >"${SCRATCH}/out" 2>"${SCRATCH}/err"; then
     FAIL=$((FAIL + 1)); printf 'FAIL: invalid option %s succeeded\n' "$args" >&2

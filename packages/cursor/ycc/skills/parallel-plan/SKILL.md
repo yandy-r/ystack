@@ -82,7 +82,7 @@ fails fast in plan-only mode. Stop and tell the user to run
 - **--visual**: Optional. Render the finished plan as an Agent-Native visual artifact (MDX) via `visual-plan`; local-files by default, hosted link requires `--share`.
 - **--dry-run**: Show what would be created without making changes. Writes nothing.
 - **feature-name**: Required. Feature slug passed to canonical `plan-workflow` for artifact-store resolution.
-- **--store=local|linear**: Optional artifact-store override, forwarded to canonical `plan-workflow`. Local is the default.
+- **--store=local|linear**: Optional artifact-store override, forwarded to canonical `plan-workflow`. Linear is the default.
 
 If any unsupported flag is present (see Flag policy above), abort with a usage error and STOP:
 

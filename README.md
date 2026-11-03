@@ -231,7 +231,7 @@ ycc:feature-research → ycc:shared-context → ycc:parallel-plan → ycc:implem
 
 Use `ycc:plan-workflow` to run the full pipeline, or invoke individual stages. `ycc:shared-context` and `ycc:parallel-plan` are thin aliases over `ycc:plan-workflow --research-only` and `--plan-only` respectively; the pipeline and its artifacts are unchanged.
 
-Those artifacts stay on the local `docs/plans/` and `docs/prps/` paths unless the repo's `.plans-config` sets `store: linear`, or the skill is invoked with `--store=linear`. Linear mode caches under `.ycc/artifacts/` and syncs Linear. `/ycc:init --artifact-store` writes the pointer. See [Planning artifacts](docs/README.md#planning-artifacts).
+Those artifacts live in Linear by default, cached under `.ycc/artifacts/`. Opt out with `--store=local`, or `store: local` in the repo's `.plans-config` or the global `~/.config/ycc/config`, to keep the local `docs/plans/` and `docs/prps/` paths. `/ycc:init --artifact-store` writes the pointer. See [Planning artifacts](docs/README.md#planning-artifacts).
 
 ## Development Sync
 

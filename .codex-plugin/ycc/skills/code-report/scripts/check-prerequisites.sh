@@ -1,33 +1,71 @@
 #!/usr/bin/env bash
 # Check that required planning documents exist for report generation
-# Usage: check-prerequisites.sh <feature-name>
+# Usage: check-prerequisites.sh <feature-name> [--store=linear|local]
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SHARED_DIR="${SCRIPT_DIR}/../../../shared/scripts"
-if [[ ! -f "${SHARED_DIR}/artifact-body.sh" ]]; then
-  echo "ERROR: artifact-body.sh not found at ${SHARED_DIR}" >&2
-  exit 1
-fi
+for helper in resolve-artifact-store.sh artifact-body.sh; do
+  if [[ ! -f "${SHARED_DIR}/${helper}" ]]; then
+    echo "ERROR: ${helper} not found at ${SHARED_DIR}" >&2
+    exit 1
+  fi
+done
+# shellcheck source=../../../shared/scripts/resolve-artifact-store.sh
+source "${SHARED_DIR}/resolve-artifact-store.sh"
 # shellcheck source=../../../shared/scripts/artifact-body.sh
 source "${SHARED_DIR}/artifact-body.sh"
 
-FEATURE_NAME="${1:-}"
-PLAN_DIR="docs/plans/${FEATURE_NAME}"
+FEATURE_NAME='' STORE_FLAG=''
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --store=*) STORE_FLAG=$1 ;;
+    --*) echo "ERROR: Unknown option: $1" >&2; exit 1 ;;
+    *)
+      if [[ -n "$FEATURE_NAME" ]]; then
+        echo "Usage: check-prerequisites.sh <feature-name> [--store=linear|local]" >&2
+        exit 1
+      fi
+      FEATURE_NAME=$1
+      ;;
+  esac
+  shift
+done
 
 if [[ -z "$FEATURE_NAME" ]]; then
   echo "ERROR: Feature name required"
-  echo "Usage: check-prerequisites.sh <feature-name>"
+  echo "Usage: check-prerequisites.sh <feature-name> [--store=linear|local]"
   exit 1
+fi
+
+if [[ -n "$STORE_FLAG" ]]; then
+  resolve_artifact_store "$PWD" "$STORE_FLAG" || exit 1
+else
+  # Existing local plans keep local mode (artifact-store.md Inputs).
+  select_local_plan_store "$FEATURE_NAME" || exit 1
+fi
+[[ -n "${ARTIFACT_STORE:-}" ]] || exit 1
+PLAN_DIR="$(get_plans_feature_dir "$FEATURE_NAME")" || exit 1
+# Local: <PLANS_DIR>/<name>/report.md, accepting legacy local names. Linear:
+# kind code-report, separate from implement-plan's run report.md.
+if [[ "$ARTIFACT_STORE" == linear ]]; then
+  REPORT_FILE="$(get_artifact_path code-report "$FEATURE_NAME")" || exit 1
+else
+  REPORT_FILE="${PLAN_DIR}/report.md"
 fi
 
 if [[ ! -d "$PLAN_DIR" ]]; then
   echo "ERROR: Plan directory not found: $PLAN_DIR"
   echo ""
   echo "The report requires a planning directory."
-  echo "Either:"
-  echo "  1. Create planning documents: /shared-context ${FEATURE_NAME}"
-  echo "  2. Create the directory manually: mkdir -p ${PLAN_DIR}"
+  if [[ "$ARTIFACT_STORE" == linear ]]; then
+    echo "Run Lookup and hydrate the plan from Linear first (artifact-store.md, Lookup and Load),"
+    echo "or rerun with --store=local for a plan under docs/plans."
+  else
+    echo "Either:"
+    echo "  1. Create planning documents: /shared-context ${FEATURE_NAME}"
+    echo "  2. Create the directory manually: mkdir -p ${PLAN_DIR}"
+  fi
   exit 1
 fi
 
@@ -49,7 +87,8 @@ if [[ ! -f "${PLAN_DIR}/shared.md" ]]; then
 fi
 
 echo "Report can be generated for: ${FEATURE_NAME}"
-echo "  Target: ${PLAN_DIR}/report.md"
+echo "  Store: ${ARTIFACT_STORE}"
+echo "  Target: ${REPORT_FILE}"
 
 if [[ -f "${PLAN_DIR}/parallel-plan.md" ]]; then
   echo "  Found: ${PLAN_DIR}/parallel-plan.md"
@@ -77,9 +116,9 @@ if [[ -f "${PLAN_DIR}/shared.md" ]]; then
 fi
 
 # Check if report already exists
-if [[ -f "${PLAN_DIR}/report.md" ]]; then
+if [[ -f "$REPORT_FILE" ]]; then
   echo ""
-  echo "NOTE: ${PLAN_DIR}/report.md already exists"
+  echo "NOTE: ${REPORT_FILE} already exists"
   echo "It will be overwritten if you proceed."
 fi
 
