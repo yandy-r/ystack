@@ -260,22 +260,59 @@ _artifact_require_git_root() {
   fi
 }
 
-# Read-only coverage check: 0 means present, 1 means append, 2 means unsafe.
+# Write NUL-terminated `check-ignore -v -z` records for the cache probes to
+# OUT. With GIT_ROOT, only that work tree's .gitignore files are consulted: an
+# empty scratch Git dir drops .git/info/exclude and core.excludesFile=/dev/null
+# drops global excludes, so a non-repository parent rule (for example a global
+# `.ycc/`) cannot hide a deeper repository rule or negation.
+_artifact_probe_ignores() {
+  local out="$1" git_root="${2:-}" status=0 ignorecase
+  local -a git_args=(-C "$ARTIFACT_ROOT")
+  if [[ -n "$git_root" ]]; then
+    git init -q --bare --template= "${out}.git" >/dev/null 2>&1 || return 1
+    # The scratch Git dir detects case folding from TMPDIR; match the repo's.
+    ignorecase=$(git -C "$ARTIFACT_ROOT" config --type=bool core.ignorecase 2>/dev/null) || ignorecase=false
+    git_args+=(--git-dir="${out}.git" --work-tree="$git_root" -c core.excludesFile=/dev/null -c core.ignoreCase="$ignorecase")
+  fi
+  # check-ignore exits 1 when nothing matches; only >1 is an error.
+  printf '.ycc/artifacts/probe\0.ycc/artifacts/probe-dir/probe\0.ycc/artifacts/feat/cache\0' | git "${git_args[@]}" check-ignore -v -z --no-index --stdin >"$out" 2>/dev/null || status=$?
+  [[ "$status" -le 1 ]]
+}
+
+# Coverage check (never edits the repository; uses TMPDIR scratch): 0 means
+# present, 1 means append, 2 means a negated rule makes it unsafe, 3 means the
+# ignore probe itself failed.
 _artifact_gitignore_present() {
-  local file="${ARTIFACT_ROOT}/.gitignore" ignore_source ignore_pattern git_root count
+  local file="${ARTIFACT_ROOT}/.gitignore" ignore_source ignore_pattern git_root count scratch made
   git_root=$(git -C "$ARTIFACT_ROOT" rev-parse --show-toplevel) || return 1
-  # Only committed-style ignores within this repo are portable. A non-negated
-  # repo rule must cover direct, nested, and representative feature-cache probes
-  # so partial exceptions cannot leave later cache files visible.
+  made=$(mktemp -d "${TMPDIR:-/tmp}/ycc-ignore.XXXXXX") || return 3
+  # Git resolves --git-dir after -C, so the scratch path must be absolute.
+  scratch=$(CDPATH='' cd -- "$made" >/dev/null && pwd -P) || { rm -rf "$made"; return 3; }
+  if ! _artifact_probe_ignores "${scratch}/all" || ! _artifact_probe_ignores "${scratch}/repo" "$git_root"; then
+    rm -rf "$scratch"
+    return 3
+  fi
+  # Any negated (!) match that re-includes a probed cache path is unsafe to
+  # override and refuses, from repository, info, or global excludes alike.
+  # Only committed-style ignores within this repo are portable, so coverage is
+  # counted from repository .gitignore files alone; global or info excludes
+  # never count and the repository rule is appended. A non-negated repo rule
+  # must cover direct, nested, and representative feature-cache probes so
+  # partial exceptions cannot leave later cache files visible.
   # Fields are NUL-terminated: source, line number (discarded into _), pattern,
   # and path.
+  while IFS= read -r -d '' _ && IFS= read -r -d '' _ && IFS= read -r -d '' ignore_pattern && IFS= read -r -d '' _; do
+    [[ "$ignore_pattern" != '!'* ]] || { rm -rf "$scratch"; return 2; }
+  done <"${scratch}/all"
   count=0
   while IFS= read -r -d '' ignore_source && IFS= read -r -d '' _ && IFS= read -r -d '' ignore_pattern && IFS= read -r -d '' _; do
-    count=$((count + 1))
+    [[ "$ignore_pattern" != '!'* ]] || { rm -rf "$scratch"; return 2; }
     [[ "$ignore_source" == /* ]] || ignore_source="${git_root}/${ignore_source}"
     ignore_source="$(CDPATH='' cd -- "$(dirname "$ignore_source")" >/dev/null 2>&1 && pwd -P)/${ignore_source##*/}"
-    [[ "$ignore_source" == "$git_root/"* && "${ignore_source##*/}" == .gitignore && "$ignore_pattern" != '!'* ]] || return 2
-  done < <(printf '.ycc/artifacts/probe\0.ycc/artifacts/probe-dir/probe\0.ycc/artifacts/feat/cache\0' | git -C "$ARTIFACT_ROOT" check-ignore -v -z --no-index --stdin 2>/dev/null)
+    [[ "$ignore_source" == "$git_root/"* && "${ignore_source##*/}" == .gitignore ]] || continue
+    count=$((count + 1))
+  done <"${scratch}/repo"
+  rm -rf "$scratch"
   [[ "$count" == 3 ]] && return 0
   if [[ -f "$file" ]] && grep -qxE '/?\.ycc/artifacts/?' "$file"; then
     return 0
@@ -289,7 +326,11 @@ ensure_artifact_gitignore() {
   _artifact_require_git_root || return 1
   local file="${ARTIFACT_ROOT}/.gitignore" last_byte status=0
   _artifact_gitignore_present || status=$?
-  case "$status" in 0) return 0 ;; 2) return 1 ;; esac
+  case "$status" in
+    0) return 0 ;;
+    2) _error 'A negated (!) ignore rule re-includes .ycc/artifacts/ paths; refusing to override it'; return 1 ;;
+    3) _error 'Cannot check .ycc/artifacts/ ignore coverage (git check-ignore or TMPDIR scratch failed)'; return 1 ;;
+  esac
   if [[ -s "$file" ]]; then
     # Command substitution strips a final newline, leaving an empty last byte.
     last_byte=$(tail -c 1 "$file") || return 1

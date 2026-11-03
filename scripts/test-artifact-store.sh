@@ -234,24 +234,60 @@ for link_kind in gitignore ycc artifacts; do
     assert_ok "${link_kind} symlink refusal creates no ignore" test ! -e "${link_repo}/.gitignore"
   fi
 done
+# Non-repository ignores (global excludes, .git/info/exclude) are not portable,
+# so the repository rule is appended rather than refused (YAN-1677).
 global_ignore_repo="${SCRATCH}/global-ignore"; make_linear_repo "$global_ignore_repo"
 printf '.ycc/\n' >"${SCRATCH}/global-excludes"
 git config --file "${GIT_CONFIG_GLOBAL}.excludes" core.excludesFile "${SCRATCH}/global-excludes"
-if (CDPATH='' cd -- "$global_ignore_repo" >/dev/null && GIT_CONFIG_GLOBAL="${GIT_CONFIG_GLOBAL}.excludes" "$BASH_BIN" -c 'source "$1" || exit 1; ensure_artifact_gitignore' _ "$HELPER"); then
-  fail 'global excludes unexpectedly accepted as repository ignore'
-else
-  pass 'global excludes rejected as repository ignore'
-fi
-assert_ok 'global excludes does not leave partial ignore' test ! -e "${global_ignore_repo}/.gitignore"
+run_global() { (CDPATH='' cd -- "$global_ignore_repo" >/dev/null && GIT_CONFIG_GLOBAL="${GIT_CONFIG_GLOBAL}.excludes" "$BASH_BIN" -c 'source "$1" || exit 1; shift; "$@"' _ "$HELPER" "$@"); }
+assert_ok 'global excludes still appends repository ignore' run_global ensure_artifact_gitignore
+assert_eq 'global excludes repository rule' '.ycc/artifacts/' "$(cat "${global_ignore_repo}/.gitignore")"
+assert_ok 'global excludes rerun is idempotent' run_global ensure_artifact_gitignore
+assert_eq 'global excludes rerun adds no line' '.ycc/artifacts/' "$(cat "${global_ignore_repo}/.gitignore")"
+rm "${global_ignore_repo}/.gitignore"
+assert_ok 'global excludes CLI --ensure succeeds' run_global "$BASH_BIN" "$HELPER" --ensure
+assert_eq 'global excludes CLI --ensure rule' '.ycc/artifacts/' "$(cat "${global_ignore_repo}/.gitignore")"
+printf '.ycc/artifacts/*\n!.ycc/artifacts/probe\n' >"${global_ignore_repo}/.gitignore"
+cp "${global_ignore_repo}/.gitignore" "${SCRATCH}/before"
+assert_bad 'global .ycc/ cannot hide repository negation' run_global ensure_artifact_gitignore
+assert_ok 'hidden repository negation bytes unchanged' cmp -s "${SCRATCH}/before" "${global_ignore_repo}/.gitignore"
+printf '.ycc/*\n' >"${global_ignore_repo}/.gitignore"
+cp "${global_ignore_repo}/.gitignore" "${SCRATCH}/before"
+assert_ok 'global .ycc/ does not hide wider repository rule' run_global ensure_artifact_gitignore
+assert_ok 'wider repository rule not duplicated' cmp -s "${SCRATCH}/before" "${global_ignore_repo}/.gitignore"
+rm "${global_ignore_repo}/.gitignore"
+printf '!.ycc/artifacts/probe\n' >"${SCRATCH}/global-excludes"
+assert_bad 'negated global exclude refuses' run_global ensure_artifact_gitignore
+assert_ok 'negated global exclude leaves no ignore' test ! -e "${global_ignore_repo}/.gitignore"
+# Git resolves --git-dir after -C, so a relative TMPDIR from a subdirectory
+# must still probe the repository root.
+rel_tmp_repo="${SCRATCH}/rel-tmp"; make_linear_repo "$rel_tmp_repo"; mkdir -p "${rel_tmp_repo}/sub/tmp"
+assert_ok 'relative TMPDIR still probes' run "${rel_tmp_repo}/sub" env TMPDIR=tmp "$BASH_BIN" -c 'source "$1"; ensure_artifact_gitignore' _ "$HELPER"
+assert_eq 'relative TMPDIR appends rule' '.ycc/artifacts/' "$(cat "${rel_tmp_repo}/.gitignore")"
+assert_eq 'relative TMPDIR scratch cleaned' '' "$(find "${rel_tmp_repo}/sub/tmp" -mindepth 1 -print)"
+probe_fail_repo="${SCRATCH}/probe-fail"; make_linear_repo "$probe_fail_repo"
+assert_bad 'missing TMPDIR refuses' run "$probe_fail_repo" env TMPDIR="${SCRATCH}/missing-tmp" "$BASH_BIN" -c 'source "$1"; ensure_artifact_gitignore' _ "$HELPER"
+assert_ok 'missing TMPDIR names probe failure' grep -q 'Cannot check .ycc/artifacts/ ignore coverage' "${SCRATCH}/err"
+assert_ok 'missing TMPDIR writes no ignore' test ! -e "${probe_fail_repo}/.gitignore"
+fold_repo="${SCRATCH}/ignorecase"; make_linear_repo "$fold_repo"
+git -C "$fold_repo" config core.ignorecase true
+printf '.YCC/ARTIFACTS/\n' >"${fold_repo}/.gitignore"
+cp "${fold_repo}/.gitignore" "${SCRATCH}/before"
+assert_ok 'case-folding repo rule counts' run "$fold_repo" ensure_artifact_gitignore
+assert_ok 'case-folding repo rule not duplicated' cmp -s "${SCRATCH}/before" "${fold_repo}/.gitignore"
 rm "${GIT_CONFIG_GLOBAL}.excludes"
 info_ignore_repo="${SCRATCH}/info-ignore"; make_linear_repo "$info_ignore_repo"
 printf '.ycc/\n' >"${info_ignore_repo}/.git/info/exclude"
-if run "$info_ignore_repo" ensure_artifact_gitignore; then
-  fail 'Git info excludes unexpectedly accepted as repository ignore'
-else
-  pass 'Git info excludes rejected as repository ignore'
-fi
-assert_ok 'Git info excludes does not leave partial ignore' test ! -e "${info_ignore_repo}/.gitignore"
+printf '# existing' >"${info_ignore_repo}/.gitignore"
+assert_ok 'Git info excludes still appends repository ignore' run "$info_ignore_repo" ensure_artifact_gitignore
+assert_eq 'Git info excludes repository rule' $'# existing\n.ycc/artifacts/' "$(cat "${info_ignore_repo}/.gitignore")"
+assert_ok 'Git info excludes rerun is idempotent' run "$info_ignore_repo" ensure_artifact_gitignore
+assert_eq 'Git info excludes rerun adds no line' $'# existing\n.ycc/artifacts/' "$(cat "${info_ignore_repo}/.gitignore")"
+negated_repo="${SCRATCH}/negated-repo"; make_linear_repo "$negated_repo"
+printf '.ycc/artifacts/*\n!.ycc/artifacts/probe\n' >"${negated_repo}/.gitignore"
+cp "${negated_repo}/.gitignore" "${SCRATCH}/before"
+assert_bad 'negated repository rule refuses' run "$negated_repo" ensure_artifact_gitignore
+assert_ok 'negated repository rule bytes unchanged' cmp -s "${SCRATCH}/before" "${negated_repo}/.gitignore"
 local_repo="${SCRATCH}/ignore-local"; make_repo "$local_repo"
 printf 'scope: local\nstore: local\n' >"${local_repo}/.plans-config"
 run "$local_repo" ensure_artifact_gitignore
