@@ -290,6 +290,63 @@ printf '.ycc/artifacts/*\n!.ycc/artifacts/probe\n' >"${negated_repo}/.gitignore"
 cp "${negated_repo}/.gitignore" "${SCRATCH}/before"
 assert_bad 'negated repository rule refuses' run "$negated_repo" ensure_artifact_gitignore
 assert_ok 'negated repository rule bytes unchanged' cmp -s "${SCRATCH}/before" "${negated_repo}/.gitignore"
+# check-ignore -v misses negations in .gitignore files under .ycc (YAN-1790).
+for variant in committed nested tracked-only bom; do
+  ycc_neg_repo="${SCRATCH}/ycc-negation-${variant}"; make_linear_repo "$ycc_neg_repo"
+  case "$variant" in
+    committed|tracked-only)
+      mkdir -p "${ycc_neg_repo}/.ycc"
+      printf '!artifacts/\n' >"${ycc_neg_repo}/.ycc/.gitignore"
+      git -C "$ycc_neg_repo" add -f .ycc/.gitignore
+      git -C "$ycc_neg_repo" commit -q -m negation
+      if [[ "$variant" == tracked-only ]]; then rm "${ycc_neg_repo}/.ycc/.gitignore"; fi
+      ;;
+    nested)
+      mkdir -p "${ycc_neg_repo}/.ycc/artifacts/sub"
+      printf '!*\n' >"${ycc_neg_repo}/.ycc/artifacts/sub/.gitignore"
+      ;;
+    bom)
+      mkdir -p "${ycc_neg_repo}/.ycc"
+      printf '\357\273\277!artifacts/\n' >"${ycc_neg_repo}/.ycc/.gitignore"
+      ;;
+  esac
+  assert_bad ".ycc ${variant} negation refuses" run "$ycc_neg_repo" ensure_artifact_gitignore
+  assert_ok ".ycc ${variant} negation names refusal" grep -q 'negated (!) ignore rule' "${SCRATCH}/err"
+  assert_ok ".ycc ${variant} negation writes no ignore" test ! -e "${ycc_neg_repo}/.gitignore"
+done
+ycc_plain_repo="${SCRATCH}/ycc-plain"; make_linear_repo "$ycc_plain_repo"
+mkdir -p "${ycc_plain_repo}/.ycc/artifacts/feat"
+# A leading space makes `!` part of a literal pattern, not a negation.
+printf 'artifacts/tmp\n !artifacts/\n' >"${ycc_plain_repo}/.ycc/.gitignore"
+assert_ok 'plain .ycc ignore still appends' run "$ycc_plain_repo" ensure_artifact_gitignore
+assert_eq 'plain .ycc ignore repository rule' '.ycc/artifacts/' "$(cat "${ycc_plain_repo}/.gitignore")"
+printf '\\!artifacts/\n' >"${ycc_plain_repo}/.ycc/.gitignore"
+rm "${ycc_plain_repo}/.gitignore"
+assert_ok 'escaped .ycc \! is not a negation' run "$ycc_plain_repo" ensure_artifact_gitignore
+assert_eq 'escaped .ycc \! repository rule' '.ycc/artifacts/' "$(cat "${ycc_plain_repo}/.gitignore")"
+# The reported YAN-1790 shape: the root rule exists, yet .ycc re-includes it.
+covered_neg_repo="${SCRATCH}/ycc-negation-covered"; make_linear_repo "$covered_neg_repo"
+mkdir -p "${covered_neg_repo}/.ycc"
+printf '.ycc/artifacts/\n' >"${covered_neg_repo}/.gitignore"
+printf '!artifacts/\n' >"${covered_neg_repo}/.ycc/.gitignore"
+git -C "$covered_neg_repo" add .gitignore .ycc/.gitignore
+git -C "$covered_neg_repo" commit -q -m negation
+cp "${covered_neg_repo}/.gitignore" "${SCRATCH}/before"
+assert_bad 'covered root rule with .ycc negation refuses' run "$covered_neg_repo" ensure_artifact_gitignore
+assert_ok 'covered root rule bytes unchanged' cmp -s "${SCRATCH}/before" "${covered_neg_repo}/.gitignore"
+# A refused or failed ignore check leaves no empty cache behind (YAN-1791).
+refuse_dir_repo="${SCRATCH}/refuse-dir"; make_linear_repo "$refuse_dir_repo"
+printf '.ycc/artifacts/*\n!.ycc/artifacts/probe\n' >"${refuse_dir_repo}/.gitignore"
+assert_bad 'negated rule refuses cache directory' run "$refuse_dir_repo" ensure_artifact_dir
+assert_ok 'negated rule refusal creates no cache' test ! -e "${refuse_dir_repo}/.ycc"
+assert_bad 'negated rule refuses CLI ensure' "$BASH_BIN" "$HELPER" --store=linear --ensure --kind=shared --slug=x "$refuse_dir_repo"
+assert_ok 'negated rule CLI refusal creates no cache' test ! -e "${refuse_dir_repo}/.ycc"
+mkdir -p "${refuse_dir_repo}/.ycc/artifacts/keep"
+assert_bad 'negated rule refuses with existing cache' run "$refuse_dir_repo" ensure_artifact_dir
+assert_ok 'refusal keeps existing cache directory' test -d "${refuse_dir_repo}/.ycc/artifacts/keep"
+probe_dir_repo="${SCRATCH}/probe-fail-dir"; make_linear_repo "$probe_dir_repo"
+assert_bad 'missing TMPDIR refuses cache directory' run "$probe_dir_repo" env TMPDIR="${SCRATCH}/missing-tmp" "$BASH_BIN" -c 'source "$1"; ensure_artifact_dir' _ "$HELPER"
+assert_ok 'missing TMPDIR creates no cache' test ! -e "${probe_dir_repo}/.ycc"
 local_repo="${SCRATCH}/ignore-local"; make_repo "$local_repo"
 printf 'scope: local\nstore: local\n' >"${local_repo}/.plans-config"
 run "$local_repo" ensure_artifact_gitignore

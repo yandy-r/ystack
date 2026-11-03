@@ -301,15 +301,56 @@ _artifact_probe_ignores() {
   [[ "$status" -le 1 ]]
 }
 
+# 0 when FILE has a negated (!) line, 1 when not, >1 when unreadable. A leading
+# space makes `!` literal. A BOM is accepted on any line, broader than Git
+# (which skips it only at file start), so this fails safe.
+_artifact_has_negation() {
+  LC_ALL=C grep -qE $'^(\xef\xbb\xbf)?!' "$1"
+}
+
+# check-ignore -v reports only each probe's deciding pattern, so a negation in
+# a .gitignore under .ycc can go unreported. Scan working-tree files (without
+# following symlinks) and index blobs, since a tracked file deleted locally
+# still applies in a clone. Returns 0 when none, 2 when negated, 3 on failure.
+# OUT is a scratch path prefix.
+_artifact_ycc_negation() {
+  local out="$1" file entry mode hash rc
+  if [[ -d "${ARTIFACT_ROOT}/.ycc" ]]; then
+    find -P "${ARTIFACT_ROOT}/.ycc" -name .gitignore -type f -print0 >"${out}.tree" 2>/dev/null || return 3
+    while IFS= read -r -d '' file; do
+      rc=0; _artifact_has_negation "$file" || rc=$?
+      [[ "$rc" == 0 ]] && return 2
+      [[ "$rc" == 1 ]] || return 3
+    done <"${out}.tree"
+  fi
+  git -C "$ARTIFACT_ROOT" ls-files -s -z -- .ycc >"${out}.index" 2>/dev/null || return 3
+  # Entries are "<mode> <hash> <stage>\t<path>"; symlinks are never read.
+  while IFS= read -r -d '' entry; do
+    [[ "${entry##*/}" == .gitignore ]] || continue
+    read -r mode hash _ <<<"${entry%%$'\t'*}"
+    [[ "$mode" == 100644 || "$mode" == 100755 ]] || continue
+    git -C "$ARTIFACT_ROOT" cat-file blob "$hash" >"${out}.blob" 2>/dev/null || return 3
+    rc=0; _artifact_has_negation "${out}.blob" || rc=$?
+    [[ "$rc" == 0 ]] && return 2
+    [[ "$rc" == 1 ]] || return 3
+  done <"${out}.index"
+  return 0
+}
+
 # Coverage check (never edits the repository; uses TMPDIR scratch): 0 means
 # present, 1 means append, 2 means a negated rule makes it unsafe, 3 means the
-# ignore probe itself failed.
+# ignore probe or the .ycc .gitignore scan failed.
 _artifact_gitignore_present() {
-  local file="${ARTIFACT_ROOT}/.gitignore" ignore_source ignore_pattern git_root count scratch made
+  local file="${ARTIFACT_ROOT}/.gitignore" ignore_source ignore_pattern git_root count scratch made status=0
   git_root=$(git -C "$ARTIFACT_ROOT" rev-parse --show-toplevel) || return 1
   made=$(mktemp -d "${TMPDIR:-/tmp}/ycc-ignore.XXXXXX") || return 3
   # Git resolves --git-dir after -C, so the scratch path must be absolute.
   scratch=$(CDPATH='' cd -- "$made" >/dev/null && pwd -P) || { rm -rf "$made"; return 3; }
+  _artifact_ycc_negation "${scratch}/ycc" || status=$?
+  if [[ "$status" != 0 ]]; then
+    rm -rf "$scratch"
+    return "$status"
+  fi
   if ! _artifact_probe_ignores "${scratch}/all" || ! _artifact_probe_ignores "${scratch}/repo" "$git_root"; then
     rm -rf "$scratch"
     return 3
@@ -351,7 +392,7 @@ ensure_artifact_gitignore() {
   case "$status" in
     0) return 0 ;;
     2) _error 'A negated (!) ignore rule re-includes .ycc/artifacts/ paths; refusing to override it'; return 1 ;;
-    3) _error 'Cannot check .ycc/artifacts/ ignore coverage (git check-ignore or TMPDIR scratch failed)'; return 1 ;;
+    3) _error 'Cannot check .ycc/artifacts/ ignore coverage (git check-ignore, .ycc .gitignore scan, or TMPDIR scratch failed)'; return 1 ;;
   esac
   if [[ -s "$file" ]]; then
     # Command substitution strips a final newline, leaving an empty last byte.
@@ -363,9 +404,9 @@ ensure_artifact_gitignore() {
 
 ensure_artifact_dir() {
   [[ -n "${ARTIFACT_DIR:-}" ]] || resolve_artifact_store || return 1
-  if [[ "$ARTIFACT_STORE" == linear ]]; then _artifact_require_git_root || return 1; fi
-  mkdir -p "$ARTIFACT_DIR" || return 1
-  ensure_artifact_gitignore
+  # Check the ignore rule first so a refusal leaves no empty cache behind.
+  ensure_artifact_gitignore || return 1
+  mkdir -p "$ARTIFACT_DIR"
 }
 
 # Local --ensure creates only what the resolved artifact needs: the parent
