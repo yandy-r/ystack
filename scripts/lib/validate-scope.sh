@@ -151,7 +151,7 @@ validate_scope_owned_targets() {
 
         # Single-target tests and validators.
         scripts/test-release-*.sh) echo "release" ;;
-        scripts/test-plan-workflow-validators.sh) echo "inventory" ;;
+        scripts/test-plan-workflow-validators.sh | scripts/test-hook-git-env.sh) echo "inventory" ;;
         scripts/test-helper-root-discovery.sh | scripts/test-artifact-store.sh | scripts/test-artifact-body.sh) echo "inventory" ;;
         scripts/test-artifact-store-pointer.sh | scripts/validate-artifact-store.sh) echo "inventory" ;;
         scripts/test-collect-linear-keys.sh | scripts/test-implement-plan-scripts.sh) echo "inventory" ;;

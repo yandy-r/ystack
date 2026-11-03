@@ -4,6 +4,12 @@
 # - temp fixtures via mktemp, trap cleanup; no test framework
 set -uo pipefail
 
+# A git hook (lefthook pre-push) exports GIT_DIR; from a linked worktree it names
+# .git/worktrees/<name>, so a fixture 'git -C <dir> init' would reinitialize the
+# caller's repository and set core.bare=true in its shared config.
+while IFS= read -r git_var; do unset "$git_var"; done < <(git rev-parse --local-env-vars)
+unset git_var
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../ycc/skills/plan-workflow/scripts" && pwd)"
 VAL_PLAN="${SCRIPT_DIR}/validate-workflow-plan.sh"
 VAL_SHARED="${SCRIPT_DIR}/validate-shared.sh"
