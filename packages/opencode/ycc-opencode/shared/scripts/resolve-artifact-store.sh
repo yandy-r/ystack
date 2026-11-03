@@ -178,6 +178,40 @@ get_artifact_path() {
         printf '%s/report.md\n' "$base"
       fi
       ;;
+    review-fixes-*|review-*)
+      # review-fixes-* first: its id never starts with fixes-, so the strip is
+      # unambiguous. Local paths match code-review/review-fix before the store.
+      name=${kind#review-fixes-}
+      [[ "$name" != "$kind" ]] || name=${kind#review-}
+      if [[ ! "$name" =~ ^(pr-[1-9][0-9]*|local-[0-9]{8}-[0-9]{6}|quick-[0-9]{8}-[0-9]{6})$ ]]; then
+        _error 'Review id must be pr-<N>, local-<YYYYMMDD-HHMMSS>, or quick-<YYYYMMDD-HHMMSS>'
+        return 1
+      fi
+      if [[ "$kind" == review-fixes-* ]]; then
+        if [[ "$ARTIFACT_STORE" == linear ]]; then
+          printf '%s/reviews/%s-fixes.md\n' "$base" "$name"
+        else
+          printf '%s/docs/prps/reviews/fixes/%s-fixes.md\n' "$repo" "$name"
+        fi
+      elif [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/reviews/%s-review.md\n' "$base" "$name"
+      else
+        printf '%s/docs/prps/reviews/%s-review.md\n' "$repo" "$name"
+      fi
+      ;;
+    pr-autofix-report-*)
+      # Local-only scratch in both modes: never pushed to Linear.
+      name=${kind#pr-autofix-report-}
+      if [[ ! "$name" =~ ^[1-9][0-9]*-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z$ ]]; then
+        _error 'pr-autofix report id must be <PR>-<YYYY-MM-DD>T<HHMMSS>Z'
+        return 1
+      fi
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/reports/pr-autofix-%s.md\n' "$base" "$name"
+      else
+        printf '%s/docs/prps/reports/pr-autofix-%s.md\n' "$repo" "$name"
+      fi
+      ;;
     research-dir)
       if [[ "$ARTIFACT_STORE" == linear ]]; then
         printf '%s/research\n' "$base"
@@ -435,6 +469,10 @@ _artifact_store_cli() {
           '--kind and --slug print an artifact path. --ensure creates what that path needs before printing' \
           '(linear: the cache directory and its .gitignore rule; local: the parent directory, or the directory itself for directory kinds).' \
           '--ensure without --kind and --slug creates ARTIFACT_DIR.' \
+          'Kinds: prd spec prp-plan feature-spec parallel-plan shared report prp-report code-report research-dir' \
+          'research-<lens> analysis-<name> prp-research deep-research blueprint feature-dir' \
+          'review-<id> review-fixes-<id> (id: pr-<N>, local-<YYYYMMDD-HHMMSS>, quick-<YYYYMMDD-HHMMSS>)' \
+          'pr-autofix-report-<N>-<YYYY-MM-DD>T<HHMMSS>Z.' \
           '--shell prints shell-quoted ARTIFACT_* assignments. PLANS_DEBUG=1 enables debug output.'
         return 0
         ;;

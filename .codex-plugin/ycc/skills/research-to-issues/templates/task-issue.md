@@ -48,6 +48,8 @@ Use this template for implementation task issues created from parallel-plan or P
 > Extracted from: {source_document}
 > Task: {task_id} of {total_tasks}
 > Phase/Batch: {phase_or_batch}
+
+{linear_refs_line}
 ```
 
 ## Field Descriptions
@@ -67,6 +69,7 @@ Use this template for implementation task issues created from parallel-plan or P
 | task_id                     | "Task N.M" identifier                         | "Task N" identifier                         |
 | total_tasks                 | Total task count across all phases            | Total task count                            |
 | phase_or_batch              | "Phase N: {name}"                             | "Batch N" (parallel) or sequential position |
+| linear_refs_line            | `Refs <KEY>` from frontmatter `tasks` map     | Same                                        |
 
 ## Field Adaptation
 
@@ -77,6 +80,7 @@ Not all fields will be present in every source. Adapt:
 - If no explicit dependencies, write "None -- this task can start independently"
 - If mandatory reading is empty, write "No mandatory prereading identified. Review the source document for full context."
 - For files lists, use relative paths from project root
+- Omit `{linear_refs_line}` for local sources and for tasks absent from the `tasks` map
 
 ## Label Assignment Rules
 

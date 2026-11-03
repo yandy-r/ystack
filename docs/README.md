@@ -67,8 +67,15 @@ Older notes stay in [`releases/`](releases/).
 
 Outputs from the PRP (Product Requirements / Plan / Review) commands:
 
-- `prps/reviews/` — review artifacts produced by `/ycc:code-review`.
-- `prps/reviews/fixes/` — fix reports produced by `/ycc:review-fix`.
+- `prps/reviews/` — review artifacts produced by `/ycc:code-review` and
+  `/ycc:quick-review` in local mode.
+- `prps/reviews/fixes/` — fix reports produced by `/ycc:review-fix` in local mode.
+
+In linear mode (the default), reviews and fix reports cache under
+`.ycc/artifacts/<slug>/reviews/` and save as Linear Documents on the reviewed
+issue or feature Project; they are never committed. `/ycc:pr-autofix` reports
+stay local in both modes (`docs/prps/reports/` locally,
+`.ycc/artifacts/<slug>/reports/` in linear mode).
 
 In local mode, PRP plans and specs are written to `docs/prps/plans/` and `docs/prps/specs/`
 on demand; those subdirectories appear once the corresponding command has

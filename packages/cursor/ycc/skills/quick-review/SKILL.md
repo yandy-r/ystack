@@ -1,7 +1,7 @@
 ---
 name: quick-review
 description: 'Reviews uncommitted changes inline without saving by default. Use when requesting a quick review, checking a small local diff, or reviewing without a saved artifact.'
-argument-hint: '[--parallel | --team] [--yes | --save | --write-and-apply] [--severity <level>] [--no-worktree]'
+argument-hint: '[--parallel | --team] [--yes | --save | --write-and-apply] [--severity <level>] [--store=local|linear] [--no-worktree]'
 allowed-tools:
   - Read
   - Grep
@@ -21,20 +21,25 @@ allowed-tools:
   - Bash(cat:*)
   - Bash(test:*)
   - Bash(mkdir:*)
+  - Bash(mktemp:*)
+  - Bash(rm:*)
   - Bash(date:*)
+  - Bash(bash:*)
+  - 'Bash(${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/*.sh:*)'
 ---
 
 # Quick Review
 
 Interactive low-friction review of uncommitted changes. Output is **inline**. The default fix path is artifact-free.
 
-**Operational context:** "Apply fixes" delegates inline findings to /quick-fix without an artifact; "Save to file" saves under docs/prps/reviews/; "Write file and apply fixes" saves an artifact and delegates to /review-fix. Writes require confirmation unless a documented scripted action selects them.
+**Operational context:** "Apply fixes" delegates inline findings to /quick-fix without an artifact; "Save to file" saves a review artifact through the artifact store (local mode: docs/prps/reviews/); "Write file and apply fixes" saves an artifact and delegates to /review-fix. Writes require confirmation unless a documented scripted action selects them.
 
 **Input**: `$ARGUMENTS`
 
 **Core rule**: "Apply fixes" must not write a review artifact. It hands the
 inline findings directly to `/quick-fix`. Only "Save to file" and
-"Write file and apply fixes" write `docs/prps/reviews/quick-*.md`.
+"Write file and apply fixes" write the `quick-*-review.md` artifact (kind
+`review-quick-<TIMESTAMP>`; local mode `docs/prps/reviews/quick-*.md`).
 
 ---
 
@@ -51,10 +56,12 @@ Extract flags from `$ARGUMENTS`:
 | `--write-and-apply`  | Skip the confirmation prompt, write the review artifact, then hand off to `/review-fix`. Mutually exclusive with `--yes` and `--save`.                                                  |
 | `--severity <level>` | Forwarded to `/quick-fix` or `/review-fix` during hand-off. Valid: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`. Default: `HIGH`. Ignored on "Save to file" / "Discard".                     |
 | `--no-worktree`      | Accepted as a **no-op**. Quick mode never creates a worktree. Emit a note: `--no-worktree has no effect in quick mode.`                                                                     |
+| `--store=<mode>`     | Artifact store override, `local` or `linear`. Forwarded to `/review-fix` on "Write file and apply fixes".                                                                               |
 
 Strip these from `$ARGUMENTS` and set `PARALLEL_MODE`, `AGENT_TEAM_MODE`,
 `AUTO_YES`, `AUTO_SAVE`, `AUTO_WRITE_AND_APPLY`, and `MIN_SEVERITY` (default
-`HIGH`). The remaining text MUST be empty; if not, abort with:
+`HIGH`). Keep `--store=local|linear` verbatim as `STORE_FLAG` (empty when
+absent). The remaining text MUST be empty; if not, abort with:
 
 ```
 Error: /quick-review takes no positional argument (only flags).
@@ -115,10 +122,17 @@ Read only on this path:
 Use the Local / Quick Mode Roster and Standard Findings Format from
 `review-checklist.md`; merge via its Merge Procedure into one list for Phase 3.
 The reviewer prompt states: flag only gaps that affect correctness or the
-stated requirements. Scratch under
-`docs/prps/reviews/.review-scratch/quick-<TIMESTAMP>/` is always removed at the
-end of Phase 5, even on "Discard" and "Apply fixes" — the one ephemeral
-exception to the artifact-free guarantee.
+stated requirements. Print the mode with
+`bash "${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell`,
+then set `SCRATCH_DIR` without `--ensure` or Linear calls. Local mode keeps it
+beside the would-be review file: `REVIEW_DIR="$(dirname "$(bash "${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=review-quick-<TIMESTAMP> --slug=review)")"`
+(`docs/prps/reviews`, unchanged) and
+`SCRATCH_DIR="$REVIEW_DIR/.review-scratch/quick-<TIMESTAMP>"`; `mkdir -p` it.
+Linear mode writes nothing in the repository before the gate and `--ensure`:
+`SCRATCH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ycc-quick-review.XXXXXX")"`.
+Scratch is never pushed and is
+always removed at the end of Phase 5, even on "Discard" and "Apply fixes" —
+the one ephemeral exception to the artifact-free guarantee.
 
 ---
 
@@ -190,7 +204,7 @@ options:
   - label: "Apply fixes"
     description: "Hand findings directly to /quick-fix. No review file is written. (recommended)"
   - label: "Save to file"
-    description: "Write docs/prps/reviews/quick-<timestamp>-review.md and stop."
+    description: "Write the quick-<timestamp>-review.md artifact (local mode: docs/prps/reviews/) and stop."
   - label: "Discard"
     description: "Write nothing, exit"
 ```
@@ -204,9 +218,9 @@ options:
   - label: "Apply fixes"
     description: "Hand findings directly to /quick-fix. No review file is written."
   - label: "Write file and apply fixes"
-    description: "Write docs/prps/reviews/quick-<timestamp>-review.md, then use /review-fix for an audit trail. (recommended)"
+    description: "Write the quick-<timestamp>-review.md artifact, then use /review-fix for an audit trail. (recommended)"
   - label: "Save to file"
-    description: "Write docs/prps/reviews/quick-<timestamp>-review.md and stop."
+    description: "Write the quick-<timestamp>-review.md artifact (local mode: docs/prps/reviews/) and stop."
   - label: "Discard"
     description: "Write nothing, exit"
 ```
@@ -230,8 +244,8 @@ Reply synonyms (case-insensitive):
 ## Phase 5 — HAND-OFF
 
 Branch on the user's selection (or auto-confirm flag). If `PARALLEL_MODE=true`
-(Path B was used), remove the `docs/prps/reviews/.review-scratch/quick-<TIMESTAMP>/`
-scratch directory before exiting — **regardless of which branch below is
+(Path B was used), remove the `$SCRATCH_DIR` scratch directory (`rm -rf`)
+before exiting — **regardless of which branch below is
 taken**, including "Discard" and "Apply fixes".
 
 ### Selection: "Discard"
@@ -259,29 +273,57 @@ Exit.
 
 ### Selection: "Save to file"
 
-Write the artifact to disk using the Phase 3 content plus the canonical header
-block:
+Write the artifact through the artifact store using the Phase 3 content plus
+the canonical header block:
 
-```bash
-mkdir -p docs/prps/reviews
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)    # reuse the Path C timestamp if set
-REVIEW_FILE="docs/prps/reviews/quick-${TIMESTAMP}-review.md"
-```
+1. Reuse the Path B/C `TIMESTAMP` if set; otherwise
+   `TIMESTAMP=$(date +%Y%m%d-%H%M%S)`.
+2. Print the mode; read `ARTIFACT_STORE=` from stdout:
+   `bash "${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell`
+3. Slug: local mode uses `review` (validated only; the path ignores it).
+   Linear mode applies the **Linear call gate** from
+   `${CURSOR_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md`, then
+   takes the slug from its Slugs rules 2-5 (no feature name).
+4. Resolve and create the destination:
+
+   ```bash
+   REVIEW_FILE="$(bash "${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=review-quick-${TIMESTAMP} --slug=<slug>)"
+   ```
+
+   Local mode: unchanged path `docs/prps/reviews/quick-${TIMESTAMP}-review.md`
+   under the current checkout's toplevel, no identity frontmatter, no Linear
+   calls. Linear mode: `.ycc/artifacts/<slug>/reviews/quick-${TIMESTAMP}-review.md`
+   (gitignored). When `--ensure` added the `.ycc/artifacts/` rule
+   (`git diff -- .gitignore` shows only that line), print
+   `Note: .gitignore gained the .ycc/artifacts/ rule from the artifact store; leave it out of PR commits.`
+
+   `DISPLAY_FILE` is the printed form: local mode
+   `docs/prps/reviews/quick-${TIMESTAMP}-review.md` (toplevel-relative, as
+   before); linear mode the absolute `$REVIEW_FILE`.
 
 Write the same artifact content that was printed in Phase 3, but set
 `**Decision**: COMMENT` in the header (since a review was produced but no
 GitHub decision is being posted).
 
+Linear mode: follow artifact-store.md > Review and report skills > Reviews
+(Lookup/Load identity, then Save) for Document `<slug> · quick-<TIMESTAMP>-review`.
+Parent: the verified `ARTIFACT_LINEAR_HINT` issue, else the feature Project,
+else none: keep the file local only and print
+`Review kept local: no Linear issue or Project.`
+
 Print:
 
 ```
-Quick review written to: docs/prps/reviews/quick-<TIMESTAMP>-review.md
+Quick review written to: <DISPLAY_FILE>
 Findings: [C] {critical_count}  [H] {high_count}  [M] {medium_count}  [L] {low_count}
 
 Next steps:
-  /review-fix docs/prps/reviews/quick-<TIMESTAMP>-review.md              # apply fixes {recommended_single if 1-2 Open findings}
-  /review-fix docs/prps/reviews/quick-<TIMESTAMP>-review.md --parallel   # fan out fixes {recommended_parallel if 3+ Open across 2+ files}
+  /review-fix <DISPLAY_FILE>              # apply fixes {recommended_single if 1-2 Open findings}
+  /review-fix <DISPLAY_FILE> --parallel   # fan out fixes {recommended_parallel if 3+ Open across 2+ files}
 ```
+
+`<DISPLAY_FILE>` is defined in step 4; in linear mode also print the
+Document URL when saved.
 
 Annotate ONE command with `# <- recommended`:
 
@@ -298,15 +340,15 @@ Step 1 — write the artifact to disk exactly as in "Save to file".
 Step 2 — invoke the `review-fix` skill inline via the `Skill` tool:
 
 - `skill`: `"review-fix"`
-- `args`: `"<REVIEW_FILE> [--parallel] [--severity <level>]"`
+- `args`: `"<REVIEW_FILE> [--parallel] [--severity <level>] [--store=<mode>]"`
 
 Forward `--parallel` if `PARALLEL_MODE=true`. Forward `--severity <level>` when
-`MIN_SEVERITY != HIGH`.
+`MIN_SEVERITY != HIGH`. Forward `STORE_FLAG` when set.
 
 Step 3 — after the Skill call returns, print:
 
 ```
-Fixes complete. Review artifact updated in place: docs/prps/reviews/quick-<TIMESTAMP>-review.md
+Fixes complete. Review artifact updated in place: <DISPLAY_FILE>
 ```
 
 Step 4 — exit.
@@ -320,10 +362,12 @@ fix phase has its own execution decision.
 ## Important Notes
 
 - **Apply fixes is artifact-free**: direct apply routes to `/quick-fix`
-  without writing `docs/prps/reviews/quick-*.md`.
+  without writing a `quick-*-review.md` artifact.
 - **Scratch is the one ephemeral exception**: when Path B (`--parallel`) is
   used, the calling skill persists each valid inline return to its scratch copy
-  at `docs/prps/reviews/.review-scratch/quick-<TIMESTAMP>/<reviewer-name>.md`
+  at `$SCRATCH_DIR/<reviewer-name>.md` (local mode:
+  `docs/prps/reviews/.review-scratch/quick-<TIMESTAMP>/`; linear mode: a
+  `mktemp -d` directory outside the repository; never pushed)
   during the `Agent` dispatch in Phase 2. It is always deleted at the end of
   Phase 5 before the skill returns control to the user — including on
   "Discard" and "Apply fixes" — so the "no file written" guarantee still

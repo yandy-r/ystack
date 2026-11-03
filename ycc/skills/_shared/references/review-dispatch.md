@@ -19,13 +19,18 @@ from `${CLAUDE_PLUGIN_ROOT}/skills/_shared/references/review-checklist.md`.
 That reference defines the roster, severity rubric, findings-format directive
 and merge procedure. Prompt contract follows below.
 
-Run-id and scratch paths per mode:
+Run-id and scratch paths per mode. `<review-dir>` is the directory of the
+resolved review file, `$(dirname "$OUT")` (local mode: `docs/prps/reviews`,
+unchanged; linear mode: `.ycc/artifacts/<slug>/reviews`). Quick mode in linear
+mode fans out before the Linear call gate, so its scratch dir is a `mktemp -d`
+directory outside the repository instead. Scratch is never pushed to Linear or
+committed.
 
-| Mode  | run-id                                                                                                    | scratch dir                                            |
-| ----- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Local | `local-<TIMESTAMP>` (one canonical timestamp per invocation; reused for the Phase 3 review filename)      | `docs/prps/reviews/.review-scratch/local-<TIMESTAMP>/` |
-| PR    | `pr-<NUMBER>` (PR numbers are unique; no timestamp)                                                       | `docs/prps/reviews/.review-scratch/pr-<NUMBER>/`       |
-| Quick | `quick-<TIMESTAMP>` (reused for the artifact filename if the user later selects an artifact-writing path) | `docs/prps/reviews/.review-scratch/quick-<TIMESTAMP>/` |
+| Mode  | run-id                                                                                                    | scratch dir                                       |
+| ----- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Local | `local-<TIMESTAMP>` (one canonical timestamp per invocation; reused for the Phase 3 review filename)      | `<review-dir>/.review-scratch/local-<TIMESTAMP>/` |
+| PR    | `pr-<NUMBER>` (PR numbers are unique; no timestamp)                                                       | `<review-dir>/.review-scratch/pr-<NUMBER>/`       |
+| Quick | `quick-<TIMESTAMP>` (reused for the artifact filename if the user later selects an artifact-writing path) | `<review-dir>/.review-scratch/quick-<TIMESTAMP>/` |
 
 Each reviewer prompt includes the instruction "flag only gaps that affect correctness or the stated requirements", plus:
 
@@ -49,7 +54,7 @@ Wait for all 3 reviewer results before merging: if results are pending and the r
 offers a wait tool, call it until every reviewer job has settled; never finish the run
 while a reviewer is still running. After all 3 `Agent` calls return, the calling skill
 (not the reviewer) persists each valid inline return to its scratch copy at
-`docs/prps/reviews/.review-scratch/<run-id>/<reviewer-name>.md`, where
+`<review-dir>/.review-scratch/<run-id>/<reviewer-name>.md`, where
 `<run-id>` is `local-<YYYYMMDD-HHMMSS>` for local mode, `pr-<NUMBER>` for PR
 mode, `quick-<YYYYMMDD-HHMMSS>` for quick mode. An empty, missing, or malformed
 return marks that reviewer failed (merge procedure in review-checklist.md); the
@@ -131,12 +136,12 @@ phase.
 
 ## Scratch backstop and cleanup
 
-- code-review local mode: remove `docs/prps/reviews/.review-scratch/local-<TIMESTAMP>/`
+- code-review local mode: remove `<review-dir>/.review-scratch/local-<TIMESTAMP>/`
   once the review artifact has been written successfully (Phase 3).
-- code-review PR mode: remove `docs/prps/reviews/.review-scratch/pr-<NUMBER>/`
+- code-review PR mode: remove `<review-dir>/.review-scratch/pr-<NUMBER>/`
   once the artifact has been written and (when `WORKTREE_ACTIVE=true`)
   committed successfully (Phase 6).
-- quick-review: remove `docs/prps/reviews/.review-scratch/quick-<TIMESTAMP>/`
+- quick-review: remove `<review-dir>/.review-scratch/quick-<TIMESTAMP>/`
   at the end of Phase 5 (HAND-OFF) unconditionally — including on "Discard"
   and "Apply fixes", which never write a permanent artifact. The scratch file
   is the one ephemeral exception to quick-review's artifact-free guarantee.

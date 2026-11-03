@@ -33,7 +33,7 @@ Parse arguments:
 
 - **feature-name**: The name of the feature to report on (its artifact-store feature directory)
 - **--dry-run**: Show what would be created without making changes
-- **--store=local|linear**: Optional artifact-store override; strip it into `STORE_FLAG` and forward it to every helper call. Full review/report routing is tracked in YAN-1156.
+- **--store=local|linear**: Optional artifact-store override; strip it into `STORE_FLAG` and forward it to every helper call.
 
 If no feature name provided, abort with usage instructions:
 

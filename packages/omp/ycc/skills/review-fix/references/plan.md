@@ -115,5 +115,8 @@ WORKTREE_ACTIVE=true
 3. **Advance** to the next severity batch. No merge step. No child worktree removal.
 
 **Status updates**: Edit the `Status:` field in the review artifact file in place
-(Open → Fixed / Failed) after each agent completes its finding. The artifact lives
-in the active worktree at `$PARENT_PATH/docs/prps/reviews/pr-<N>-review.md`.
+(Open → Fixed / Failed) after each agent completes its finding. In local mode the
+artifact lives in the active worktree at `$PARENT_PATH/docs/prps/reviews/pr-<N>-review.md`.
+In linear mode it is the resolved cache file (`$REVIEW_FILE`, under
+`.ycc/artifacts/<slug>/reviews/`); edit it there and re-Save its Document per
+SKILL.md Phase 4, never copying it into the worktree or committing it.

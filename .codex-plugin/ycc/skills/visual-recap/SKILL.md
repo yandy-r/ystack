@@ -15,7 +15,7 @@ file, and architecture changes become the same `data-model`, `api-endpoint`, `fi
 and `diagram` blocks a forward plan would use, only now they summarize work that exists. A
 reviewer scans the shape of the change before spending attention on the literal lines.
 
-**Operational context:** Keep recap content local-only: write docs/prps/reviews/visual/ and preview through the localhost bridge; never upload code to hosted services. Accept a Git range, branch, or tracked working-tree diff; behavior is remote-agnostic.
+**Operational context:** Keep recap content local-only: write docs/prps/reviews/visual/ and preview through the localhost bridge; never upload code to hosted services. Accept a Git range, branch, or tracked working-tree diff; behavior is remote-agnostic. This path is intentionally outside the artifact store: `--store` and linear mode never move or upload it.
 
 ## LOCAL-ONLY mandate — read this first
 

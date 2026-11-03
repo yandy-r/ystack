@@ -6,6 +6,7 @@
 - Kinds
 - Planning skills
 - Implementation skills
+- Review and report skills
 - PR linking
 - Layout
 - Frontmatter
@@ -34,15 +35,15 @@ It sources `resolve-plans-dir.sh` from its own directory. Sourcing resolves from
 
 Planning artifacts default to Linear storage. Local mode keeps the existing local paths; see Store resolution for opting out.
 
-| Piece                                       | Issue    | State                                                               |
-| ------------------------------------------- | -------- | ------------------------------------------------------------------- |
-| `resolve-artifact-store.sh`                 | YAN-1153 | Shipped                                                             |
-| This reference                              | YAN-1152 | Shipped                                                             |
-| Planning skills and validators              | YAN-1154 | Migrated                                                            |
-| Implementation skills and validators        | YAN-1155 | Migrated                                                            |
-| Review and report skills                    | YAN-1156 | Partial: `code-report` uses kind `code-report`; others not migrated |
-| Generators, capability matrix, `init`   | YAN-1157 | Shipped                                                             |
-| Existing `docs/plans` and `docs/prps` trees | YAN-1158 | Leave in place                                                      |
+| Piece                                       | Issue    | State          |
+| ------------------------------------------- | -------- | -------------- |
+| `resolve-artifact-store.sh`                 | YAN-1153 | Shipped        |
+| This reference                              | YAN-1152 | Shipped        |
+| Planning skills and validators              | YAN-1154 | Migrated       |
+| Implementation skills and validators        | YAN-1155 | Migrated       |
+| Review and report skills                    | YAN-1156 | Migrated       |
+| Generators, capability matrix, `init`   | YAN-1157 | Shipped        |
+| Existing `docs/plans` and `docs/prps` trees | YAN-1158 | Leave in place |
 
 ## Kinds
 
@@ -56,16 +57,20 @@ Planning artifacts default to Linear storage. Local mode keeps the existing loca
 | plan-workflow / parallel-plan  | Document, plus one Issue per task                                   | `parallel-plan.md`              |
 | prp-plan / `plan --visual` | Document, plus one Issue per task                                   | `prp-plan.md`                   |
 | review                         | One Document per review, attached to the issue or feature Project   | `reviews/<review-id>-review.md` |
+| review-fixes                   | Document beside its review, with the same parent                    | `reviews/<review-id>-fixes.md`  |
 | report                         | Project status update, plus a Document when long                    | `report.md`                     |
 | code-report                    | Document on the feature Project                                     | `code-report.md`                |
+| pr-autofix-report              | Local-only scratch; never pushed                                    | `reports/pr-autofix-<id>.md`    |
 | analysis                       | Local-only scratch; never pushed                                    | `analysis-*.md`                 |
 | prp-plan research backstop     | Local-only scratch; never pushed                                    | `.prp-research/<role>.md`       |
 | blueprint                      | Document on the feature Project                                     | `blueprint.md`                  |
 | deep-research                  | Final report as research lens `deep-research`; scratch never pushed | `deep-research/` (scratch)      |
+| visual-recap                   | None: local-only by its privacy rule, outside the store             | Its own local path              |
+| save-session / resume-session  | None: user-global `~/.claude/session-data/`, not a repo artifact    | None                            |
 
-Document titles are `<slug> · <kind>`. `<kind>` is the cache filename stem, omitting the conventional `research/` and `reviews/` directories: `shared` → `shared.md`, `parallel-plan` → `parallel-plan.md`, `prp-plan` → `prp-plan.md`, `feature-spec` → `feature-spec.md`, `report` → `report.md`, `code-report` → `code-report.md`, `research-<lens>` → `research/research-<lens>.md`, and `<pr-N|local-<stamp>|quick-<stamp>>-review` → the matching `reviews/<review-id>-review.md`. `prd` and `spec` map to their same-named files. Load maps that title suffix back to the cache filename. Each split part uses `<basename>-part-N` as its kind and filename stem.
+Document titles are `<slug> · <kind>`. `<kind>` is the cache filename stem, omitting the conventional `research/` and `reviews/` directories: `shared` → `shared.md`, `parallel-plan` → `parallel-plan.md`, `prp-plan` → `prp-plan.md`, `feature-spec` → `feature-spec.md`, `report` → `report.md`, `code-report` → `code-report.md`, `research-<lens>` → `research/research-<lens>.md`, `<pr-N|local-<stamp>|quick-<stamp>>-review` → the matching `reviews/<review-id>-review.md`, and `<review-id>-fixes` → `reviews/<review-id>-fixes.md`. `prd` and `spec` map to their same-named files. Load maps that title suffix back to the cache filename. Each split part uses `<basename>-part-N` as its kind and filename stem.
 
-A review keeps its PR comment unchanged. With no reviewed issue, attach its Document to the feature Project; if no Project exists, keep the review local only.
+Review routing, parents, and local-only kinds: see Review and report skills.
 
 `prp-implement` `{plan}-report.md` (kind `prp-report`) and `implement-plan` (kind `report`) share the `report.md` cache file. Local mode resolves `prp-report` to `docs/prps/reports/<slug>-report.md` under the current checkout and `report` to `<PLANS_DIR>/<slug>/report.md`; linear mode resolves both to `.ycc/artifacts/<slug>/report.md`. Store the status-update id in `linear.statusUpdate`; a long report also has `linear.document`.
 
@@ -113,7 +118,7 @@ In local mode, write `$OUT` at the existing local path, without identity frontma
 | `blueprint`         | `blueprint`; derive the slug from `git rev-parse --path-format=absolute --git-common-dir`: its parent's basename when it is named `.git`, else its own basename minus `.git` (bare repo or submodule), else the current directory name outside Git; lowercase and sanitize it |
 | `visual-plan`       | Reads the caller-selected `prp-plan` or `parallel-plan`; generated visual files follow Size and diagrams and are not uploaded                                                                                                                                                 |
 
-`get_artifact_path <kind> <slug>` prints an absolute path without creating anything. Its `--kind=... --slug=...` CLI form requires both options. With a kind and slug, `--ensure` in linear mode calls `ensure_artifact_dir` to create the cache base and repository gitignore rule; in local mode it creates only the returned file's parent directory (or the returned directory for directory kinds), never an unrelated `PLANS_DIR`. Without a kind, `--ensure` retains the `ensure_artifact_dir` behavior below. Repo-level local kinds `prd`, `spec`, `prp-plan`, `prp-research`, and `blueprint` resolve under the current checkout's physical git toplevel, or the physical start directory outside git; feature kinds retain `PLANS_DIR`. Create any needed parent directory for the returned file when writing. An explicit deep-research `--output-dir` always wins. Local deep-research keeps `research/<subject>` and does not call `get_artifact_path deep-research`; its linear final Document is `<slug> · research-deep-research`, cached as `research/research-deep-research.md`.
+`get_artifact_path <kind> <slug>` prints an absolute path without creating anything. Its `--kind=... --slug=...` CLI form requires both options. With a kind and slug, `--ensure` in linear mode calls `ensure_artifact_dir` to create the cache base and repository gitignore rule; in local mode it creates only the returned file's parent directory (or the returned directory for directory kinds), never an unrelated `PLANS_DIR`. Without a kind, `--ensure` retains the `ensure_artifact_dir` behavior below. Repo-level local kinds `prd`, `spec`, `prp-plan`, `prp-research`, `blueprint`, and the review and pr-autofix kinds resolve under the current checkout's physical git toplevel, or the physical start directory outside git; feature kinds retain `PLANS_DIR`. Create any needed parent directory for the returned file when writing. An explicit deep-research `--output-dir` always wins. Local deep-research keeps `research/<subject>` and does not call `get_artifact_path deep-research`; its linear final Document is `<slug> · research-deep-research`, cached as `research/research-deep-research.md`.
 
 For each uploaded planning document in linear mode:
 
@@ -183,6 +188,48 @@ The orchestrator moves issues by state type, not team-specific state names:
 
 `orchestrate` builds its own decomposition. Its Linear behavior applies only when its input is a Linear issue reference (a `store: linear` config alone changes nothing): it reads that issue's title, description and sub-issues as the task description before deriving any slug, moves the issue to `started` immediately before the first dispatch, comments on failure, saves a `report` when the issue has a Project (on success and failure), and marks the issue `completed` only when the run's final verification passes. `--plan-only` keeps writing `docs/orchestration/`; that path is not an artifact-store kind.
 
+## Review and report skills
+
+These skills follow Planning skills for `STORE_FLAG`, printing the mode, the Linear call gate, and `--ensure`, and resolve every path with the helper. Exception: local-only kinds (`pr-autofix-report-<id>`) make no Linear calls and therefore skip the Linear call gate; they still print the mode. `<N>` is a PR number ≥ 1; the helper rejects any other id. Local mode keeps today's paths and commits, anchored at the checkout toplevel even when run from a subdirectory; printed local paths and `/review-fix` commands use the toplevel-relative form (`docs/prps/...`), as before.
+
+| Kind                     | Id                                                             | Linear cache                        | Local path                              |
+| ------------------------ | -------------------------------------------------------------- | ----------------------------------- | --------------------------------------- |
+| `review-<id>`            | `pr-<N>`, `local-<YYYYMMDD-HHMMSS>`, `quick-<YYYYMMDD-HHMMSS>` | `<slug>/reviews/<id>-review.md`     | `docs/prps/reviews/<id>-review.md`      |
+| `review-fixes-<id>`      | Same as `review-<id>`                                          | `<slug>/reviews/<id>-fixes.md`      | `docs/prps/reviews/fixes/<id>-fixes.md` |
+| `pr-autofix-report-<id>` | `<N>-<YYYY-MM-DD>T<HHMMSS>Z`                                   | `<slug>/reports/pr-autofix-<id>.md` | `docs/prps/reports/pr-autofix-<id>.md`  |
+
+Local paths resolve under the start directory's checkout (`ARTIFACT_REPO_ROOT`), so pass the reviewed worktree as start-dir. In local mode the slug is validated but does not affect the path.
+
+### Reviews
+
+- `code-review` (local and PR) and `quick-review` (`Save to file`, `Write file and apply fixes`) write kind `review-<id>`. Slug: Slugs rules 2–5; reviews have no feature name. A PR review takes its hint from the PR, never the local branch: the `headRefName` key (Branch hint rules), else a `Closes|Fixes|Resolves <KEY>` in the PR body (Lookup step 4); with neither, skip rules 2–3 and sanitize `headRefName` for rule 4.
+- Linear: Save one Document `<slug> · <id>-review`. Parent: the verified PR-derived hint issue (local reviews: `ARTIFACT_LINEAR_HINT`) or cached `linear.issue`, recorded in `linear.issue`; else the feature Project; else keep the review local only with no push.
+- The GitHub PR review comment is unchanged. Linear-mode reviews are gitignored cache; never commit them to the PR branch. When `--ensure` added the `.ycc/artifacts/` rule (`git -C <checkout> diff -- .gitignore` shows only that line), print a note naming `<checkout>/.gitignore` and tell the user to leave it out of PR commits and to commit fixes by explicit path, never `git add -A`.
+- Scratch: `.review-scratch/<run-id>/` beside the resolved file (`$(dirname "$OUT")/.review-scratch/<run-id>/`); local mode keeps `docs/prps/reviews/.review-scratch/<run-id>/`. Never pushed. Fan-out that runs before the gate and `--ensure` (quick-review) keeps linear-mode scratch outside the repository in `mktemp -d`.
+
+### Review fixes
+
+`review-fix` and `quick-fix` resolve their input:
+
+1. A path ending `.md`: use it as-is.
+2. Digits `N`: kind `review-pr-N` in the current mode. Linear: the current checkout cache, then the main checkout cache; if missing, Lookup and Load Document `<slug> · pr-N-review`, searching only this repository's Projects (Lookup step 5) and asking when none is configured. Check the review's `**Branch**` head against the PR's `headRefName` before applying it.
+3. Blank: the newest `*-review.md` by mtime in the mode's review location (linear: `.ycc/artifacts/*/reviews/`), current checkout first, then the main checkout.
+
+Existing local reviews keep local mode. When `STORE_FLAG` is empty and the printed `ARTIFACT_STORE_SOURCE=default`, set `STORE_FLAG=--store=local` (and forward it) if the input is a `.md` path that is not a linear review (not under `.ycc/artifacts/`, no leading `linear:` block), digits `N` with an existing `docs/prps/reviews/pr-<N>-review.md`, or blank input whose newest review lies under `docs/prps/reviews/`. Print one line: `Using local review at <path>; pin with store: local in .plans-config`. An explicit or configured linear mode with a local review path aborts: `A local review requires local mode; use --store=local.`
+
+Status edits on a linear review re-run Save for its Document; Conflict applies. The fix report uses kind `review-fixes-<id>`, saved as Document `<slug> · <id>-fixes` with the review's parent. Linear mode never commits either file. A review id the helper rejects keeps the pre-store local report path `docs/prps/reviews/fixes/<source-name>-fixes.md`; linear mode aborts before writing.
+
+### Local-only reports
+
+- `pr-autofix` writes kind `pr-autofix-report-<id>`: local-only in both modes, never pushed, and not committed in linear mode. It prints the mode and validates `STORE_FLAG` in Phase 0, before any commit or push, and skips the Linear call gate. When its `--ensure` adds the `.ycc/artifacts/` rule, the final output names the `.gitignore` edit. Its `~/.claude/session-data/ci-watch/` audit log is unchanged.
+- `visual-recap` stays outside the store under its privacy rule; its paths are unchanged.
+- `save-session` and `resume-session` use user-global `~/.claude/session-data/`, not a repository artifact; unchanged.
+
+### Research to issues
+
+- `research-to-issues` strips `--store` into `STORE_FLAG`. A feature name resolves `parallel-plan`, `prp-plan`, `feature-spec`, or `prd` with `get_artifact_path`, first existing file in that order (the order Lookup uses for a Linear reference). A Linear issue, Project, or Document reference first hydrates the cache with Lookup and Load, as in Implementation skills > Inputs and Resolve and hydrate.
+- It creates GitHub issues only; Linear task issues come from planning Save. When the plan frontmatter has a `tasks` map, each child GitHub issue for a mapped task adds `Refs <KEY>` for its Linear task issue, and the tracking issue references `linear.issue`. It never creates Linear issues.
+
 ## PR linking
 
 `prp-pr` and `git-workflow` add Linear and GitHub issue links to the PR body's related-issues section:
@@ -211,7 +258,11 @@ Linear mode stores a gitignored cache:
 ├── reviews/
 │   ├── pr-<N>-review.md
 │   ├── local-<stamp>-review.md
-│   └── quick-<stamp>-review.md
+│   ├── quick-<stamp>-review.md
+│   ├── <review-id>-fixes.md
+│   └── .review-scratch/<run-id>/
+├── reports/
+│   └── pr-autofix-<id>.md
 ├── research/
 │   ├── research-business.md
 │   ├── research-technical.md
@@ -245,7 +296,9 @@ Linear mode stores a gitignored cache:
 | `.ycc/artifacts/<slug>/reviews/pr-<N>-review.md`        | `docs/prps/reviews/pr-<N>-review.md`                                  |
 | `.ycc/artifacts/<slug>/reviews/local-<stamp>-review.md` | `docs/prps/reviews/local-<stamp>-review.md`                           |
 | `.ycc/artifacts/<slug>/reviews/quick-<stamp>-review.md` | `docs/prps/reviews/quick-<stamp>-review.md`                           |
+| `.ycc/artifacts/<slug>/reviews/<review-id>-fixes.md`    | `docs/prps/reviews/fixes/<review-id>-fixes.md`                        |
 | `.ycc/artifacts/<slug>/report.md`                       | `docs/plans/<slug>/report.md` or `docs/prps/reports/<plan>-report.md` |
+| `.ycc/artifacts/<slug>/reports/pr-autofix-<id>.md`      | `docs/prps/reports/pr-autofix-<id>.md`                                |
 | `.ycc/artifacts/<slug>/analysis-*.md`                   | `docs/plans/<slug>/analysis-*.md`                                     |
 | `.ycc/artifacts/<slug>/.prp-research/<role>.md`         | `docs/prps/plans/.prp-research/<slug>/<role>.md`                      |
 | `.ycc/artifacts/<slug>/blueprint.md`                    | `docs/blueprint.md`                                                   |
@@ -406,14 +459,14 @@ In linear mode, `ARTIFACT_ROOT` is `PLANS_ROOT` unless `PLANS_ROOT` lies outside
 | `ARTIFACT_LINEAR_LABEL`     | `linear_label`, or empty                                                                                           |
 | `ARTIFACT_LINEAR_HINT`      | Branch issue-key hint, or empty; skills must verify it in Linear                                                   |
 
-| Function                                                     | Behavior                                                                                                                                                                                                     |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `resolve_artifact_store [--store=linear\|local] [start-dir]` | Export all variables and re-export `PLANS_DIR`/`PLANS_ROOT` for the start directory. No writes. Return 1 on invalid input.                                                                                   |
-| `get_feature_artifact_dir <slug>`                            | Print `${ARTIFACT_DIR}/<slug>` after the slug validation above. Do not create it.                                                                                                                            |
-| `get_artifact_path <kind> <slug>`                            | Print the kind's absolute local or linear path. Validate the slug like `get_feature_artifact_dir` and research/analysis suffixes as lowercase kebab-case. No writes.                                         |
-| `select_local_plan_store <name>`                             | Under `ARTIFACT_STORE_SOURCE=default` only, re-resolve with `--store=local` when the local feature directory (legacy names allowed) exists, printing the Inputs line. Used by the read-only planning checks. |
-| `ensure_artifact_gitignore`                                  | Linear: ensure the repository gitignore rule. Local: return 0 without writing.                                                                                                                               |
-| `ensure_artifact_dir`                                        | Run `ensure_artifact_gitignore`, then create `ARTIFACT_DIR` only on success; a refused or failed check creates no `.ycc/artifacts/`. The write-on-first-save entry point.                                    |
+| Function                                                     | Behavior                                                                                                                                                                                                              |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resolve_artifact_store [--store=linear\|local] [start-dir]` | Export all variables and re-export `PLANS_DIR`/`PLANS_ROOT` for the start directory. No writes. Return 1 on invalid input.                                                                                            |
+| `get_feature_artifact_dir <slug>`                            | Print `${ARTIFACT_DIR}/<slug>` after the slug validation above. Do not create it.                                                                                                                                     |
+| `get_artifact_path <kind> <slug>`                            | Print the kind's absolute local or linear path. Validate the slug like `get_feature_artifact_dir`, research/analysis suffixes as lowercase kebab-case, and review/pr-autofix ids as in Review kinds below. No writes. |
+| `select_local_plan_store <name>`                             | Under `ARTIFACT_STORE_SOURCE=default` only, re-resolve with `--store=local` when the local feature directory (legacy names allowed) exists, printing the Inputs line. Used by the read-only planning checks.          |
+| `ensure_artifact_gitignore`                                  | Linear: ensure the repository gitignore rule. Local: return 0 without writing.                                                                                                                                        |
+| `ensure_artifact_dir`                                        | Run `ensure_artifact_gitignore`, then create `ARTIFACT_DIR` only on success; a refused or failed check creates no `.ycc/artifacts/`. The write-on-first-save entry point.                                             |
 
 Pointer writer (not sourced; see Fresh clone for the CLI and exit codes):
 
@@ -433,6 +486,7 @@ bash "${HOME}/.agents/ycc-shared/scripts/resolve-artifact-store.sh" [--store=lin
 - `--help` prints usage. `--debug` or `PLANS_DEBUG=1` enables debug output.
 - `--kind` and `--slug` together print `get_artifact_path`; without them, default output remains `ARTIFACT_DIR`. With both options, local `--ensure` creates only that file's parent or that directory itself; linear `--ensure` calls `ensure_artifact_dir` for the cache base and gitignore rule. Without kind/slug, `--ensure` calls `ensure_artifact_dir` unchanged.
 - Report kinds: `report` resolves locally to `${PLANS_DIR}/<slug>/report.md`; `prp-report` resolves to `<repo>/docs/prps/reports/<slug>-report.md` under the current checkout. Both resolve to `.ycc/artifacts/<slug>/report.md` in linear mode. `code-report` resolves locally to the same `${PLANS_DIR}/<slug>/report.md` and in linear mode to `.ycc/artifacts/<slug>/code-report.md`. Local `--ensure` creates only the parent directory.
+- Review kinds: `review-<id>` and `review-fixes-<id>` accept `pr-<N>`, `local-<YYYYMMDD-HHMMSS>`, or `quick-<YYYYMMDD-HHMMSS>`; `pr-autofix-report-<id>` accepts `<N>-<YYYY-MM-DD>T<HHMMSS>Z`, where `<N>` ≥ 1. Other ids fail. Paths: Review and report skills.
 - Sourcing auto-resolves without `exit` or enabling `set -e`; check `${ARTIFACT_STORE:-}` before use. Call `resolve_artifact_store` explicitly to pass a flag/start directory or receive invalid-input status.
 
 ```bash

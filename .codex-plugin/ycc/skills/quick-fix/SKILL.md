@@ -12,9 +12,10 @@ Bundled paths are relative to this SKILL.md's directory (the installed location 
 Apply fixes from an inline Quick Review findings block without writing or
 updating a review artifact.
 
-**Core rule**: This skill is artifact-free. It MUST NOT create files under
-`docs/prps/reviews/` — that would lose the audit contract — and it MUST NOT
-update any review markdown file. If the
+**Core rule**: This skill is artifact-free. It MUST NOT create review files in
+any store (local `docs/prps/reviews/` or linear `.ycc/artifacts/*/reviews/`) —
+that would lose the audit contract — it MUST NOT update any review markdown
+file, and it makes no Linear calls. If the
 user wants an auditable artifact, route them to `$review-fix` with a saved
 review file instead.
 
@@ -242,7 +243,8 @@ so the user can decide whether to save a formal review artifact or fix manually.
 ## Relationship to review-fix
 
 - `$quick-fix` is for ephemeral, inline quick-review findings.
-- `$review-fix` is for artifacts under `docs/prps/reviews/`.
+- `$review-fix` is for saved review artifacts (local `docs/prps/reviews/`
+  or the linear artifact-store cache and Document).
 - Do not teach `$review-fix` to parse inline quick-review payloads; keeping
   the workflows separate preserves the audit trail contract for artifact-backed
   reviews.

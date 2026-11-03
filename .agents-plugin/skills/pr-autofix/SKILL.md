@@ -116,12 +116,18 @@ Extract flags from `$ARGUMENTS`; the remainder is the PR selector.
 | `--ci-max-same-failure=N`         | Bail after the same failure signature recurs N times (default 3).                                                                |
 | `--ci-timeout-min=N`              | Wall-clock cap in minutes (default 30).                                                                                          |
 | `--ci-yes`                        | Skip the one-time CI authorization prompt (non-interactive callers).                                                             |
+| `--store=local\|linear`           | Artifact-store override for the local report path; kept verbatim as `STORE_FLAG` (empty when absent).                            |
 
 **Validation** (abort on any failure):
 
 - `--bot-only` and `--human-only` are mutually exclusive.
 - `--no-push` and `--ci` are mutually exclusive (CI cannot observe unpushed commits).
 - `--commit-style` must be `one` or `per-comment`.
+- Artifact store: print the mode for the report with
+  `bash "${HOME}/.agents/ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell "$(git rev-parse --show-toplevel)"`
+  and abort on a non-zero exit (for example `--store=liner`), before any fix,
+  commit or push. The report is a local-only kind, so no Linear call gate
+  applies (artifact-store.md > Review and report skills).
 
 ### PR resolution
 
@@ -153,6 +159,8 @@ Before the GitHub checks, detect the provider on `origin` (`forge_detect_provide
 | `HEAD_BRANCH != $(default-branch)`        | Stop: "Refusing: PR head equals the default branch." (Same constraint as `ci-monitor.sh`; exit `refused-default-branch`.)                         |
 | Working tree clean                        | Warn + AskUserQuestion: "Uncommitted changes detected — commit/stash before fixing? (yes/no/abort)"                                               |
 | Local checkout = `HEAD_BRANCH`            | If not, AskUserQuestion: "Switch to `<HEAD_BRANCH>` now? (yes/no)". On `no`, abort.                                                               |
+
+A `.gitignore` whose only change adds the `.ycc/artifacts/` rule (left by a previous linear-mode report, Phase 8) does not count as uncommitted changes here or in Phase 4's clean-tree checks; never stage it.
 
 If `--ci` was passed and any refusal fires, append: `--ci will not run because the autofix run cannot proceed.`
 
@@ -204,7 +212,7 @@ For each `Apply` entry, sanitize the body per `references/prompt-injection-safet
 ### Batching
 
 1. For `--commit-style one`: group same-file Apply entries in one fixer, sorted by line DESCENDING. Different-file groups parallelize with `--parallel`; order batches by severity: CRITICAL → HIGH → MEDIUM → LOW.
-2. For `--commit-style per-comment`: dispatch one comment at a time, sequentially even with `--parallel`. Use the same severity-first, same-file line-DESC order; re-check each anchor against the current file. Before dispatch require a clean working tree and index. After each `Fixed`, run Phase 5's per-comment commit before dispatching the next comment.
+2. For `--commit-style per-comment`: dispatch one comment at a time, sequentially even with `--parallel`. Use the same severity-first, same-file line-DESC order; re-check each anchor against the current file. Before dispatch require a clean working tree and index (a `.gitignore` whose only change adds the `.ycc/artifacts/` rule does not count). After each `Fixed`, run Phase 5's per-comment commit before dispatching the next comment.
 3. For either mode, a Failed fixer with leftover edits stops dispatch and push for user review; never include those edits in another comment's commit or discard them automatically.
 
 ### Dispatch modes
@@ -304,7 +312,14 @@ If everything was Deferred (no commit, no thread mutation), skip the summary ent
 
 ### Local report and final stdout
 
-Write the report to `$(git rev-parse --show-toplevel)/docs/prps/reports/pr-autofix-${PR_NUMBER}-$(date -u +%FT%H%M%SZ).md`, then print the final stdout. Both templates, and the Goal Signals block, are in `references/output-templates.md`. Print every Goal Signal verbatim as the last lines of Phase 8 output, one `KEY: PASS|FAIL` per line.
+Resolve the report through the artifact store, kind `pr-autofix-report-<N>-<ts>`, using the same UTC stamp as before:
+
+```bash
+TS="$(date -u +%FT%H%M%SZ)"
+REPORT_PATH="$(bash "${HOME}/.agents/ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=pr-autofix-report-${PR_NUMBER}-${TS} --slug=<slug> "$(git rev-parse --show-toplevel)")"
+```
+
+Slug: `pr-autofix` in local mode (validated only); in linear mode artifact-store.md Slugs rules 3-4 (lowercased `ARTIFACT_LINEAR_HINT`, else the sanitized `HEAD_BRANCH`), with no Linear calls. Local mode: unchanged path `$(git rev-parse --show-toplevel)/docs/prps/reports/pr-autofix-${PR_NUMBER}-<ts>.md`. Linear mode: `.ycc/artifacts/<slug>/reports/pr-autofix-<N>-<ts>.md` (gitignored). The report is local-only in both modes (artifact-store.md > Review and report skills > Local-only reports): never pushed to Linear, never committed in linear mode, and a `.gitignore` change made by `--ensure` is never staged. When `git diff -- .gitignore` shows only the added `.ycc/artifacts/` rule, add the `.gitignore` line from the final stdout template; later runs ignore that change in their clean-tree checks. `--dry-run` writes no report. The `~/.claude/session-data/ci-watch/` audit log is unchanged. Write the report to `$REPORT_PATH`, then print the final stdout (`Report:` shows the toplevel-relative path in local mode, as before). Both templates, and the Goal Signals block, are in `references/output-templates.md`. Print every Goal Signal verbatim as the last lines of Phase 8 output, one `KEY: PASS|FAIL` per line.
 
 ---
 
@@ -325,7 +340,7 @@ Write the report to `$(git rev-parse --show-toplevel)/docs/prps/reports/pr-autof
 - **NO_FORCE_PUSH**: no `git push --force` or `--force-with-lease` was issued.
 - **NO_NO_VERIFY**: no `git commit --no-verify` was issued.
 - **NO_RAW_PROMPTS_OUTBOUND**: no reviewer text appears verbatim in any reply, summary, or commit message; all outbound text passes the sanitizer.
-- **REPORT_CREATED**: `docs/prps/reports/pr-autofix-<N>-<ts>.md` exists.
+- **REPORT_CREATED**: the resolved `$REPORT_PATH` exists (local mode: `docs/prps/reports/pr-autofix-<N>-<ts>.md`).
 - **CI_GREEN**: if `--ci` ran, the loop reached `RESULT=green` and Phase 8 stdout shows `Result: green`. `n/a` when `--ci` was not set.
 - **CI_BAIL_VISIBLE**: if `--ci` bailed, the report and stdout state the `bail-*` code and the cap/constraint that fired. `n/a` when `--ci` reached green or was not set.
 
