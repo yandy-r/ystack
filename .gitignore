@@ -32,6 +32,10 @@ node_modules/
 __pycache__/
 *.py[cod]
 .mypy_cache/
+# pyproject.toml is tool config only (no [project]); `uv run` — including the
+# lefthook hook fallback when lefthook is not installed — writes these locally.
+/uv.lock
+/.venv/
 
 # opencode model-alias overrides (per-user, optional)
 scripts/opencode_model_aliases.local.json
