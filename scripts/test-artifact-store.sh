@@ -320,6 +320,10 @@ mkdir -p "${ycc_plain_repo}/.ycc/artifacts/feat"
 printf 'artifacts/tmp\n !artifacts/\n' >"${ycc_plain_repo}/.ycc/.gitignore"
 assert_ok 'plain .ycc ignore still appends' run "$ycc_plain_repo" ensure_artifact_gitignore
 assert_eq 'plain .ycc ignore repository rule' '.ycc/artifacts/' "$(cat "${ycc_plain_repo}/.gitignore")"
+printf '\\!artifacts/\n' >"${ycc_plain_repo}/.ycc/.gitignore"
+rm "${ycc_plain_repo}/.gitignore"
+assert_ok 'escaped .ycc \! is not a negation' run "$ycc_plain_repo" ensure_artifact_gitignore
+assert_eq 'escaped .ycc \! repository rule' '.ycc/artifacts/' "$(cat "${ycc_plain_repo}/.gitignore")"
 # The reported YAN-1790 shape: the root rule exists, yet .ycc re-includes it.
 covered_neg_repo="${SCRATCH}/ycc-negation-covered"; make_linear_repo "$covered_neg_repo"
 mkdir -p "${covered_neg_repo}/.ycc"

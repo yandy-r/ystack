@@ -134,7 +134,7 @@ if [[ "$store" == linear ]]; then
     0) ignore=present ;;
     1) ignore=added ;;
     2) die 2 'A negated (!) ignore rule re-includes .ycc/artifacts/ paths; refusing to override it' ;;
-    3) die 2 'Cannot check .ycc/artifacts/ ignore coverage (git check-ignore or TMPDIR scratch failed)' ;;
+    3) die 2 'Cannot check .ycc/artifacts/ ignore coverage (git check-ignore, .ycc .gitignore scan, or TMPDIR scratch failed)' ;;
     *) die 2 'Cannot ensure repository artifact-cache ignore rule' ;;
   esac
 fi

@@ -301,8 +301,9 @@ _artifact_probe_ignores() {
   [[ "$status" -le 1 ]]
 }
 
-# 0 when FILE has a negated (!) line, 1 when not, >1 when unreadable. Git
-# skips a UTF-8 BOM, and a leading space makes `!` literal.
+# 0 when FILE has a negated (!) line, 1 when not, >1 when unreadable. A leading
+# space makes `!` literal. A BOM is accepted on any line, broader than Git
+# (which skips it only at file start), so this fails safe.
 _artifact_has_negation() {
   LC_ALL=C grep -qE $'^(\xef\xbb\xbf)?!' "$1"
 }
@@ -338,7 +339,7 @@ _artifact_ycc_negation() {
 
 # Coverage check (never edits the repository; uses TMPDIR scratch): 0 means
 # present, 1 means append, 2 means a negated rule makes it unsafe, 3 means the
-# ignore probe itself failed.
+# ignore probe or the .ycc .gitignore scan failed.
 _artifact_gitignore_present() {
   local file="${ARTIFACT_ROOT}/.gitignore" ignore_source ignore_pattern git_root count scratch made status=0
   git_root=$(git -C "$ARTIFACT_ROOT" rev-parse --show-toplevel) || return 1
@@ -391,7 +392,7 @@ ensure_artifact_gitignore() {
   case "$status" in
     0) return 0 ;;
     2) _error 'A negated (!) ignore rule re-includes .ycc/artifacts/ paths; refusing to override it'; return 1 ;;
-    3) _error 'Cannot check .ycc/artifacts/ ignore coverage (git check-ignore or TMPDIR scratch failed)'; return 1 ;;
+    3) _error 'Cannot check .ycc/artifacts/ ignore coverage (git check-ignore, .ycc .gitignore scan, or TMPDIR scratch failed)'; return 1 ;;
   esac
   if [[ -s "$file" ]]; then
     # Command substitution strips a final newline, leaving an empty last byte.
