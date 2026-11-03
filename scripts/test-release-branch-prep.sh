@@ -252,6 +252,15 @@ test_prep_artifact_gitignore() {
   assert_eq "$PREP_OUT" 'feat/demo' 'prep: prints branch after missing final newline'
 
   repo="$(mkrepo)"
+  printf '%s\n' '.ycc/artifacts/' '!.ycc/artifacts/' >"${repo}/.gitignore"
+  git -C "$repo" add .gitignore
+  git -C "$repo" commit -q -m 'chore: re-include the artifact cache'
+  (cd "$repo" && bash "${SHARED}/resolve-artifact-store.sh" --store=linear --ensure --kind=parallel-plan --slug=demo) >/dev/null
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 0 'prep: accepts ensured cache rule after committed rule and negation'
+  assert_eq "$(current_branch "$repo")" 'feat/demo' 'prep: switches branch after committed rule and negation'
+
+  repo="$(mkrepo)"
   mkdir -p "${repo}/packages/x"
   printf '%s\n' '.ycc/artifacts/' >"${repo}/packages/x/.gitignore"
   run_prep "$repo" demo

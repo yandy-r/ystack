@@ -9,7 +9,8 @@
 # Behavior:
 #   - Rejects an unrelated dirty checkout (only plan-artifact paths allowed:
 #     docs/plans/<slug>/*, docs/orchestration/<slug>*,
-#     docs/prps/{plans,specs,prds}/<slug>*, plus cache-only .gitignore additions).
+#     docs/prps/{plans,specs,prds}/<slug>*, plus a .gitignore whose only
+#     change appends one .ycc/artifacts/ rule line).
 #   - On feat/<slug>: idempotent no-op.
 #   - On trunk (main/master/trunk/develop, plus the RELEASING.md trunk) and
 #     feat/<slug> exists: switch to it.
@@ -162,20 +163,27 @@ fi
 #
 # Allow plan-artifact paths; reject anything else.
 
+# Accept a .gitignore equal to its HEAD content (empty when new) plus exactly
+# one trailing cache rule line, as `--ensure` writes it, including after a
+# missing final newline. HEAD may already hold the rule: a later `!` line can
+# void it, so the resolver appends another.
 is_artifact_gitignore() {
-  local path="$1" root file head='' work rule='^/?\.ycc/artifacts/?$'
+  local path="$1" root file head='' work rest rule='^/?\.ycc/artifacts/?$'
   root=$(git rev-parse --show-toplevel)
   file="$root/$path"
   [[ -f "$file" && ! -L "$file" ]] || return 1
-  grep -qE "$rule" "$file" || return 1
+  # The x sentinel keeps trailing newlines that command substitution strips.
+  work=$(cat -- "$file" && printf x) || return 1
+  work=${work%x}
   if git -C "$root" cat-file -e "HEAD:$path" 2>/dev/null; then
-    head=$(git -C "$root" show "HEAD:$path") || return 1
-    if grep -qE "$rule" <<<"$head"; then return 1; fi
+    head=$(git -C "$root" show "HEAD:$path" && printf x) || return 1
+    head=${head%x}
   fi
-  # Compare all non-rule content, including staged changes; command
-  # substitution ignores trailing newlines added before the cache rule.
-  work=$(grep -vE "$rule" "$file" || true)
-  [[ "$work" == "$head" ]]
+  if [[ -n "$head" && "$head" != *$'\n' ]]; then head="${head}"$'\n'; fi
+  [[ "$work" == "$head"* ]] || return 1
+  rest=${work#"$head"}
+  rest=${rest%$'\n'}
+  [[ "$rest" != *$'\n'* && "$rest" =~ $rule ]]
 }
 
 is_plan_artifact() {
