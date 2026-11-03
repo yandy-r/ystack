@@ -310,6 +310,14 @@ assert_ok 'partial cache plans full coverage' grep -qx 'gitignore=added' "${SCRA
 printf '.ycc/\n' >"${partial}/.gitignore"
 expect_exit 'dry-run accepts wider repository coverage' 0 linear --dry-run "$partial"
 assert_ok 'wider cache reports present' grep -qx 'gitignore=present' "${SCRATCH}/out"
+# A global excludes match is not portable: the pointer still adds the repo rule (YAN-1677).
+global="${SCRATCH}/global-excludes-repo"; make_repo "$global"
+printf '.ycc/\n' >"${SCRATCH}/global-excludes"
+git config --file "$GIT_CONFIG_GLOBAL" core.excludesFile "${SCRATCH}/global-excludes"
+expect_exit 'global excludes pointer succeeds' 0 linear "$global"
+assert_ok 'global excludes pointer adds repo rule' grep -qx 'gitignore=added' "${SCRATCH}/out"
+assert_eq 'global excludes commit includes ignore' $'.gitignore\n.plans-config' "$(git -C "$global" show --pretty= --name-only HEAD)"
+git config --file "$GIT_CONFIG_GLOBAL" --unset core.excludesFile
 untracked="${SCRATCH}/untracked-pointer"; make_repo "$untracked"
 expect_exit 'no-commit creates untracked pointer' 0 linear --no-commit "$untracked"
 expect_exit 'unchanged untracked pointer still commits' 0 linear "$untracked"

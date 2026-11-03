@@ -473,8 +473,10 @@ In linear mode, both `ensure_*` functions refuse when `ARTIFACT_ROOT` is outside
 
 The linear gitignore check returns without editing when either condition holds:
 
-- `git check-ignore -v --no-index` ignores `.ycc/artifacts/probe` and the reported source is a `.gitignore` inside this repository. Global excludes and `.git/info/exclude` do not count.
+- `git check-ignore -v --no-index`, consulting only this repository's `.gitignore` files, ignores `.ycc/artifacts/probe`, `.ycc/artifacts/probe-dir/probe`, and `.ycc/artifacts/feat/cache`.
 - `${ARTIFACT_ROOT}/.gitignore` already contains `.ycc/artifacts/`, `/.ycc/artifacts/`, `.ycc/artifacts`, or `/.ycc/artifacts`.
+
+Matches from a global `core.excludesFile` or `.git/info/exclude` do not count because they are not portable; the repository rule is still appended. A negated (`!`) rule that re-includes one of those probe paths, from any source, refuses rather than being overridden. Directory-level exceptions such as `!.ycc/artifacts/feat/` are not reported by Git and are overridden by the appended rule.
 
 Otherwise append `.ycc/artifacts/`, creating `.gitignore` if needed and adding a missing trailing newline before the entry. Skills call `--ensure` after the Linear gate and before the first cache write or pull; `artifact-store-pointer.sh` (run by `init --artifact-store=linear`) applies the same rule when it writes the committed pointer.
 

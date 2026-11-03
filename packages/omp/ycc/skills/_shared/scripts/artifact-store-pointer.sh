@@ -133,6 +133,7 @@ if [[ "$store" == linear ]]; then
   case "$coverage" in
     0) ignore=present ;;
     1) ignore=added ;;
+    2) die 2 'A negated (!) ignore rule re-includes .ycc/artifacts/ paths; refusing to override it' ;;
     *) die 2 'Cannot ensure repository artifact-cache ignore rule' ;;
   esac
 fi
