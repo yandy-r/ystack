@@ -468,6 +468,9 @@ for pair in review-pr-3/reviews/pr-3-review.md review-fixes-pr-3/reviews/pr-3-fi
   assert_eq "linear ensure ${kind} path" "$review_path" "$("$BASH_BIN" "$HELPER" --ensure --kind="$kind" --slug=feat "$review_repo")"
   assert_ok "linear ensure ${kind} ignores path" git -C "$review_repo" check-ignore -q -- "$review_path"
   assert_ok "linear ensure ${kind} creates no file" test ! -e "$review_path"
+  # Skills create the file's parent themselves (mkdir -p "$(dirname "$OUT")").
+  assert_ok "linear ensure ${kind} creates the cache root" test -d "${review_repo}/.ycc/artifacts"
+  assert_ok "linear ensure ${kind} leaves the parent to the skill" test ! -e "${review_path%/*}"
 done
 assert_eq 'linear ensure review kinds write one ignore rule' '.ycc/artifacts/' "$(cat "${review_repo}/.gitignore")"
 assert_ok 'local ensure review kinds leave plans dir absent' test ! -e "${path_repo}/custom plans"

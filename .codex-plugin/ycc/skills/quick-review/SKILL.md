@@ -102,13 +102,13 @@ Use the Local / Quick Mode Roster and Standard Findings Format from
 `review-checklist.md`; merge via its Merge Procedure into one list for Phase 3.
 The reviewer prompt states: flag only gaps that affect correctness or the
 stated requirements. Print the mode with
-`bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell`,
+`"../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell`,
 then set `SCRATCH_DIR` without `--ensure` or Linear calls. Local mode keeps it
-beside the would-be review file: `REVIEW_DIR="$(dirname "$(bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=review-quick-<TIMESTAMP> --slug=review)")"`
+beside the would-be review file: `REVIEW_DIR="$(dirname "$("../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=review-quick-<TIMESTAMP> --slug=review)")"`
 (`docs/prps/reviews`, unchanged) and
 `SCRATCH_DIR="$REVIEW_DIR/.review-scratch/quick-<TIMESTAMP>"`; `mkdir -p` it.
 Linear mode writes nothing in the repository before the gate and `--ensure`:
-`SCRATCH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ycc-quick-review.XXXXXX")"`.
+`SCRATCH_DIR="$(mktemp -d /tmp/ycc-quick-review.XXXXXX)"`.
 Scratch is never pushed and is
 always removed at the end of Phase 5, even on "Discard" and "Apply fixes" —
 the one ephemeral exception to the artifact-free guarantee.
@@ -223,7 +223,9 @@ Reply synonyms (case-insensitive):
 ## Phase 5 — HAND-OFF
 
 Branch on the user's selection (or auto-confirm flag). If `PARALLEL_MODE=true`
-(Path B was used), remove the `$SCRATCH_DIR` scratch directory (`rm -rf`)
+(Path B was used), remove the scratch directory with `rm -rf <SCRATCH_DIR>`,
+passing its literal absolute path (the allowed `rm` forms cover only
+`/tmp/ycc-quick-review.*` and `*/docs/prps/reviews/.review-scratch/quick-*`),
 before exiting — **regardless of which branch below is
 taken**, including "Discard" and "Apply fixes".
 
@@ -258,7 +260,7 @@ the canonical header block:
 1. Reuse the Path B/C `TIMESTAMP` if set; otherwise
    `TIMESTAMP=$(date +%Y%m%d-%H%M%S)`.
 2. Print the mode; read `ARTIFACT_STORE=` from stdout:
-   `bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell`
+   `"../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell`
 3. Slug: local mode uses `review` (validated only; the path ignores it).
    Linear mode applies the **Linear call gate** from
    `../../shared/references/artifact-store.md`, then
@@ -266,14 +268,15 @@ the canonical header block:
 4. Resolve and create the destination:
 
    ```bash
-   REVIEW_FILE="$(bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=review-quick-${TIMESTAMP} --slug=<slug>)"
+   REVIEW_FILE="$("../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=review-quick-${TIMESTAMP} --slug=<slug>)"
+   mkdir -p "$(dirname "$REVIEW_FILE")"
    ```
 
    Local mode: unchanged path `docs/prps/reviews/quick-${TIMESTAMP}-review.md`
    under the current checkout's toplevel, no identity frontmatter, no Linear
    calls. Linear mode: `.ycc/artifacts/<slug>/reviews/quick-${TIMESTAMP}-review.md`
-   (gitignored). When `--ensure` added the `.ycc/artifacts/` rule
-   (`git diff -- .gitignore` shows only that line), print
+   (gitignored). When the rule-only `.gitignore` check (artifact-store.md >
+   Reviews) holds, print
    `Note: .gitignore gained the .ycc/artifacts/ rule from the artifact store; leave it out of PR commits.`
 
    `DISPLAY_FILE` is the printed form: local mode
@@ -369,4 +372,5 @@ fix phase has its own execution decision.
 - `$code-review --quick` delegates to this skill.
 - `$quick-fix` consumes inline findings for artifact-free fixing.
 - `$review-fix` consumes written artifacts only.
-- `$prp-commit` or `$git-workflow --commit` can commit the fixes afterward.
+- Commit the fixes afterward by explicit path: `$prp-commit <fixed files>`,
+  never a stage-everything commit.

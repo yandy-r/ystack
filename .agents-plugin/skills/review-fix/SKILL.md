@@ -24,7 +24,6 @@ allowed-tools:
 - Bash(mktemp:*)
 - Bash(git:*)
 - Bash(gh:*)
-- Bash(bash:*)
 - Bash(npm:*)
 - Bash(pnpm:*)
 - Bash(yarn:*)
@@ -76,13 +75,15 @@ Strip these flags from `$ARGUMENTS` and set `PARALLEL_MODE`, `AGENT_TEAM_MODE`, 
 - `--team` in Cursor/Codex bundles: use `--parallel` instead.
 
 Input resolution — print the mode first:
-`bash "${HOME}/.agents/ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell`.
+`"${HOME}/.agents/ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell`.
 Apply the local-review rule below before anything else. Then, in linear mode,
 apply the **Linear call gate** from
 `~/.agents/ycc-shared/references/artifact-store.md` before any
 Linear call, write or `--ensure`; rules are in its Review and report skills > Review fixes.
 
-- Path ending `.md` → as-is. A path under `.ycc/artifacts/` or with a leading
+- Path ending `.md` → resolve a relative path against the current directory
+  first, then against `git rev-parse --show-toplevel` (printed review paths
+  are toplevel-relative). A path under `.ycc/artifacts/` or with a leading
   `linear:` frontmatter block is a linear review: set `STORE_FLAG=--store=linear`
   when empty (with `--store=local`, abort:
   `A Linear review requires linear mode; drop --store=local.`).
@@ -90,16 +91,22 @@ Linear call, write or `--ensure`; rules are in its Review and report skills > Re
   in local mode (unchanged `docs/prps/reviews/pr-<N>-review.md`, worktree then
   main repo). Linear mode: the cache `.ycc/artifacts/*/reviews/pr-N-review.md`
   in the current checkout, then the main checkout; if missing, run Lookup
-  scoped to this repository: search Documents titled `<slug> · pr-N-review`
-  only in the Projects of Lookup step 5 (`ARTIFACT_LINEAR_PROJECT`, else
-  Projects carrying `ARTIFACT_LINEAR_LABEL`); with neither configured, ask
-  for the Document (Lookup step 7) instead of searching the workspace. Load
-  the hit into `--ensure --kind=review-pr-N --slug=<slug>` (slug from the
+  scoped to this repository, stopping at the first hit:
+  1. The PR itself: `gh pr view N --json headRefName,body`; take the issue key
+     from `headRefName` (Branch hint rules), else a `Closes|Fixes|Resolves <KEY>`
+     line in the body; verify the issue in Linear and look among its Documents
+     for a title ending `· pr-N-review`.
+  2. Documents titled `<slug> · pr-N-review` in the Projects of Lookup step 5
+     (`ARTIFACT_LINEAR_PROJECT`, else Projects carrying `ARTIFACT_LINEAR_LABEL`).
+  3. Ask for the Document (Lookup step 7); never search the whole workspace.
+
+  Load the hit into `--ensure --kind=review-pr-N --slug=<slug>` (slug from the
   Document title prefix before `·`). `--dry-run` never writes: read a fetched
   body from a temporary file outside the repository instead. Before using a
   linear `pr-N` review, compare the head of its `**Branch**: <head> → <base>`
   header with `gh pr view N --json headRefName --jq .headRefName`; on a
   mismatch abort: `Error: review <path> is for branch <head>, not PR #N's <headRefName>.`
+
 - Blank → latest `*-review.md` by mtime in the mode's review location (local:
   `docs/prps/reviews/`; linear: `.ycc/artifacts/*/reviews/`), current checkout
   then main checkout (parent of `git rev-parse --path-format=absolute --git-common-dir`);
@@ -108,17 +115,21 @@ Linear call, write or `--ensure`; rules are in its Review and report skills > Re
 Existing local reviews keep local mode (artifact-store.md > Review fixes).
 When `STORE_FLAG` is empty and the printed `ARTIFACT_STORE_SOURCE=default`, set
 `STORE_FLAG=--store=local` (and forward it) when the input is a `.md` path that
-is not a linear review, digits `N` with an existing
-`docs/prps/reviews/pr-<N>-review.md` (current checkout, then main checkout), or
-blank input whose newest `*-review.md` across both review locations lies under
-`docs/prps/reviews/`. Print one line:
+is not a linear review, digits `N` whose `docs/prps/reviews/pr-<N>-review.md`
+exists (current checkout, then main checkout) and is newer by mtime than every
+linear cache `.ycc/artifacts/*/reviews/pr-<N>-review.md` in those checkouts (no
+cache counts as older), or blank input whose newest `*-review.md` across both
+review locations lies under `docs/prps/reviews/`. Print one line:
 `Using local review at <path>; pin with store: local in .plans-config`.
 When linear mode comes from `--store=linear` or a config, a `.md` path that is
 not a linear review aborts:
 `A local review requires local mode; use --store=local.`
 
-Record `REVIEW_FILE`, `REVIEW_ID` (basename minus `-review.md`, else minus
-`.md`), and in linear mode `REVIEW_SLUG` (the `.ycc/artifacts/<slug>/` component).
+Record `REVIEW_FILE`; `REVIEW_SELECTOR`, the input to re-run with (`N` for
+digits, else the resolved `.md` path; never a temporary copy); `REVIEW_ID`
+(basename minus `-review.md`, else minus `.md`; `pr-<N>` for a `--dry-run`
+temporary copy); and in linear mode `REVIEW_SLUG` (the `.ycc/artifacts/<slug>/`
+component; the Document title prefix for a temporary copy).
 Fix reports need a store review id (`pr-<N>`, `local-<YYYYMMDD-HHMMSS>`,
 `quick-<YYYYMMDD-HHMMSS>`). Any other `REVIEW_ID` keeps the pre-store report
 path in local mode (Phase 6); in linear mode abort here, before any write:
@@ -216,7 +227,7 @@ If `DRY_RUN=true` and `AGENT_TEAM_MODE=false`, stop here. Print a reminder:
 
 ```
 Dry run complete. To apply fixes, re-run without --dry-run:
-  /review-fix $REVIEW_FILE [--parallel | --team] [--severity <level>]
+  /review-fix ${STORE_FLAG} $REVIEW_SELECTOR [--parallel | --team] [--severity <level>]
 ```
 
 If `DRY_RUN=true` and `AGENT_TEAM_MODE=true`, defer the final exit to Phase 4 C.2 so the team name and per-batch teammate roster can be printed alongside the fix plan. Do NOT proceed to any team/task/agent tool calls.
@@ -254,10 +265,11 @@ One-time parent setup only when forced and not yet ensured.
 Status updates in place via `Edit` after each agent returns: Fixed on
 `STATUS: Fixed`, Failed on `STATUS: Failed`. Track per-batch todos. In Path B/C,
 between-batch validation failure stops and asks for the path-specific choices
-in fixer-dispatch.md. Path A continues; no stop-and-ask gate. Linear mode: after
-the last status edit (and before any stop), re-run Save for Document
-`<REVIEW_SLUG> · <REVIEW_ID>-review` per artifact-store.md (Conflict rules
-apply; offline sets `pending: true`).
+in fixer-dispatch.md. Path A continues; no stop-and-ask gate. Linear mode: when
+the review carries `linear.document` or `pending: true`, re-run Save for
+Document `<REVIEW_SLUG> · <REVIEW_ID>-review` per artifact-store.md after the
+last status edit (and before any stop); Conflict rules apply and offline sets
+`pending: true`. A review kept local only (neither key) is not re-saved.
 
 ## Phase 5 — VERIFY
 
@@ -274,7 +286,8 @@ Resolve the report with kind `review-fixes-<REVIEW_ID>`, starting from the
 active checkout root (`$PARENT_PATH` in worktree mode):
 
 ```bash
-FIX_REPORT="$(bash "${HOME}/.agents/ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=review-fixes-<REVIEW_ID> --slug=<slug> <checkout>)"
+FIX_REPORT="$("${HOME}/.agents/ycc-shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=review-fixes-<REVIEW_ID> --slug=<slug> <checkout>)"
+mkdir -p "$(dirname "$FIX_REPORT")"
 ```
 
 Slug: `review` in local mode (unchanged path
@@ -303,8 +316,8 @@ Report source path, report path, mode, eligible/fixed/failed/skipped/open
 counts, updated statuses, validation results, next steps
 (`/code-review <target>` re-review, then commit the fixed files by name:
 `/prp-commit <fixed files>`, never a stage-everything commit). Linear mode:
-when `git -C <checkout> diff -- .gitignore` shows only the added
-`.ycc/artifacts/` rule, print
+when the rule-only `.gitignore` check (artifact-store.md > Reviews) holds for
+`<checkout>`, print
 `Note: <checkout>/.gitignore gained the .ycc/artifacts/ rule from the artifact store; leave it out of PR commits.`
 
 Print under `### Goal Signals (machine-readable — printed verbatim for /goal)`,

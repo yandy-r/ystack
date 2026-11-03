@@ -194,7 +194,7 @@ fi
 
 #### Artifact Write
 
-Write the artifact to `$OUT`, resolved in SKILL.md "Review destination" with kind `review-pr-<N>` and the active checkout as start directory (`--ensure` already created its parent).
+Write the artifact to `$OUT`, resolved in SKILL.md "Review destination" with kind `review-pr-<N>` and the active checkout as start directory (its parent was created there with `mkdir -p "$(dirname "$OUT")"`).
 
 - **Local mode** — unchanged path `$(git rev-parse --show-toplevel)/docs/prps/reviews/pr-<N>-review.md`. When `WORKTREE_ACTIVE=true` this resolves to the worktree top-level (e.g., `<repo-root>/.cursor/worktrees/<repo>-pr-<N>/docs/prps/reviews/pr-<N>-review.md`); when `--no-worktree` is in effect, it resolves to the main repo. The artifact intentionally lives **with the PR branch** so it travels with the review history.
 - **Linear mode** — `<checkout>/.ycc/artifacts/<slug>/reviews/pr-<N>-review.md`, a gitignored cache that never reaches the PR branch. Follow `${CURSOR_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md` > Review and report skills > Reviews: Lookup/Load identity for Document `<slug> · pr-<N>-review` before writing, write the body, then Save before PUBLISH. Parent: the verified hint issue (or `linear.issue`), else the feature Project, else none (keep it local only). The GitHub review comment is unchanged.

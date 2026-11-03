@@ -74,7 +74,9 @@ timestamp per invocation, reused as the fan-out run-id) or `pr-<N>`.
    (Branch hint rules), else a `Closes|Fixes|Resolves <KEY>` in the PR body;
    verify it in Linear. With neither, skip rules 2-3 and sanitize
    `headRefName` for rule 4.
-3. `OUT="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=review-<review-id> --slug=<slug> <checkout>)"`
+3. `OUT="$(bash "${HOME}/.config/opencode/shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=review-<review-id> --slug=<slug> <checkout>)"`,
+   then `mkdir -p "$(dirname "$OUT")"` (linear `--ensure` creates only the
+   cache root).
 
 Local mode: unchanged path `<checkout>/docs/prps/reviews/<review-id>-review.md`,
 no identity frontmatter, no Linear calls. Linear mode:
@@ -84,10 +86,11 @@ skills > Reviews (Lookup/Load identity, then Save). Document
 `<slug> · <review-id>-review`; parent is the verified hint issue from step 2
 (or cached `linear.issue`), else the feature Project, else none: keep the
 review local only and print `Review kept local: no Linear issue or Project.`
-Fan-out scratch lives at `$(dirname "$OUT")/.review-scratch/<run-id>/` and is
-never pushed. Linear `--ensure` may add the `.ycc/artifacts/` rule to
-`<checkout>/.gitignore`; never commit that to a PR branch. When
-`git -C <checkout> diff -- .gitignore` shows only that rule, print
+Fan-out scratch lives at `$(dirname "$OUT")/.review-scratch/<run-id>/`
+(`mkdir -p` it) and is never pushed. Linear `--ensure` may add or create the
+`.ycc/artifacts/` rule in `<checkout>/.gitignore`; never commit that to a PR
+branch. When the rule-only `.gitignore` check (artifact-store.md > Reviews)
+holds for `<checkout>`, print
 `Note: <checkout>/.gitignore gained the .ycc/artifacts/ rule from the artifact store; leave it out of PR commits.`
 
 `DISPLAY_OUT` is the printed form of `$OUT`: in local mode the path relative

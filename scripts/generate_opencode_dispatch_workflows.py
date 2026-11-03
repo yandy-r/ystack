@@ -308,7 +308,7 @@ def _project_required_workflow_surfaces(text: str, source_path: str) -> str:
             r"Dry run complete\. To apply fixes, re-run without --dry-run:.*?```",
             (
                 "Dry run complete. To apply fixes, re-run without --dry-run:\n"
-                "  /review-fix $REVIEW_FILE [--parallel] [--severity <level>]\n```"
+                "  /review-fix ${STORE_FLAG} $REVIEW_SELECTOR [--parallel] [--severity <level>]\n```"
             ),
             output,
             count=1,

@@ -8,7 +8,7 @@
 
 ## Report location
 
-Write the fix report to `$FIX_REPORT`, resolved in SKILL.md Phase 6 with kind `review-fixes-<REVIEW_ID>` from the active checkout root (`--ensure` creates its parent).
+Write the fix report to `$FIX_REPORT`, resolved in SKILL.md Phase 6 with kind `review-fixes-<REVIEW_ID>` from the active checkout root (its parent created there with `mkdir -p "$(dirname "$FIX_REPORT")"`).
 
 - **Local mode** — unchanged: `$(git rev-parse --show-toplevel)/docs/prps/reviews/fixes/`. When in a worktree this resolves to the worktree top-level; otherwise to the main repo. A review whose id the resolver rejects (renamed or legacy name) keeps this path without the resolver: `<source-name>-fixes.md`.
 - **Linear mode** — `.ycc/artifacts/<slug>/reviews/<REVIEW_ID>-fixes.md` (gitignored), saved per `${CLAUDE_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md` > Review and report skills > Review fixes as Document `<slug> · <REVIEW_ID>-fixes`, parented like the review Document (none → local only).
