@@ -265,6 +265,16 @@ rel_tmp_repo="${SCRATCH}/rel-tmp"; make_linear_repo "$rel_tmp_repo"; mkdir -p "$
 assert_ok 'relative TMPDIR still probes' run "${rel_tmp_repo}/sub" env TMPDIR=tmp "$BASH_BIN" -c 'source "$1"; ensure_artifact_gitignore' _ "$HELPER"
 assert_eq 'relative TMPDIR appends rule' '.ycc/artifacts/' "$(cat "${rel_tmp_repo}/.gitignore")"
 assert_eq 'relative TMPDIR scratch cleaned' '' "$(find "${rel_tmp_repo}/sub/tmp" -mindepth 1 -print)"
+probe_fail_repo="${SCRATCH}/probe-fail"; make_linear_repo "$probe_fail_repo"
+assert_bad 'missing TMPDIR refuses' run "$probe_fail_repo" env TMPDIR="${SCRATCH}/missing-tmp" "$BASH_BIN" -c 'source "$1"; ensure_artifact_gitignore' _ "$HELPER"
+assert_ok 'missing TMPDIR names probe failure' grep -q 'Cannot check .ycc/artifacts/ ignore coverage' "${SCRATCH}/err"
+assert_ok 'missing TMPDIR writes no ignore' test ! -e "${probe_fail_repo}/.gitignore"
+fold_repo="${SCRATCH}/ignorecase"; make_linear_repo "$fold_repo"
+git -C "$fold_repo" config core.ignorecase true
+printf '.YCC/ARTIFACTS/\n' >"${fold_repo}/.gitignore"
+cp "${fold_repo}/.gitignore" "${SCRATCH}/before"
+assert_ok 'case-folding repo rule counts' run "$fold_repo" ensure_artifact_gitignore
+assert_ok 'case-folding repo rule not duplicated' cmp -s "${SCRATCH}/before" "${fold_repo}/.gitignore"
 rm "${GIT_CONFIG_GLOBAL}.excludes"
 info_ignore_repo="${SCRATCH}/info-ignore"; make_linear_repo "$info_ignore_repo"
 printf '.ycc/\n' >"${info_ignore_repo}/.git/info/exclude"

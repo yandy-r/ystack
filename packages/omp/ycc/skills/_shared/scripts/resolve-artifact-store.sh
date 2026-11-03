@@ -279,8 +279,9 @@ _artifact_probe_ignores() {
   [[ "$status" -le 1 ]]
 }
 
-# Read-only coverage check: 0 means present, 1 means append, 2 means a negated
-# rule makes it unsafe, 3 means the ignore probe itself failed.
+# Coverage check (never edits the repository; uses TMPDIR scratch): 0 means
+# present, 1 means append, 2 means a negated rule makes it unsafe, 3 means the
+# ignore probe itself failed.
 _artifact_gitignore_present() {
   local file="${ARTIFACT_ROOT}/.gitignore" ignore_source ignore_pattern git_root count scratch made
   git_root=$(git -C "$ARTIFACT_ROOT" rev-parse --show-toplevel) || return 1
