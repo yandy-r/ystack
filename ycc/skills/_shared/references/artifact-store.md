@@ -479,10 +479,12 @@ In linear mode, both `ensure_*` functions refuse when `ARTIFACT_ROOT` is outside
 
 The linear gitignore check returns without editing when either condition holds:
 
-- `git check-ignore -v --no-index`, consulting only this repository's `.gitignore` files, ignores `.ycc/artifacts/probe`, `.ycc/artifacts/probe-dir/probe`, and `.ycc/artifacts/feat/cache`.
-- `${ARTIFACT_ROOT}/.gitignore` already contains `.ycc/artifacts/`, `/.ycc/artifacts/`, `.ycc/artifacts`, or `/.ycc/artifacts`.
+- `${ARTIFACT_ROOT}/.gitignore` contains `.ycc/artifacts/`, `/.ycc/artifacts/`, `.ycc/artifacts`, or `/.ycc/artifacts` on a line after every relevant `!` line in that file. Git cannot re-include files under an excluded directory, so this line covers the cache.
+- `git check-ignore -v --no-index`, consulting only this repository's `.gitignore` files, ignores `.ycc/artifacts/probe`, `.ycc/artifacts/probe-dir/probe`, and `.ycc/artifacts/feat/cache`, and no repository `.gitignore` from the Git root down to `ARTIFACT_ROOT`, in the working tree or the index, has a relevant `!` line.
 
-Matches from a global `core.excludesFile` or `.git/info/exclude` do not count because they are not portable; the repository rule is still appended. A negated (`!`) rule that re-includes one of those probe paths, from any source, refuses rather than being overridden. Directory-level exceptions such as `!.ycc/artifacts/feat/` are not reported by Git and are overridden by the appended rule. A `!` line in any `.gitignore` under `.ycc/`, in the working tree or the index (after an optional UTF-8 BOM), also refuses: `check-ignore` cannot attribute it, and the deeper file overrides the root rule.
+A `!` line is relevant when it may re-include `.ycc/artifacts/**` paths the probes miss, such as `!.ycc/artifacts/my-feature/` or `!.ycc/artifacts/`. Unanchored negations (no `/` except a trailing one) and patterns containing `\` or `(` count as relevant. Otherwise segments are compared from the left: a segment with `**` makes the line relevant once every earlier segment has matched, and anchored negations whose leading segments cannot match the path from that file's directory to `.ycc/artifacts`, such as `!.vscode/settings.json`, are ignored. A relevant line makes probe coverage not count, so the rule is appended after it; the next check then finds the exact line last.
+
+Matches from a global `core.excludesFile` or `.git/info/exclude` do not count because they are not portable; the repository rule is still appended. A negated (`!`) rule that re-includes one of those probe paths, from any source, refuses rather than being overridden. A `!` line in any `.gitignore` under `.ycc/`, in the working tree or the index (after an optional UTF-8 BOM), also refuses: `check-ignore` cannot attribute it, and the deeper file overrides the root rule.
 
 Otherwise append `.ycc/artifacts/`, creating `.gitignore` if needed and adding a missing trailing newline before the entry. Skills call `--ensure` after the Linear gate and before the first cache write or pull; `artifact-store-pointer.sh` (run by `ycc:init --artifact-store=linear`) applies the same rule when it writes the committed pointer.
 

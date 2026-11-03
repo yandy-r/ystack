@@ -337,11 +337,88 @@ _artifact_ycc_negation() {
   return 0
 }
 
+# 0 when the negated pattern PAT (without `!`) may re-include REL, the path
+# from its .gitignore directory to .ycc/artifacts. Unanchored patterns, `\` or
+# `(` (Bash and Git globs differ there), and `**` once earlier segments match
+# all count; an anchored pattern counts unless a leading segment cannot match.
+_artifact_negation_relevant() {
+  local LC_ALL=C pat="${1%/}" rel="$2" pseg rseg
+  [[ "$pat" == */* ]] || return 0
+  [[ "$pat" != *[\\\(]* ]] || return 0
+  pat=${pat#/}
+  while [[ -n "$pat" && -n "$rel" ]]; do
+    pseg=${pat%%/*} rseg=${rel%%/*}
+    [[ "$pseg" != *'**'* ]] || return 0
+    # shellcheck disable=SC2053 # The gitignore segment is a glob.
+    [[ "$rseg" == $pseg ]] || return 1
+    if [[ "$pat" == */* ]]; then pat=${pat#*/}; else pat=''; fi
+    if [[ "$rel" == */* ]]; then rel=${rel#*/}; else rel=''; fi
+  done
+  return 0
+}
+
+# Print the number of FILE's last `!` line relevant to REL (0 if none); fails
+# when unreadable. A BOM is accepted on any line, as in _artifact_has_negation.
+# FOLD=true matches case-insensitively; call only in a subshell.
+_artifact_last_negation() {
+  local file="$1" rel="$2" fold="${3:-false}" line n=0 last=0
+  [[ -r "$file" ]] || return 1
+  [[ "$fold" != true ]] || shopt -s nocasematch
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    n=$((n + 1))
+    line=${line#$'\xef\xbb\xbf'}
+    [[ "$line" == '!'* ]] || continue
+    line=${line%$'\r'}
+    while [[ "$line" == *' ' && "$line" != *'\ ' ]]; do line=${line% }; done
+    if _artifact_negation_relevant "${line#!}" "$rel"; then last=$n; fi
+  done <"$file" || return 1
+  printf '%s\n' "$last"
+}
+
+# Scan repository .gitignore files from GIT_ROOT down to ARTIFACT_ROOT, in the
+# working tree (regular files only; Git skips symlinks) and the index, for `!`
+# lines that may re-include .ycc/artifacts. Prints the last such line number in
+# the working-tree ${ARTIFACT_ROOT}/.gitignore (0 if none). Returns 0 when any
+# file has one, 1 when none, 3 on failure. OUT is a scratch path prefix.
+_artifact_chain_negation() {
+  local out="$1" git_root="$2" phys_root dir sub path entry mode hash last fold found=1 root_last=0
+  local -a paths=()
+  phys_root=$(CDPATH='' cd -- "$ARTIFACT_ROOT" >/dev/null 2>&1 && pwd -P) || return 3
+  fold=$(git -C "$ARTIFACT_ROOT" config --type=bool core.ignorecase 2>/dev/null) || fold=false
+  dir="$phys_root"
+  while :; do
+    sub=${dir#"$git_root"}; sub=${sub#/}
+    paths+=("${sub:+$sub/}.gitignore")
+    [[ "$dir" != "$git_root" ]] || break
+    [[ "$dir" == "$git_root"/* ]] || return 3
+    dir=$(dirname "$dir")
+  done
+  sub=${phys_root#"$git_root"}; sub=${sub#/}; sub=${sub:+$sub/}
+  for path in "${paths[@]}"; do
+    [[ -f "${git_root}/${path}" && ! -L "${git_root}/${path}" ]] || continue
+    last=$(_artifact_last_negation "${git_root}/${path}" "${sub#"${path%.gitignore}"}.ycc/artifacts" "$fold") || return 3
+    [[ "$last" == 0 ]] || found=0
+    [[ "$path" != "${sub}.gitignore" ]] || root_last=$last
+  done
+  git --literal-pathspecs -C "$git_root" ls-files -s -z -- "${paths[@]}" >"${out}.index" 2>/dev/null || return 3
+  # Entries are "<mode> <hash> <stage>\t<path>"; symlinks are never read.
+  while IFS= read -r -d '' entry; do
+    path=${entry#*$'\t'}
+    read -r mode hash _ <<<"${entry%%$'\t'*}"
+    [[ "$mode" == 100644 || "$mode" == 100755 ]] || continue
+    git -C "$git_root" cat-file blob "$hash" >"${out}.blob" 2>/dev/null || return 3
+    last=$(_artifact_last_negation "${out}.blob" "${sub#"${path%.gitignore}"}.ycc/artifacts" "$fold") || return 3
+    [[ "$last" == 0 ]] || found=0
+  done <"${out}.index"
+  printf '%s\n' "$root_last"
+  return "$found"
+}
+
 # Coverage check (never edits the repository; uses TMPDIR scratch): 0 means
 # present, 1 means append, 2 means a negated rule makes it unsafe, 3 means the
-# ignore probe or the .ycc .gitignore scan failed.
+# ignore probe or a .gitignore scan failed.
 _artifact_gitignore_present() {
-  local file="${ARTIFACT_ROOT}/.gitignore" ignore_source ignore_pattern git_root count scratch made status=0
+  local file="${ARTIFACT_ROOT}/.gitignore" ignore_source ignore_pattern git_root count scratch made status=0 root_neg short=0
   git_root=$(git -C "$ARTIFACT_ROOT" rev-parse --show-toplevel) || return 1
   made=$(mktemp -d "${TMPDIR:-/tmp}/ycc-ignore.XXXXXX") || return 3
   # Git resolves --git-dir after -C, so the scratch path must be absolute.
@@ -375,11 +452,21 @@ _artifact_gitignore_present() {
     [[ "$ignore_source" == "$git_root/"* && "${ignore_source##*/}" == .gitignore ]] || continue
     count=$((count + 1))
   done <"${scratch}/repo"
+  # check-ignore misses rules that re-include paths beyond the probes, so a
+  # relevant `!` line from the Git root down voids probe coverage. The exact
+  # rule still counts when it follows every relevant `!` line in its own file:
+  # that directory rule excludes the cache, and Git cannot re-include files
+  # under an excluded directory.
+  status=0
+  root_neg=$(_artifact_chain_negation "${scratch}/chain" "$git_root") || status=$?
   rm -rf "$scratch"
-  [[ "$count" == 3 ]] && return 0
-  if [[ -f "$file" ]] && grep -qxE '/?\.ycc/artifacts/?' "$file"; then
-    return 0
+  [[ "$status" -le 1 ]] || return 3
+  if [[ -f "$file" ]]; then
+    short=$(grep -anxE '/?\.ycc/artifacts/?' "$file") || short=''
+    short=${short##*$'\n'}; short=${short%%:*}
   fi
+  [[ "${short:-0}" -gt "$root_neg" ]] && return 0
+  [[ "$status" == 1 && "$count" == 3 ]] && return 0
   return 1
 }
 
@@ -392,7 +479,7 @@ ensure_artifact_gitignore() {
   case "$status" in
     0) return 0 ;;
     2) _error 'A negated (!) ignore rule re-includes .ycc/artifacts/ paths; refusing to override it'; return 1 ;;
-    3) _error 'Cannot check .ycc/artifacts/ ignore coverage (git check-ignore, .ycc .gitignore scan, or TMPDIR scratch failed)'; return 1 ;;
+    3) _error 'Cannot check .ycc/artifacts/ ignore coverage (git check-ignore, .gitignore scan, or TMPDIR scratch failed)'; return 1 ;;
   esac
   if [[ -s "$file" ]]; then
     # Command substitution strips a final newline, leaving an empty last byte.

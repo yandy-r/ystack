@@ -200,6 +200,52 @@ printf '.ycc/artifacts/*\n!.ycc/artifacts/feat/\n' >"${negation_repo}/.gitignore
 run "$negation_repo" ensure_artifact_gitignore
 assert_eq 'negated exception gets repo coverage line' $'.ycc/artifacts/*\n!.ycc/artifacts/feat/\n.ycc/artifacts/' "$(cat "${negation_repo}/.gitignore")"
 assert_ok 'nested probe ignored after append' git -C "$negation_repo" check-ignore -q -- .ycc/artifacts/feat/cache
+# Probe coverage cannot count while a repository ! rule re-includes cache
+# paths the probes miss, in any .gitignore from the Git root (YAN-1810).
+for variant in exception reinclude escaped subdir index-only; do
+  reinc_repo="${SCRATCH}/ignore-reinclude-${variant}"; make_linear_repo "$reinc_repo"
+  reinc_root="$reinc_repo"
+  case "$variant" in
+    exception)
+      printf '.ycc/artifacts/*\n!.ycc/artifacts/my-feature/\n' >"${reinc_repo}/.gitignore"
+      expected=$'.ycc/artifacts/*\n!.ycc/artifacts/my-feature/\n.ycc/artifacts/'
+      ;;
+    reinclude)
+      printf '.ycc/artifacts/\n!.ycc/artifacts/\n' >"${reinc_repo}/.gitignore"
+      expected=$'.ycc/artifacts/\n!.ycc/artifacts/\n.ycc/artifacts/'
+      ;;
+    escaped)
+      printf '%s\n' '.ycc/artifacts/*' '!.ycc\/artifacts/my-feature/' >"${reinc_repo}/.gitignore"
+      expected=$'.ycc/artifacts/*\n!.ycc\\/artifacts/my-feature/\n.ycc/artifacts/'
+      ;;
+    subdir)
+      reinc_root="${reinc_repo}/packages/app"; mkdir -p "$reinc_root"
+      printf 'scope: local\nstore: linear\n' >"${reinc_root}/.plans-config"
+      printf '**/.ycc/artifacts/*\n!packages/app/.ycc/artifacts/my-feature/\n' >"${reinc_repo}/.gitignore"
+      expected='.ycc/artifacts/'
+      ;;
+    index-only)
+      printf '.ycc/artifacts/*\n!.ycc/artifacts/my-feature/\n' >"${reinc_repo}/.gitignore"
+      git -C "$reinc_repo" add .gitignore
+      git -C "$reinc_repo" commit -q -m negation
+      printf '.ycc/artifacts/*\n' >"${reinc_repo}/.gitignore"
+      expected=$'.ycc/artifacts/*\n.ycc/artifacts/'
+      ;;
+  esac
+  assert_eq "re-include ${variant}: CLI ensure returns path" "${reinc_root}/.ycc/artifacts/my-feature/shared.md" "$("$BASH_BIN" "$HELPER" --store=linear --ensure --kind=shared --slug=my-feature "$reinc_root")"
+  assert_eq "re-include ${variant}: rule appended" "$expected" "$(cat "${reinc_root}/.gitignore")"
+  mkdir -p "${reinc_root}/.ycc/artifacts/my-feature"; : >"${reinc_root}/.ycc/artifacts/my-feature/shared.md"
+  assert_ok "re-include ${variant}: cache file ignored" git -C "$reinc_root" check-ignore -q -- .ycc/artifacts/my-feature/shared.md
+  assert_eq "re-include ${variant}: cache file not untracked" '' "$(git -C "$reinc_root" status --porcelain -uall -- .ycc)"
+  cp "${reinc_root}/.gitignore" "${SCRATCH}/before"
+  assert_ok "re-include ${variant}: rerun succeeds" run "$reinc_root" ensure_artifact_gitignore
+  assert_ok "re-include ${variant}: rerun is idempotent" cmp -s "${SCRATCH}/before" "${reinc_root}/.gitignore"
+done
+unrelated_repo="${SCRATCH}/ignore-unrelated-negation"; make_linear_repo "$unrelated_repo"
+printf '.ycc/artifacts/\n!.vscode/settings.json\n' >"${unrelated_repo}/.gitignore"
+cp "${unrelated_repo}/.gitignore" "${SCRATCH}/before"
+assert_ok 'unrelated anchored negation keeps coverage' run "$unrelated_repo" ensure_artifact_gitignore
+assert_ok 'unrelated anchored negation bytes unchanged' cmp -s "${SCRATCH}/before" "${unrelated_repo}/.gitignore"
 
 sub_repo="${SCRATCH}/subdir-ignore"; make_repo "$sub_repo"
 sub_root="${sub_repo}/packages/app"; mkdir -p "$sub_root"
