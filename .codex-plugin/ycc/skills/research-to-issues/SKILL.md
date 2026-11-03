@@ -13,13 +13,13 @@ Convert planning and research output into structured GitHub issues with tracking
 
 ## Supported Source Types
 
-| Source Type   | Produced By                              | Input Path Pattern                  |
-| ------------- | ---------------------------------------- | ----------------------------------- |
-| deep-research | `deep-research`                      | Directory with `RESEARCH-REPORT.md` |
-| feature-spec  | `feature-research`                   | `docs/plans/*/feature-spec.md`      |
-| parallel-plan | `parallel-plan`, `plan-workflow` | `docs/plans/*/parallel-plan.md`     |
-| prp-plan      | `prp-plan`                           | `docs/prps/plans/*.plan.md`         |
-| prd           | `prp-prd`                            | `docs/prps/prds/*.prd.md`           |
+| Source Type   | Produced By                              | Input Path Pattern (local mode)     | Linear cache (linear mode)                       |
+| ------------- | ---------------------------------------- | ----------------------------------- | ------------------------------------------------ |
+| deep-research | `deep-research`                      | Directory with `RESEARCH-REPORT.md` | Directory with `RESEARCH-REPORT.md` (`--source`) |
+| feature-spec  | `feature-research`                   | `docs/plans/*/feature-spec.md`      | `.ycc/artifacts/<slug>/feature-spec.md`          |
+| parallel-plan | `parallel-plan`, `plan-workflow` | `docs/plans/*/parallel-plan.md`     | `.ycc/artifacts/<slug>/parallel-plan.md`         |
+| prp-plan      | `prp-plan`                           | `docs/prps/plans/*.plan.md`         | `.ycc/artifacts/<slug>/prp-plan.md`              |
+| prd           | `prp-prd`                            | `docs/prps/prds/*.prd.md`           | `.ycc/artifacts/<slug>/prd.md`                   |
 
 ## Current Task
 
@@ -28,7 +28,9 @@ Convert planning and research output into structured GitHub issues with tracking
 Parse arguments:
 
 - **--source PATH**: Path to source file or directory (aliases: `--research-dir`)
-- **--type TYPE**: Explicit source type (`deep-research`, `feature-spec`, `parallel-plan`, `prp-plan`). Auto-detected if omitted.
+- **feature-name** or **Linear reference** (positional, optional): resolved through the artifact store in Step 1
+- **--type TYPE**: Explicit source type (`deep-research`, `feature-spec`, `parallel-plan`, `prp-plan`, `prd`). Auto-detected if omitted.
+- **--store=local|linear**: Artifact-store override; strip it into `STORE_FLAG` (empty when absent) and forward it to every resolver call
 - **--dry-run**: Preview all issues that would be created without creating them
 - **--skip-anti-scope**: Skip creating issues for anti-scope/deferred items
 - **--skip-gaps**: Skip creating issues for research gaps
@@ -76,11 +78,26 @@ Check if GitHub MCP tools are available by looking for tools matching `mcp__gith
 
 ### Step 1: Identify Source
 
-Determine the source path:
+Determine the source path through the artifact store (`../../shared/references/artifact-store.md` > Review and report skills > Research to issues). First print the mode and read `ARTIFACT_STORE=` from stdout:
 
-1. If `--source PATH` or `--research-dir PATH` is specified, use that path
-2. Otherwise, search for common locations: `docs/plans/`, `docs/prps/plans/`, `docs/prps/prds/`, `docs/research/`, `research/`
-3. If not found, ask the user to specify the path
+```bash
+bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell
+```
+
+1. `--source PATH` or `--research-dir PATH` → use that path. A path under `.ycc/artifacts/` or with a leading `linear:` frontmatter block is a linear source; any other path keeps local behavior.
+2. A Linear reference (issue key, `linear.app` issue/Project/Document URL, as defined in artifact-store.md > Implementation skills > Inputs) selects linear mode (`STORE_FLAG=--store=linear` when empty; with `--store=local`, abort with `A Linear plan reference requires linear mode; drop --store=local.`). Apply the **Linear call gate**, then follow Implementation skills > Resolve and hydrate steps 2-3: Lookup the source kind (`--type`, else `parallel-plan`, then `prp-plan`, `feature-spec`, `prd`), map the hit to a slug, and Load it into `--ensure --kind=<kind> --slug=<slug>`. Use that absolute cache path. `--dry-run` writes nothing: reuse an existing cache read-only, or read the fetched body from a temporary file outside the repository.
+3. A feature name → resolve each candidate kind without `--ensure`, in the same order as item 2 (`--type` first when given, else `parallel-plan`, `prp-plan`, `feature-spec`, `prd`), and use the first existing file, so a plan with a `tasks` map wins over its feature spec:
+
+   ```bash
+   bash "../../shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --kind=<parallel-plan|prp-plan|feature-spec|prd> --slug=<feature-name>
+   ```
+
+   Under `ARTIFACT_STORE_SOURCE=default`, an existing local `docs/plans/<feature-name>/` (or `docs/prps/` file) keeps local mode, as in Implementation skills > Inputs. In linear mode, a missing cache runs Lookup/Load as in item 2 (gate first); never report "not found" without querying Linear.
+
+4. Otherwise, local mode searches the common locations: `docs/plans/`, `docs/prps/plans/`, `docs/prps/prds/`, `docs/research/`, `research/`. Linear mode searches `.ycc/artifacts/*/` in the current checkout, then the main checkout, then runs Lookup.
+5. If not found, ask the user to specify the path
+
+Local mode keeps today's discovery, output, and Linear-free behavior unchanged. Retain the source's leading frontmatter `linear.issue` and `tasks` map (linear sources only) for Step 6.
 
 ### Step 2: Run Validation
 
@@ -137,6 +154,8 @@ Construct a complete plan:
 - **For each tracking unit** -> 1 tracking issue with checkbox list of child items
 - **For each child item** -> 1 child issue with full agentic context
 - **For each extra item** -> 1 child issue grouped under appropriate tracker
+
+**Linear task links (linear-sourced plans only).** Linear task issues are created by the planning skill's Save, never here: this skill creates GitHub/Forgejo issues only and makes no Linear writes. When the plan frontmatter has a `tasks` map, add `Refs <KEY>` (that task's `tasks.<id>.issue`, keyed by the literal task heading id) to each child issue whose task id is mapped, and add `Refs <linear.issue>` to every tracking issue when `linear.issue` is set. Unmapped tasks get no Linear line. Local-mode sources never get these lines.
 
 ### Step 7: Compute Labels
 
@@ -198,7 +217,7 @@ Same process as Step 11 for anti-scope items, research gaps, and decision items 
 
 ### Step 13: Create Tracking Issues
 
-Compose tracking issue bodies using `templates/tracking-issue.md`. Populate checkbox lists with links to child issue numbers (e.g., `- [ ] #42 Set up data models`).
+Compose tracking issue bodies using `templates/tracking-issue.md`. Populate checkbox lists with links to child issue numbers (e.g., `- [ ] #42 Set up data models`). Include the `Refs <linear.issue>` line from Step 6 when present.
 
 **MCP (preferred):** `mcp__github__create_issue` with title `"Phase {N}: {title}"` or `"Batch {N}: {title}"`, body, labels.
 
@@ -255,7 +274,7 @@ EOF
 - **Labels are created with --force** -- safe to run multiple times
 - **Issue order matters** -- create child issues before tracking issues (need issue numbers)
 - **MCP-first** -- GitHub operations prefer MCP tools with automatic `gh` CLI fallback
-- **No implementation** -- this skill creates issues only. It does not write code or create plans.
+- **No implementation** -- this skill creates issues only. It does not write code or create plans, and never creates Linear issues (planning Save owns Linear task issues).
 - **Templates are guides** -- adapt fields to whatever is actually present in the source
 - **Agentic-friendly** -- every child issue includes mandatory reading, scope, implementation guidance, and validation criteria to support autonomous engineering workflows
 

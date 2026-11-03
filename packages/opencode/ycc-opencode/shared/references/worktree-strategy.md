@@ -61,16 +61,20 @@ honor its annotations when present. When the plan has no annotations, the
 fallback is now **on** (was off). `--no-worktree` overrides both the plan
 annotations and the default.
 
-**Artifact location for `code-review`** — In PR mode the review artifact is
-written _into the active worktree_ at
-`<worktree>/docs/prps/reviews/pr-<N>-review.md`, then committed and pushed to
-the PR's head branch. See the `code-review` skill (`SKILL.md`) for
-the full lifecycle (draft→ready promotion, artifact commit+push, post-review
-worktree removal, opt-outs `--keep-draft` and `--keep-worktree`).
+**Artifact location for `code-review`** — In PR mode, local store mode writes
+the review artifact _into the active worktree_ at
+`<worktree>/docs/prps/reviews/pr-<N>-review.md`, then commits and pushes it to
+the PR's head branch. Linear store mode writes the gitignored cache
+`<worktree>/.ycc/artifacts/<slug>/reviews/pr-<N>-review.md`, saves it as a
+Linear Document, and never commits it. See the `code-review` skill
+(`SKILL.md`) for the full lifecycle (draft→ready promotion, artifact
+commit+push, post-review worktree removal, opt-outs `--keep-draft` and
+`--keep-worktree`).
 
 `review-fix` follows: it discovers the artifact in the active worktree's
-`docs/prps/reviews/` first, then falls back to the main repo for in-flight
-artifacts written under the previous contract.
+review location (`docs/prps/reviews/` or `.ycc/artifacts/*/reviews/`) first,
+then falls back to the main repo for in-flight artifacts written under the
+previous contract.
 
 ---
 

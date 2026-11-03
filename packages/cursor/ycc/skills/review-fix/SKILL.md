@@ -1,7 +1,7 @@
 ---
 name: review-fix
 description: 'Applies saved code-review findings and updates artifact status. Use when fixing a review file, applying severity-filtered findings, or tracking review fixes as Fixed or Failed.'
-argument-hint: '[--parallel | --team] [--severity <level>] [--no-worktree] [--dry-run] <path/to/review.md | pr-number | blank>'
+argument-hint: '[--parallel | --team] [--severity <level>] [--no-worktree] [--dry-run] [--store=local|linear] <path/to/review.md | pr-number | blank>'
 allowed-tools:
   - Read
   - Grep
@@ -20,7 +20,9 @@ allowed-tools:
   - Bash(test:*)
   - Bash(find:*)
   - Bash(mkdir:*)
+  - Bash(mktemp:*)
   - Bash(git:*)
+  - Bash(gh:*)
   - Bash(npm:*)
   - Bash(pnpm:*)
   - Bash(yarn:*)
@@ -32,6 +34,7 @@ allowed-tools:
   - Bash(python:*)
   - Bash(python3:*)
   - Bash(make:*)
+  - 'Bash(${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/*.sh:*)'
 ---
 
 # Review Fix
@@ -56,8 +59,9 @@ Extract flags from `$ARGUMENTS` before treating the remainder as the input:
 | `--dry-run`          | Print the fix plan and stop. No dispatch, no file changes. With `--team` also print team name and per-batch roster (no tool calls) |
 | `--worktree`         | Legacy no-op; worktree mode is default (auto-detect from artifact)                                                                 |
 | `--no-worktree`      | Apply fixes directly in current working tree                                                                                       |
+| `--store=<mode>`     | Artifact store override, `local` or `linear`                                                                                       |
 
-Strip these flags from `$ARGUMENTS` and set `PARALLEL_MODE`, `AGENT_TEAM_MODE`, `MIN_SEVERITY`, `DRY_RUN`, and `WORKTREE_MODE=true` unless `--no-worktree` is present. The remaining text is the input selector.
+Strip these flags from `$ARGUMENTS` and set `PARALLEL_MODE`, `AGENT_TEAM_MODE`, `MIN_SEVERITY`, `DRY_RUN`, and `WORKTREE_MODE=true` unless `--no-worktree` is present. Keep `--store=local|linear` verbatim as `STORE_FLAG` (empty when absent) and forward it to every resolver call. The remaining text is the input selector.
 
 **Questions:** class `failure-recovery` (Path B/C between-batch failure): headless (no question tool or chat turn), stop, preserve completed fixes, and print the failing batch plus the resume command; class `clarify` (blank input): headless, print the resolved artifact path and stop. See `${CURSOR_PLUGIN_ROOT}/skills/_shared/references/question-policy.md`.
 
@@ -69,10 +73,66 @@ Strip these flags from `$ARGUMENTS` and set `PARALLEL_MODE`, `AGENT_TEAM_MODE`, 
   `--team requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1. Use --parallel instead, or set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 in your Claude Code settings if you intentionally want agent-team dispatch.`
 - `--team` in Cursor/Codex bundles: use `--parallel` instead.
 
-Input resolution — artifact lives on the PR branch in the worktree's
-`docs/prps/reviews/`; fall back to main repo's. Path ending `.md` → as-is;
-digits → `docs/prps/reviews/pr-<N>-review.md`; blank → latest by mtime in
-current worktree, then main repo; prompt user to confirm.
+Input resolution — print the mode first:
+`"${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --shell`.
+Apply the local-review rule below before anything else. Then, in linear mode,
+apply the **Linear call gate** from
+`${CURSOR_PLUGIN_ROOT}/skills/_shared/references/artifact-store.md` before any
+Linear call, write or `--ensure`; rules are in its Review and report skills > Review fixes.
+
+- Path ending `.md` → resolve a relative path against the current directory
+  first, then against `git rev-parse --show-toplevel` (printed review paths
+  are toplevel-relative). A path under `.ycc/artifacts/` or with a leading
+  `linear:` frontmatter block is a linear review: set `STORE_FLAG=--store=linear`
+  when empty (with `--store=local`, abort:
+  `A Linear review requires linear mode; drop --store=local.`).
+- Digits `N` → resolve kind `review-pr-N` (no `--ensure`) with slug `review`
+  in local mode (unchanged `docs/prps/reviews/pr-<N>-review.md`, worktree then
+  main repo). Linear mode: the cache `.ycc/artifacts/*/reviews/pr-N-review.md`
+  in the current checkout, then the main checkout; if missing, run Lookup
+  scoped to this repository, stopping at the first hit:
+  1. The PR itself: `gh pr view N --json headRefName,body`; take the issue key
+     from `headRefName` (Branch hint rules), else a `Closes|Fixes|Resolves <KEY>`
+     line in the body; verify the issue in Linear and look among its Documents
+     for a title ending `· pr-N-review`.
+  2. Documents titled `<slug> · pr-N-review` in the Projects of Lookup step 5
+     (`ARTIFACT_LINEAR_PROJECT`, else Projects carrying `ARTIFACT_LINEAR_LABEL`).
+  3. Ask for the Document (Lookup step 7); never search the whole workspace.
+
+  Load the hit into `--ensure --kind=review-pr-N --slug=<slug>` (slug from the
+  Document title prefix before `·`). `--dry-run` never writes: read a fetched
+  body from a temporary file outside the repository instead. Before using a
+  linear `pr-N` review, compare the head of its `**Branch**: <head> → <base>`
+  header with `gh pr view N --json headRefName --jq .headRefName`; on a
+  mismatch abort: `Error: review <path> is for branch <head>, not PR #N's <headRefName>.`
+
+- Blank → latest `*-review.md` by mtime in the mode's review location (local:
+  `docs/prps/reviews/`; linear: `.ycc/artifacts/*/reviews/`), current checkout
+  then main checkout (parent of `git rev-parse --path-format=absolute --git-common-dir`);
+  prompt user to confirm.
+
+Existing local reviews keep local mode (artifact-store.md > Review fixes).
+When `STORE_FLAG` is empty and the printed `ARTIFACT_STORE_SOURCE=default`, set
+`STORE_FLAG=--store=local` (and forward it) when the input is a `.md` path that
+is not a linear review, digits `N` whose `docs/prps/reviews/pr-<N>-review.md`
+exists (current checkout, then main checkout) and is newer by mtime than every
+linear cache `.ycc/artifacts/*/reviews/pr-<N>-review.md` in those checkouts (no
+cache counts as older), or blank input whose newest `*-review.md` across both
+review locations lies under `docs/prps/reviews/`. Print one line:
+`Using local review at <path>; pin with store: local in .plans-config`.
+When linear mode comes from `--store=linear` or a config, a `.md` path that is
+not a linear review aborts:
+`A local review requires local mode; use --store=local.`
+
+Record `REVIEW_FILE`; `REVIEW_SELECTOR`, the input to re-run with (`N` for
+digits, else the resolved `.md` path; never a temporary copy); `REVIEW_ID`
+(basename minus `-review.md`, else minus `.md`; `pr-<N>` for a `--dry-run`
+temporary copy); and in linear mode `REVIEW_SLUG` (the `.ycc/artifacts/<slug>/`
+component; the Document title prefix for a temporary copy).
+Fix reports need a store review id (`pr-<N>`, `local-<YYYYMMDD-HHMMSS>`,
+`quick-<YYYYMMDD-HHMMSS>`). Any other `REVIEW_ID` keeps the pre-store report
+path in local mode (Phase 6); in linear mode abort here, before any write:
+`Error: review id <REVIEW_ID> is not pr-<N>, local-<stamp> or quick-<stamp>; rename the review or use --store=local.`
 
 Error paths:
 
@@ -166,7 +226,7 @@ If `DRY_RUN=true` and `AGENT_TEAM_MODE=false`, stop here. Print a reminder:
 
 ```
 Dry run complete. To apply fixes, re-run without --dry-run:
-  /review-fix $REVIEW_FILE [--parallel | --team] [--severity <level>]
+  /review-fix ${STORE_FLAG} $REVIEW_SELECTOR [--parallel | --team] [--severity <level>]
 ```
 
 If `DRY_RUN=true` and `AGENT_TEAM_MODE=true`, defer the final exit to Phase 4 C.2 so the team name and per-batch teammate roster can be printed alongside the fix plan. Do NOT proceed to any team/task/agent tool calls.
@@ -204,7 +264,11 @@ One-time parent setup only when forced and not yet ensured.
 Status updates in place via `Edit` after each agent returns: Fixed on
 `STATUS: Fixed`, Failed on `STATUS: Failed`. Track per-batch todos. In Path B/C,
 between-batch validation failure stops and asks for the path-specific choices
-in fixer-dispatch.md. Path A continues; no stop-and-ask gate.
+in fixer-dispatch.md. Path A continues; no stop-and-ask gate. Linear mode: when
+the review carries `linear.document` or `pending: true`, re-run Save for
+Document `<REVIEW_SLUG> · <REVIEW_ID>-review` per artifact-store.md after the
+last status edit (and before any stop); Conflict rules apply and offline sets
+`pending: true`. A review kept local only (neither key) is not re-saved.
 
 ## Phase 5 — VERIFY
 
@@ -217,9 +281,24 @@ Read report template and worktree summary:
 
 `${CURSOR_PLUGIN_ROOT}/skills/review-fix/references/fix-report.md`
 
-Write to `docs/prps/reviews/fixes/<source-name>-fixes.md` under the active
-checkout root. In worktree mode, stage and commit the report alongside fix
-commits and push. GitHub-only: detect forge first (see
+Resolve the report with kind `review-fixes-<REVIEW_ID>`, starting from the
+active checkout root (`$PARENT_PATH` in worktree mode):
+
+```bash
+FIX_REPORT="$("${CURSOR_PLUGIN_ROOT}/skills/_shared/scripts/resolve-artifact-store.sh" ${STORE_FLAG} --ensure --kind=review-fixes-<REVIEW_ID> --slug=<slug> <checkout>)"
+mkdir -p "$(dirname "$FIX_REPORT")"
+```
+
+Slug: `review` in local mode (unchanged path
+`docs/prps/reviews/fixes/<source-name>-fixes.md`); `REVIEW_SLUG` in linear mode
+(`.ycc/artifacts/<slug>/reviews/<REVIEW_ID>-fixes.md`, saved as Document
+`<slug> · <REVIEW_ID>-fixes` with the review Document's parent; none → local
+only). Local mode with a `REVIEW_ID` the resolver rejects (renamed or legacy
+review): skip the resolver and keep the pre-store path,
+`FIX_REPORT="$(git -C <checkout> rev-parse --show-toplevel)/docs/prps/reviews/fixes/<REVIEW_ID>-fixes.md"`,
+creating its parent with `mkdir -p`. Local mode in worktree mode: stage and commit the report alongside fix
+commits and push. Linear mode never commits the report (gitignored); fix
+commits still push, staged by explicit path only. GitHub-only: detect forge first (see
 `${CURSOR_PLUGIN_ROOT}/skills/_shared/references/forge-detection.md`); on
 non-GitHub providers skip commit/push with notice
 `PR posting is GitHub-only on provider <provider>; fixes applied locally — commit and push them yourself.` and `REPORT_COMMITTED: n/a`.
@@ -234,7 +313,11 @@ Start the output with this literal heading:
 
 Report source path, report path, mode, eligible/fixed/failed/skipped/open
 counts, updated statuses, validation results, next steps
-(`/code-review <target>` re-review, `/git-workflow --commit`).
+(`/code-review <target>` re-review, then commit the fixed files by name:
+`/prp-commit <fixed files>`, never a stage-everything commit). Linear mode:
+when the rule-only `.gitignore` check (artifact-store.md > Reviews) holds for
+`<checkout>`, print
+`Note: <checkout>/.gitignore gained the .ycc/artifacts/ rule from the artifact store; leave it out of PR commits.`
 
 Print under `### Goal Signals (machine-readable — printed verbatim for /goal)`,
 as the last lines, one `KEY: PASS|FAIL` per line (always include the value):
@@ -248,9 +331,11 @@ REPORT_COMMITTED: <PASS|FAIL|n/a>
 ```
 
 PASS only when the criterion holds: plan respects same-file sequentialization;
-every attempted finding's Status updated in the source artifact; report
-written under `docs/prps/reviews/fixes/`; Phase 5 completed (even if checks
-failed); report committed and pushed (worktree mode; `n/a` in `--no-worktree`).
+every attempted finding's Status updated in the source artifact (linear mode:
+and saved or marked `pending`); report written at `$FIX_REPORT` (local mode
+under `docs/prps/reviews/fixes/`); Phase 5 completed (even if checks
+failed); report committed and pushed (local-mode worktree runs; `n/a` in
+`--no-worktree` and linear mode).
 Also print an `Open remaining: <M - X - Y>` line.
 
 ## Edge cases

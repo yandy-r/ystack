@@ -9,18 +9,25 @@
 - Status field rules
 - Required fields per finding
 
-Canonical schema for review artifacts written to `docs/prps/reviews/`.
+Canonical schema for review artifacts, written to `docs/prps/reviews/` (local
+store) or `.ycc/artifacts/<slug>/reviews/` (linear store, the default).
 `$code-review` writes it (both modes). `$review-fix`, `$quick-fix`,
 and `$quick-review` parse it. Do not deviate — downstream skills parse
 these fields mechanically.
 
 ## File locations
 
-| Mode  | Path                                                  |
-| ----- | ----------------------------------------------------- |
-| Local | `docs/prps/reviews/local-{YYYYMMDD-HHMMSS}-review.md` |
-| PR    | `docs/prps/reviews/pr-{NUMBER}-review.md`             |
-| Quick | `docs/prps/reviews/quick-{YYYYMMDD-HHMMSS}-review.md` |
+| Artifact     | Local store                                           | Linear store (cache; one Linear Document each)                    |
+| ------------ | ----------------------------------------------------- | ----------------------------------------------------------------- |
+| Local review | `docs/prps/reviews/local-{YYYYMMDD-HHMMSS}-review.md` | `.ycc/artifacts/<slug>/reviews/local-{YYYYMMDD-HHMMSS}-review.md` |
+| PR review    | `docs/prps/reviews/pr-{NUMBER}-review.md`             | `.ycc/artifacts/<slug>/reviews/pr-{NUMBER}-review.md`             |
+| Quick review | `docs/prps/reviews/quick-{YYYYMMDD-HHMMSS}-review.md` | `.ycc/artifacts/<slug>/reviews/quick-{YYYYMMDD-HHMMSS}-review.md` |
+| Fix report   | `docs/prps/reviews/fixes/{review-id}-fixes.md`        | `.ycc/artifacts/<slug>/reviews/{review-id}-fixes.md`              |
+
+Resolve every path with `resolve-artifact-store.sh --kind=review-<id>` or
+`--kind=review-fixes-<id>`; never build it by hand. Mode, slug, Linear
+Document parent, scratch directories, and fix-input lookup: see
+`artifact-store.md` > Review and report skills.
 
 ## Template
 

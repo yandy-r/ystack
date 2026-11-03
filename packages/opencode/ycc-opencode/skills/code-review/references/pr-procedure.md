@@ -3,14 +3,14 @@
 ## Contents
 
 - SETUP
-- FETCH / CONTEXT / REVIEW
+- FETCH / DESTINATION / CONTEXT / REVIEW
 - VALIDATE / DECIDE
 - REPORT / PUBLISH / OUTPUT
 - Edge cases
 
 ## Phase 0½ — SETUP (PR mode default; skipped with `--no-worktree`)
 
-Skip this phase entirely when `WORKTREE_MODE=false` (i.e., `--no-worktree` was passed).
+Skip this phase entirely when `WORKTREE_MODE=false` (i.e., `--no-worktree` was passed). Phase 1½ DESTINATION still runs.
 
 ### PR mode with `--worktree`
 
@@ -74,12 +74,23 @@ gh pr diff <NUMBER>
 
 If PR not found, stop with error. Store PR metadata for later phases.
 
+### Phase 1½ — DESTINATION
+
+Runs in every PR review, with or without a worktree, once FETCH has the PR
+number (a URL or branch selector yields it only here). Resolve `OUT` per
+SKILL.md "Review destination" with `<review-id>` `pr-<N>` and `<checkout>`
+(`$PARENT_WORKTREE_PATH` when `WORKTREE_ACTIVE=true`, else the current
+toplevel). In linear mode take the Linear hint from FETCH's `headRefName`
+(issue key per artifact-store.md > Branch hint), else from a
+`Closes|Fixes|Resolves <KEY>` line in `body`; never from the local branch.
+Fan-out scratch for REVIEW lives under `$(dirname "$OUT")`.
+
 ### Phase 2 — CONTEXT
 
 Build review context:
 
 1. **Project rules** — Read `AGENTS.md`, `RELEASING.md` (when present), `.claude/docs/`, and any contributing guidelines
-2. **PRP artifacts** — Check `docs/prps/reports/` and `docs/prps/plans/` (including `completed/`) for implementation context related to this PR
+2. **PRP artifacts** — Check `docs/prps/reports/` and `docs/prps/plans/` (including `completed/`) for implementation context related to this PR; in linear mode also check `.ycc/artifacts/*/` (read-only; no Linear calls here)
 3. **PR intent** — Parse PR description for goals, linked issues, test plans
 4. **Changed files** — List all modified files and categorize by type (source, test, config, docs)
 5. **PR base vs. release model** — Skip silently when `release-state.sh get` prints `present=0`. Otherwise fetch the head (`git fetch origin <headRefName>`, or `pull/<N>/head` for a fork) and compare `baseRefName` with `release-state.sh base --head FETCH_HEAD`, per `{{package-root}}/shared/references/pr-base-and-backport.md` (section "Checking an existing PR"). On a mismatch, record a **MEDIUM** finding anchored at `RELEASING.md` (Category: Pattern Compliance) naming both branches, with the suggested fix `gh pr edit <N> --base <expected>` (a retarget, not a code change).
@@ -183,26 +194,24 @@ fi
 
 #### Artifact Write
 
-Write the artifact to `$(git rev-parse --show-toplevel)/docs/prps/reviews/pr-<N>-review.md`. When `WORKTREE_ACTIVE=true` this resolves to the worktree top-level (e.g., `<repo-root>/.opencode/worktrees/<repo>-pr-<N>/docs/prps/reviews/pr-<N>-review.md`); when `--no-worktree` is in effect, it resolves to the main repo. The artifact intentionally lives **with the PR branch** so it travels with the review history.
+Write the artifact to `$OUT`, resolved in SKILL.md "Review destination" with kind `review-pr-<N>` and the active checkout as start directory (its parent was created there with `mkdir -p "$(dirname "$OUT")"`).
 
-```bash
-mkdir -p "$(git rev-parse --show-toplevel)/docs/prps/reviews"
-```
+- **Local mode** — unchanged path `$(git rev-parse --show-toplevel)/docs/prps/reviews/pr-<N>-review.md`. When `WORKTREE_ACTIVE=true` this resolves to the worktree top-level (e.g., `<repo-root>/.opencode/worktrees/<repo>-pr-<N>/docs/prps/reviews/pr-<N>-review.md`); when `--no-worktree` is in effect, it resolves to the main repo. The artifact intentionally lives **with the PR branch** so it travels with the review history.
+- **Linear mode** — `<checkout>/.ycc/artifacts/<slug>/reviews/pr-<N>-review.md`, a gitignored cache that never reaches the PR branch. Follow `{{package-root}}/shared/references/artifact-store.md` > Review and report skills > Reviews: Lookup/Load identity for Document `<slug> · pr-<N>-review` before writing, write the body, then Save before PUBLISH. Parent: the verified hint issue (or `linear.issue`), else the feature Project, else none (keep it local only). The GitHub review comment is unchanged.
 
 Use the shared Review Artifact Format at
 `{{package-root}}/shared/references/review-artifact-format.md`.
 The artifact must include finding IDs and `Status: Open` on every finding so that `/ycc:review-fix` can later update the file in place.
 
-- Write the artifact to `$(git rev-parse --show-toplevel)/docs/prps/reviews/pr-<N>-review.md`. When `WORKTREE_ACTIVE=true` this resolves to the worktree top-level (e.g., `<repo-root>/.opencode/worktrees/<repo>-pr-<N>/docs/prps/reviews/pr-<N>-review.md`); when `--no-worktree` is in effect, it resolves to the main repo. The artifact intentionally lives **with the PR branch** so it travels with the review history.
-- **Note**: the artifact will be committed to the PR branch (see commit step below). If you do not want the review record on the PR branch, add `docs/prps/reviews/` to `.gitignore` — the skill detects this and skips the commit.
+- **Note** (local mode): the artifact will be committed to the PR branch (see commit step below). If you do not want the review record on the PR branch, add `docs/prps/reviews/` to `.gitignore` — the skill detects this and skips the commit.
 
 #### Artifact Commit + Push
 
-After the artifact has been written, in PR mode when `WORKTREE_ACTIVE=true`, commit and push it to the PR branch before posting the review:
+After the artifact has been written, in PR mode when `WORKTREE_ACTIVE=true`, commit and push it to the PR branch before posting the review. A linear-mode artifact is always gitignored, so it takes the skip branch:
 
 ```bash
 if [[ "$WORKTREE_ACTIVE" == "true" ]]; then
-  ARTIFACT_REL="docs/prps/reviews/pr-${PR_NUMBER}-review.md"
+  ARTIFACT_REL="${OUT#"$(git -C "$PARENT_WORKTREE_PATH" rev-parse --show-toplevel)"/}"
   pushd "$PARENT_WORKTREE_PATH" >/dev/null
   if git check-ignore -q "$ARTIFACT_REL"; then
     echo "Artifact path is gitignored; skipping commit. Worktree preserved at $PARENT_WORKTREE_PATH."
@@ -217,10 +226,13 @@ if [[ "$WORKTREE_ACTIVE" == "true" ]]; then
 fi
 ```
 
+In local mode `ARTIFACT_REL` is `docs/prps/reviews/pr-${PR_NUMBER}-review.md`, as before. Never stage a `.gitignore` change made by linear `--ensure`.
+
 If `PARALLEL_MODE=true` (Path B was used), remove the
-`docs/prps/reviews/.review-scratch/pr-<NUMBER>/` scratch directory now that
-the artifact has been written (and, when `WORKTREE_ACTIVE=true`, committed
-and pushed) successfully.
+`$(dirname "$OUT")/.review-scratch/pr-<NUMBER>/` scratch directory (local
+mode: `docs/prps/reviews/.review-scratch/pr-<NUMBER>/`) now that the artifact
+has been written (and, when `WORKTREE_ACTIVE=true`, committed and pushed, or
+in linear mode saved) successfully.
 
 ### Phase 7 — PUBLISH
 
@@ -290,7 +302,8 @@ Issues: <critical_count> critical, <high_count> high, <medium_count> medium, <lo
 Validation: <pass_count>/<total_count> checks passed
 
 Artifacts:
-  Review: docs/prps/reviews/pr-<NUMBER>-review.md
+  Review: <$DISPLAY_OUT; local mode docs/prps/reviews/pr-<NUMBER>-review.md>
+  Linear: <Document URL, linear mode only; or "local only (no Linear parent)">
   GitHub: <PR URL>
 
 Next steps:

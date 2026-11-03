@@ -384,7 +384,13 @@ for pair in \
   "deep-research|${linear_base}/deep-research|-" \
   "blueprint|${linear_base}/blueprint.md|${path_repo}/docs/blueprint.md" \
   "research-dir|${linear_base}/research|${local_base}" \
-  "feature-dir|${linear_base}|${local_base}"; do
+  "feature-dir|${linear_base}|${local_base}" \
+  "review-pr-12|${linear_base}/reviews/pr-12-review.md|${path_repo}/docs/prps/reviews/pr-12-review.md" \
+  "review-local-20261103-120000|${linear_base}/reviews/local-20261103-120000-review.md|${path_repo}/docs/prps/reviews/local-20261103-120000-review.md" \
+  "review-quick-20261103-120000|${linear_base}/reviews/quick-20261103-120000-review.md|${path_repo}/docs/prps/reviews/quick-20261103-120000-review.md" \
+  "review-fixes-pr-12|${linear_base}/reviews/pr-12-fixes.md|${path_repo}/docs/prps/reviews/fixes/pr-12-fixes.md" \
+  "review-fixes-local-20261103-120000|${linear_base}/reviews/local-20261103-120000-fixes.md|${path_repo}/docs/prps/reviews/fixes/local-20261103-120000-fixes.md" \
+  "pr-autofix-report-12-2026-11-03T120000Z|${linear_base}/reports/pr-autofix-12-2026-11-03T120000Z.md|${path_repo}/docs/prps/reports/pr-autofix-12-2026-11-03T120000Z.md"; do
   IFS='|' read -r kind linear_expected local_expected <<<"$pair"
   assert_eq "linear ${kind} sourced path" "$linear_expected" "$(CDPATH='' cd -- "$path_repo" >/dev/null && "$BASH_BIN" -c 'source "$1"; resolve_artifact_store --store=linear "$2" && get_artifact_path "$3" Feature_1' _ "$HELPER" "$path_repo" "$kind")"
   assert_eq "linear ${kind} CLI path" "$linear_expected" "$("$BASH_BIN" "$HELPER" --store=linear --kind="$kind" --slug=Feature_1 "$path_repo")"
@@ -396,7 +402,9 @@ for pair in \
     assert_eq "local ${kind} CLI path" "$local_expected" "$("$BASH_BIN" "$HELPER" --store=local --kind="$kind" --slug=Feature_1 "$path_repo")"
   fi
 done
-for bad_kind in '' unknown research- research-Upper research-bad_name analysis- analysis-Upper analysis-bad_name; do
+for bad_kind in '' unknown research- research-Upper research-bad_name analysis- analysis-Upper analysis-bad_name \
+  review- review-../x review-pr-0 review-pr-01 review-local-1 review-quick-20261103-1200 review-fixes- review-fixes-pr-x \
+  review-fixes-fixes-pr-1 pr-autofix-report- pr-autofix-report-1-bad pr-autofix-report-0-2026-11-03T120000Z pr-autofix-report-1-2026-11-03T120000Z/../x; do
   assert_bad "invalid kind '${bad_kind}'" run "$path_repo" get_artifact_path "$bad_kind" Feature_1
 done
 assert_bad 'artifact path missing kind' run "$path_repo" get_artifact_path
@@ -443,22 +451,43 @@ assert_ok 'local ensure shared creates feature dir' test -d "$local_base"
 assert_ok 'local ensure shared creates no file' test ! -e "${local_base}/shared.md"
 "$BASH_BIN" "$HELPER" --store=local --ensure --kind=prp-research --slug=Feature_1 "$path_repo" >/dev/null
 assert_ok 'local ensure prp-research creates the directory itself' test -d "${path_repo}/docs/prps/plans/.prp-research/Feature_1"
+# Review and pr-autofix kinds are files: local --ensure makes only their parent.
+rm -rf "${path_repo}/custom plans"
+"$BASH_BIN" "$HELPER" --store=local --ensure --kind=review-fixes-pr-7 --slug=Feature_1 "$path_repo" >/dev/null
+assert_ok 'local ensure review-fixes creates fixes parent' test -d "${path_repo}/docs/prps/reviews/fixes"
+assert_ok 'local ensure review-fixes creates no file' test ! -e "${path_repo}/docs/prps/reviews/fixes/pr-7-fixes.md"
+rm -rf "${path_repo}/docs/prps"
+"$BASH_BIN" "$HELPER" --store=local --ensure --kind=pr-autofix-report-7-2026-11-03T120000Z --slug=Feature_1 "$path_repo" >/dev/null
+assert_ok 'local ensure pr-autofix creates reports parent' test -d "${path_repo}/docs/prps/reports"
+assert_ok 'local ensure pr-autofix creates no file' test ! -e "${path_repo}/docs/prps/reports/pr-autofix-7-2026-11-03T120000Z.md"
+# Linear --ensure for review kinds creates the cache and its ignore rule only.
+review_repo="${SCRATCH}/review-linear"; make_linear_repo "$review_repo"
+for pair in review-pr-3/reviews/pr-3-review.md review-fixes-pr-3/reviews/pr-3-fixes.md \
+  pr-autofix-report-3-2026-11-03T120000Z/reports/pr-autofix-3-2026-11-03T120000Z.md; do
+  kind="${pair%%/*}" review_path="${review_repo}/.ycc/artifacts/feat/${pair#*/}"
+  assert_eq "linear ensure ${kind} path" "$review_path" "$("$BASH_BIN" "$HELPER" --ensure --kind="$kind" --slug=feat "$review_repo")"
+  assert_ok "linear ensure ${kind} ignores path" git -C "$review_repo" check-ignore -q -- "$review_path"
+  assert_ok "linear ensure ${kind} creates no file" test ! -e "$review_path"
+  # Skills create the file's parent themselves (mkdir -p "$(dirname "$OUT")").
+  assert_ok "linear ensure ${kind} creates the cache root" test -d "${review_repo}/.ycc/artifacts"
+  assert_ok "linear ensure ${kind} leaves the parent to the skill" test ! -e "${review_path%/*}"
+done
+assert_eq 'linear ensure review kinds write one ignore rule' '.ycc/artifacts/' "$(cat "${review_repo}/.gitignore")"
+assert_ok 'local ensure review kinds leave plans dir absent' test ! -e "${path_repo}/custom plans"
 # Repo-level kinds follow the current checkout, not PLANS_ROOT (nested worktree).
 wt_parent="${SCRATCH}/wt-parent"; make_repo "$wt_parent"
 git -C "$wt_parent" add .plans-config; git -C "$wt_parent" commit -q -m cfg
 wt_child="${wt_parent}/.worktrees/feat"
 git -C "$wt_parent" worktree add -q -b wt-feat "$wt_child"
 mkdir -p "${wt_child}/sub/dir"
-for kind in prd spec prp-plan prp-report blueprint; do
-  case "$kind" in
-    prd) wt_rel="docs/prps/prds/foo.prd.md" ;;
-    spec) wt_rel="docs/prps/specs/foo.spec.md" ;;
-    prp-plan) wt_rel="docs/prps/plans/foo.plan.md" ;;
-    prp-report) wt_rel="docs/prps/reports/foo-report.md" ;;
-    blueprint) wt_rel="docs/blueprint.md" ;;
-  esac
+for pair in prd/docs/prps/prds/foo.prd.md spec/docs/prps/specs/foo.spec.md prp-plan/docs/prps/plans/foo.plan.md \
+  prp-report/docs/prps/reports/foo-report.md blueprint/docs/blueprint.md review-pr-1/docs/prps/reviews/pr-1-review.md \
+  review-fixes-pr-1/docs/prps/reviews/fixes/pr-1-fixes.md \
+  pr-autofix-report-1-2026-11-03T120000Z/docs/prps/reports/pr-autofix-1-2026-11-03T120000Z.md; do
+  kind="${pair%%/*}" wt_rel="${pair#*/}"
   assert_eq "worktree ${kind} resolves under worktree toplevel" "${wt_child}/${wt_rel}" "$("$BASH_BIN" "$HELPER" --store=local --kind="$kind" --slug=foo "${wt_child}/sub/dir")"
 done
+assert_eq 'worktree linear review resolves under worktree cache' "${wt_child}/.ycc/artifacts/foo/reviews/pr-1-review.md" "$("$BASH_BIN" "$HELPER" --store=linear --kind=review-pr-1 --slug=foo "${wt_child}/sub/dir")"
 assert_eq 'worktree prp-research resolves under worktree toplevel' "${wt_child}/docs/prps/plans/.prp-research/foo" "$("$BASH_BIN" "$HELPER" --store=local --kind=prp-research --slug=foo "$wt_child")"
 nogit_repo="${SCRATCH}/nogit-repo"; mkdir -p "$nogit_repo"
 assert_eq 'non-git local prd resolves under start dir' "${nogit_repo}/docs/prps/prds/foo.prd.md" "$("$BASH_BIN" "$HELPER" --store=local --kind=prd --slug=foo "$nogit_repo")"

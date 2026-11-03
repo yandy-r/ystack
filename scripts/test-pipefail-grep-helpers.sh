@@ -391,6 +391,17 @@ if [[ "$OUT" == *'DETECTED_TYPE: parallel-plan'* ]]; then
 else
     fail "validate-prerequisites: detection missed body after long frontmatter (rc=$RC, out=$OUT)"
 fi
+# Linear artifact-store cache basenames (YAN-1156) are detected by name alone.
+mkdir -p "${VP_DIR}/cache"
+for vp_pair in prp-plan.md:prp-plan prd.md:prd; do
+    printf '%s\n' '# Body' 'No signature headers.' >"${VP_DIR}/cache/${vp_pair%%:*}"
+    vp_run "cache-${vp_pair##*:}" "cache/${vp_pair%%:*}"
+    if [[ "$OUT" == *"DETECTED_TYPE: ${vp_pair##*:}"* ]]; then
+        pass "validate-prerequisites: cache basename ${vp_pair%%:*} detected as ${vp_pair##*:}"
+    else
+        fail "validate-prerequisites: cache basename ${vp_pair%%:*} (rc=$RC, out=$OUT)"
+    fi
+done
 
 # A local plan opening with a `---` thematic break keeps every task.
 printf '%s\n' '---' '### Task 1: first' '---' '## Summary' '### Task 2: second' >"${VP_DIR}/break.plan.md"

@@ -21,6 +21,8 @@ Use this template for phase-level, batch-level, or cluster-level tracking issues
 
 {optional_sections}
 
+{linear_refs_line}
+
 ## Notes
 
 - This is a tracking issue. Individual items are linked above.
@@ -114,6 +116,7 @@ Testing approach and validation commands from the plan.
 | checkbox_list      | Generated from child issues after creation        | "- [ ] #12 Set up data models"        |
 | success_criteria   | Success criteria, acceptance criteria from source | Bulleted list of criteria             |
 | dependency_summary | Phase/batch dependencies from plan                | "Requires Phase 1 complete"           |
+| linear_refs_line   | `Refs <linear.issue>` (linear sources)            | "Refs YAN-1152"                       |
 
 ## Label Assignment
 

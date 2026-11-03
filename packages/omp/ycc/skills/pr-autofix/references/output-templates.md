@@ -61,7 +61,7 @@ For `Skip`, a second `ask` collects a free-form reason (max ~140 chars), sanitiz
 
 ## Phase 8 local report
 
-Write to `$(git rev-parse --show-toplevel)/docs/prps/reports/pr-autofix-${PR_NUMBER}-$(date -u +%FT%H%M%SZ).md`:
+Write to `$REPORT_PATH`, resolved in SKILL.md Phase 8 with kind `pr-autofix-report-<N>-<ts>` (local mode: unchanged `$(git rev-parse --show-toplevel)/docs/prps/reports/pr-autofix-${PR_NUMBER}-$(date -u +%FT%H%M%SZ).md`; linear mode: `.ycc/artifacts/<slug>/reports/pr-autofix-<N>-<ts>.md`, local-only and never pushed or committed):
 
 ```markdown
 # PR Autofix Report: PR #<N>
@@ -126,7 +126,8 @@ Write to `$(git rev-parse --show-toplevel)/docs/prps/reports/pr-autofix-${PR_NUM
 PR:        #<PR_NUMBER>
 Branch:    <HEAD_BRANCH>
 Mode:      <Sequential|Parallel>
-Report:    docs/prps/reports/pr-autofix-<N>-<ts>.md
+Report:    <local mode docs/prps/reports/pr-autofix-<N>-<ts>.md; linear mode absolute REPORT_PATH>
+Gitignore: <linear mode only, when --ensure added it: .gitignore gained the .ycc/artifacts/ rule; leave it out of commits>
 
 ### Comments
   Fetched:  T

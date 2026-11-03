@@ -150,7 +150,8 @@ for the result-delivery and batch-completion contract):
 1. For any reviewer whose `task` return was empty, missing, or malformed,
    treat that reviewer as a failure for that role (do not fabricate findings
    for it). In Path B only, the scratch file at
-   `docs/prps/reviews/.review-scratch/<run-id>/<reviewer-name>.md` is the
+   `<review-dir>/.review-scratch/<run-id>/<reviewer-name>.md` (`<review-dir>`
+   is the resolved review file's directory; see review-dispatch.md) is the
    calling skill's own copy of the inline returns it already received, not a
    second source to recover from.
 2. Combine by severity (CRITICAL first, then HIGH, MEDIUM, LOW).
@@ -164,6 +165,6 @@ Pass the merged findings to the REPORT phase as if they came from a single-pass
 review.
 
 **Cleanup**: after a successful merge, the calling skill should remove the
-`docs/prps/reviews/.review-scratch/<run-id>/` directory.
+`<review-dir>/.review-scratch/<run-id>/` directory.
 
 ---

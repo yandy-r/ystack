@@ -259,7 +259,9 @@ def _project_required_workflow_surfaces(text: str, source_path: str) -> str:
                 "Strip the supported flags from `$ARGUMENTS` and set "
                 "`QUICK_MODE=true|false`, `PARALLEL_MODE=true|false`, "
                 "`NO_WORKTREE_MODE=true|false`, `KEEP_DRAFT=true|false`, and "
-                "`KEEP_WORKTREE=true|false`. Compute `WORKTREE_MODE=true` unless "
+                "`KEEP_WORKTREE=true|false`. Keep `--store=local|linear` verbatim "
+                "as `STORE_FLAG` (empty when absent) and forward it to every "
+                "resolver call. Compute `WORKTREE_MODE=true` unless "
                 "`--no-worktree` is present. The remaining text is the mode selector "
                 "(PR number/URL or blank for local)."
             ),
@@ -282,7 +284,9 @@ def _project_required_workflow_surfaces(text: str, source_path: str) -> str:
             (
                 "Strip the supported flags from `$ARGUMENTS` and set "
                 "`PARALLEL_MODE`, `MIN_SEVERITY`, `DRY_RUN`, and "
-                "`WORKTREE_MODE=true` unless `--no-worktree` is present. The "
+                "`WORKTREE_MODE=true` unless `--no-worktree` is present. Keep "
+                "`--store=local|linear` verbatim as `STORE_FLAG` (empty when "
+                "absent) and forward it to every resolver call. The "
                 "remaining text is the input selector."
             ),
             output,
@@ -304,7 +308,7 @@ def _project_required_workflow_surfaces(text: str, source_path: str) -> str:
             r"Dry run complete\. To apply fixes, re-run without --dry-run:.*?```",
             (
                 "Dry run complete. To apply fixes, re-run without --dry-run:\n"
-                "  /review-fix $REVIEW_FILE [--parallel] [--severity <level>]\n```"
+                "  /review-fix ${STORE_FLAG} $REVIEW_SELECTOR [--parallel] [--severity <level>]\n```"
             ),
             output,
             count=1,

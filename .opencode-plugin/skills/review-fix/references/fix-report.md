@@ -8,20 +8,20 @@
 
 ## Report location
 
-Write the fix report to `$(git rev-parse --show-toplevel)/docs/prps/reviews/fixes/`. When in a worktree this resolves to the worktree top-level; otherwise to the main repo.
+Write the fix report to `$FIX_REPORT`, resolved in SKILL.md Phase 6 with kind `review-fixes-<REVIEW_ID>` from the active checkout root (its parent created there with `mkdir -p "$(dirname "$FIX_REPORT")"`).
 
-```bash
-mkdir -p "$(git rev-parse --show-toplevel)/docs/prps/reviews/fixes"
-```
+- **Local mode** — unchanged: `$(git rev-parse --show-toplevel)/docs/prps/reviews/fixes/`. When in a worktree this resolves to the worktree top-level; otherwise to the main repo. A review whose id the resolver rejects (renamed or legacy name) keeps this path without the resolver: `<source-name>-fixes.md`.
+- **Linear mode** — `.ycc/artifacts/<slug>/reviews/<REVIEW_ID>-fixes.md` (gitignored), saved per `~/.config/opencode/shared/references/artifact-store.md` > Review and report skills > Review fixes as Document `<slug> · <REVIEW_ID>-fixes`, parented like the review Document (none → local only).
 
 Derive the report filename from the source review:
 
-| Source                                              | Report                                                   |
-| --------------------------------------------------- | -------------------------------------------------------- |
-| `docs/prps/reviews/pr-42-review.md`                 | `docs/prps/reviews/fixes/pr-42-fixes.md`                 |
-| `docs/prps/reviews/local-20260408-143022-review.md` | `docs/prps/reviews/fixes/local-20260408-143022-fixes.md` |
+| Source                                                   | Report (local mode)                                      |
+| -------------------------------------------------------- | -------------------------------------------------------- |
+| `docs/prps/reviews/pr-42-review.md`                      | `docs/prps/reviews/fixes/pr-42-fixes.md`                 |
+| `docs/prps/reviews/local-20260408-143022-review.md`      | `docs/prps/reviews/fixes/local-20260408-143022-fixes.md` |
+| `.ycc/artifacts/<slug>/reviews/pr-42-review.md` (linear) | `.ycc/artifacts/<slug>/reviews/pr-42-fixes.md`           |
 
-After writing the fix report, stage and commit it to the PR branch alongside the fix commits:
+Local mode only: after writing the fix report, stage and commit it to the PR branch alongside the fix commits. Linear mode never commits it (gitignored, `REPORT_COMMITTED: n/a`) and never stages a `.gitignore` change made by `--ensure`. Stage fix commits by explicit path (`git add -- <fixed files>`), never `git add -A`.
 
 ```bash
 FIX_REPORT_REL="docs/prps/reviews/fixes/<name>-fixes.md"
@@ -92,7 +92,7 @@ git push
 
 - Re-run `/code-review <same target>` to verify the remaining open findings and confirm fixes resolved the issues
 - Address failed fixes manually using the Blocker + Recommendation notes above
-- Run `/git-workflow --commit` to commit the changes when satisfied
+- Commit the fixed files by name when satisfied (`/prp-commit <fixed files>`); leave any artifact-store `.gitignore` rule out of the commit
 ```
 
 ## Worktree summary (only when `WORKTREE_ACTIVE=true`)

@@ -137,9 +137,10 @@ else
       DETECTED_TYPE="feature-spec"
     elif [[ "$BASENAME" == "parallel-plan.md" ]]; then
       DETECTED_TYPE="parallel-plan"
-    elif [[ "$BASENAME" == *.plan.md ]]; then
+    elif [[ "$BASENAME" == *.plan.md || "$BASENAME" == "prp-plan.md" ]]; then
+      # prp-plan.md / prd.md are the linear artifact-store cache names.
       DETECTED_TYPE="prp-plan"
-    elif [[ "$BASENAME" == *.prd.md ]]; then
+    elif [[ "$BASENAME" == *.prd.md || "$BASENAME" == "prd.md" ]]; then
       DETECTED_TYPE="prd"
     else
       # Content-based fallback: check the first 40 body lines (frontmatter
