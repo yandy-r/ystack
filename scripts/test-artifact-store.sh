@@ -246,6 +246,20 @@ printf '.ycc/artifacts/\n!.vscode/settings.json\n' >"${unrelated_repo}/.gitignor
 cp "${unrelated_repo}/.gitignore" "${SCRATCH}/before"
 assert_ok 'unrelated anchored negation keeps coverage' run "$unrelated_repo" ensure_artifact_gitignore
 assert_ok 'unrelated anchored negation bytes unchanged' cmp -s "${SCRATCH}/before" "${unrelated_repo}/.gitignore"
+# Only a `!` that can match the .ycc/artifacts directory itself undoes an
+# earlier exact rule in the same file.
+for variant in env keep; do
+  kept_repo="${SCRATCH}/ignore-kept-${variant}"; make_linear_repo "$kept_repo"
+  case "$variant" in
+    env) printf '.ycc/artifacts/\n.env*\n!.env.example\n' >"${kept_repo}/.gitignore" ;;
+    keep) printf '.ycc/artifacts/\n!.ycc/artifacts/keep/\n' >"${kept_repo}/.gitignore" ;;
+  esac
+  cp "${kept_repo}/.gitignore" "${SCRATCH}/before"
+  assert_ok "covered ${variant} negation: ensure succeeds" run "$kept_repo" ensure_artifact_gitignore
+  assert_ok "covered ${variant} negation: bytes unchanged" cmp -s "${SCRATCH}/before" "${kept_repo}/.gitignore"
+  mkdir -p "${kept_repo}/.ycc/artifacts/keep"; : >"${kept_repo}/.ycc/artifacts/keep/shared.md"
+  assert_ok "covered ${variant} negation: keep file ignored" git -C "$kept_repo" check-ignore -q -- .ycc/artifacts/keep/shared.md
+done
 
 sub_repo="${SCRATCH}/subdir-ignore"; make_repo "$sub_repo"
 sub_root="${sub_repo}/packages/app"; mkdir -p "$sub_root"

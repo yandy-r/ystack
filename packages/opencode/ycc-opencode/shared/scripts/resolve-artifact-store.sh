@@ -357,11 +357,36 @@ _artifact_negation_relevant() {
   return 0
 }
 
-# Print the number of FILE's last `!` line relevant to REL (0 if none); fails
-# when unreadable. A BOM is accepted on any line, as in _artifact_has_negation.
+# 0 when the negated pattern PAT (without `!`) may match the REL directory
+# itself, the only way to undo an earlier `.ycc/artifacts/` rule in the same
+# file. `\` or `(` and unanchored `**` match conservatively.
+_artifact_negation_matches_dir() {
+  local LC_ALL=C pat="${1%/}" rel="$2" pseg rseg
+  [[ "$pat" != *[\\\(]* ]] || return 0
+  if [[ "$pat" != */* ]]; then
+    [[ "$pat" != *'**'* ]] || return 0
+    # shellcheck disable=SC2053 # The gitignore pattern is a glob.
+    [[ "${rel##*/}" == $pat ]]
+    return
+  fi
+  pat=${pat#/}
+  while [[ -n "$pat" && -n "$rel" ]]; do
+    pseg=${pat%%/*} rseg=${rel%%/*}
+    [[ "$pseg" != *'**'* ]] || return 0
+    # shellcheck disable=SC2053 # The gitignore segment is a glob.
+    [[ "$rseg" == $pseg ]] || return 1
+    if [[ "$pat" == */* ]]; then pat=${pat#*/}; else pat=''; fi
+    if [[ "$rel" == */* ]]; then rel=${rel#*/}; else rel=''; fi
+  done
+  [[ -z "$pat" && -z "$rel" ]]
+}
+
+# Print "BROAD STRICT": the numbers of FILE's last `!` line relevant to REL and
+# last one matching the REL directory itself (0 if none); fails when
+# unreadable. A BOM is accepted on any line, as in _artifact_has_negation.
 # FOLD=true matches case-insensitively; call only in a subshell.
 _artifact_last_negation() {
-  local file="$1" rel="$2" fold="${3:-false}" line n=0 last=0
+  local file="$1" rel="$2" fold="${3:-false}" line n=0 last=0 strict=0
   [[ -r "$file" ]] || return 1
   [[ "$fold" != true ]] || shopt -s nocasematch
   while IFS= read -r line || [[ -n "$line" ]]; do
@@ -371,17 +396,19 @@ _artifact_last_negation() {
     line=${line%$'\r'}
     while [[ "$line" == *' ' && "$line" != *'\ ' ]]; do line=${line% }; done
     if _artifact_negation_relevant "${line#!}" "$rel"; then last=$n; fi
+    if _artifact_negation_matches_dir "${line#!}" "$rel"; then strict=$n; fi
   done <"$file" || return 1
-  printf '%s\n' "$last"
+  printf '%s %s\n' "$last" "$strict"
 }
 
 # Scan repository .gitignore files from GIT_ROOT down to ARTIFACT_ROOT, in the
 # working tree (regular files only; Git skips symlinks) and the index, for `!`
-# lines that may re-include .ycc/artifacts. Prints the last such line number in
-# the working-tree ${ARTIFACT_ROOT}/.gitignore (0 if none). Returns 0 when any
-# file has one, 1 when none, 3 on failure. OUT is a scratch path prefix.
+# lines that may re-include .ycc/artifacts. Prints the last line number in the
+# working-tree ${ARTIFACT_ROOT}/.gitignore whose `!` can match the
+# .ycc/artifacts directory itself (0 if none). Returns 0 when any file has a
+# relevant `!` line, 1 when none, 3 on failure. OUT is a scratch path prefix.
 _artifact_chain_negation() {
-  local out="$1" git_root="$2" phys_root dir sub path entry mode hash last fold found=1 root_last=0
+  local out="$1" git_root="$2" phys_root dir sub path entry mode hash last strict fold found=1 root_last=0
   local -a paths=()
   phys_root=$(CDPATH='' cd -- "$ARTIFACT_ROOT" >/dev/null 2>&1 && pwd -P) || return 3
   fold=$(git -C "$ARTIFACT_ROOT" config --type=bool core.ignorecase 2>/dev/null) || fold=false
@@ -397,8 +424,9 @@ _artifact_chain_negation() {
   for path in "${paths[@]}"; do
     [[ -f "${git_root}/${path}" && ! -L "${git_root}/${path}" ]] || continue
     last=$(_artifact_last_negation "${git_root}/${path}" "${sub#"${path%.gitignore}"}.ycc/artifacts" "$fold") || return 3
+    strict=${last#* } last=${last%% *}
     [[ "$last" == 0 ]] || found=0
-    [[ "$path" != "${sub}.gitignore" ]] || root_last=$last
+    [[ "$path" != "${sub}.gitignore" ]] || root_last=$strict
   done
   git --literal-pathspecs -C "$git_root" ls-files -s -z -- "${paths[@]}" >"${out}.index" 2>/dev/null || return 3
   # Entries are "<mode> <hash> <stage>\t<path>"; symlinks are never read.
@@ -408,7 +436,7 @@ _artifact_chain_negation() {
     [[ "$mode" == 100644 || "$mode" == 100755 ]] || continue
     git -C "$git_root" cat-file blob "$hash" >"${out}.blob" 2>/dev/null || return 3
     last=$(_artifact_last_negation "${out}.blob" "${sub#"${path%.gitignore}"}.ycc/artifacts" "$fold") || return 3
-    [[ "$last" == 0 ]] || found=0
+    [[ "${last%% *}" == 0 ]] || found=0
   done <"${out}.index"
   printf '%s\n' "$root_last"
   return "$found"
@@ -454,9 +482,9 @@ _artifact_gitignore_present() {
   done <"${scratch}/repo"
   # check-ignore misses rules that re-include paths beyond the probes, so a
   # relevant `!` line from the Git root down voids probe coverage. The exact
-  # rule still counts when it follows every relevant `!` line in its own file:
-  # that directory rule excludes the cache, and Git cannot re-include files
-  # under an excluded directory.
+  # rule still counts when it follows every `!` line in its own file that can
+  # match the .ycc/artifacts directory itself: that directory rule excludes
+  # the cache, and Git cannot re-include files under an excluded directory.
   status=0
   root_neg=$(_artifact_chain_negation "${scratch}/chain" "$git_root") || status=$?
   rm -rf "$scratch"
