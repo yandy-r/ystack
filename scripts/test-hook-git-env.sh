@@ -50,11 +50,39 @@ for suite in "${REPLAY_SUITES[@]}"; do
 done
 
 # --- 2. Static: fixture git init call sites must isolate the environment -----
-# Accepted isolation: clear the local env vars, run under env -i, unset GIT_DIR,
-# or (Python) drop GIT_* keys from the child env.
+# Accepted isolation, on executable (non-comment) lines only: clear
+# `git rev-parse --local-env-vars`, launch under `env -i VAR=...`, an `unset`
+# command naming GIT_DIR, or (Python) drop GIT_* keys from the child env.
 isolates() {
-  grep -qE 'local-env-vars|env -i|unset GIT_DIR|startswith\(.GIT_.\)' "$1"
+  grep -vE '^[[:space:]]*#' "$1" | grep -qE \
+    -e 'git"?,? *"?rev-parse"?,? *"?--local-env-vars' \
+    -e '(^|[[:space:](])env -i( [A-Z_]+=| *\\?$)' \
+    -e '^[[:space:]]*unset[[:space:]]+([A-Za-z_]+[[:space:]]+)*GIT_DIR([[:space:]]|$)' \
+    -e "startswith\\(['\"]GIT_['\"]\\)"
 }
+
+# Self-test: guard words that appear only in comments, strings, or this
+# regex itself must not count as isolation. The guard command is assembled at
+# runtime so these fixtures never satisfy the scan of this file.
+guard_cmd="git rev-parse --local-env""-vars"
+init_cmd="git -C \"\$tmp\" init -q"
+fake="${SCRATCH}/fake-suite.sh"
+printf '%s\n' '#!/usr/bin/env bash' "# run under env -i; unset GIT_DIR; ${guard_cmd}" \
+  'echo "use env -i or unset GIT_DIR"' "$init_cmd" >"$fake"
+if isolates "$fake"; then
+  fail "static check accepts guards that appear only in comments or strings"
+else
+  pass "static check ignores comment-only and string-only guards"
+fi
+real="${SCRATCH}/real-suite.sh"
+printf '%s\n' '#!/usr/bin/env bash' \
+  "while IFS= read -r v; do unset \"\$v\"; done < <(${guard_cmd})" \
+  "$init_cmd" >"$real"
+if isolates "$real"; then
+  pass "static check accepts an executable --local-env-vars guard"
+else
+  fail "static check rejects an executable --local-env-vars guard"
+fi
 
 cd "$REPO_ROOT"
 checked=0
