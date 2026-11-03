@@ -236,6 +236,8 @@ run_target() {
             "${REPO_ROOT}/scripts/validate-ycc-skills.sh" || fail "validate-ycc-skills.sh"
             echo "== validate: plan-workflow validator regressions =="
             "${REPO_ROOT}/scripts/test-plan-workflow-validators.sh" || fail "test-plan-workflow-validators.sh"
+            echo "== validate: fixture suites ignore hook GIT_DIR =="
+            "${REPO_ROOT}/scripts/test-hook-git-env.sh" || fail "test-hook-git-env.sh"
             echo "== validate: per-runtime worktree roots =="
             "${REPO_ROOT}/scripts/test-worktree-roots.sh" || fail "test-worktree-roots.sh"
             echo "== validate: clean report generator =="

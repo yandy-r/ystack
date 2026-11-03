@@ -145,6 +145,7 @@ expect_targets "package install plan tests select config" "config" scripts/test_
 expect_targets "mods select mods and the install tests" "config mods" ycc/mods/README.md
 expect_targets "release tests select release" "release" scripts/test-release-model.sh
 expect_targets "plan-workflow validator test selects inventory" "inventory" scripts/test-plan-workflow-validators.sh
+expect_targets "hook git env test selects inventory" "inventory" scripts/test-hook-git-env.sh
 expect_targets "clean report test selects inventory" "inventory" scripts/test-clean-report.sh
 expect_targets "grep count helpers test selects inventory" "inventory" scripts/test-grep-count-helpers.sh
 expect_targets "pipefail grep helpers test selects inventory" "inventory" scripts/test-pipefail-grep-helpers.sh
