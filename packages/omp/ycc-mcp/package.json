@@ -1,6 +1,6 @@
 {
   "name": "ycc-mcp",
-  "version": "6.2.0",
+  "version": "6.2.1",
   "description": "MCP server connections for the ycc skills and agents.",
   "private": true
 }
