@@ -24,12 +24,13 @@ timeout, and standard Linux utilities. No inference.
 
 Every pi call runs under `env -i` with HOME, XDG_*, TMPDIR, npm and git config isolated
 under the sandbox, PI_OFFLINE=1 and npm offline mode. By default each call also runs under
-bubblewrap in a private network namespace with the invoking user's real home hidden behind a
-tmpfs (only the Node and Pi install trees are bind-mounted back read-only), so the real ~/.pi
-is unreachable. git: sources with .invalid hosts are rewritten to local bare repos by git
-`insteadOf`, and GIT_ALLOW_PROTOCOL=file limits git to file://. Sessions use a null
-openai-completions model on 127.0.0.1:9 whose runs the probe extension aborts before any
-request, or an in-process scripted provider (pi-ai faux) loaded as an extension.
+bubblewrap in private network and PID namespaces with the invoking user's real home, /run
+and /tmp hidden behind tmpfs (only the Node prefix, Pi's node_modules tree and the sandbox
+root are bound back), so the real ~/.pi is unreachable. git: sources with .invalid hosts are
+rewritten to local bare repos by git `insteadOf`, and GIT_ALLOW_PROTOCOL=file limits git to
+file://. Sessions use a null openai-completions model on 127.0.0.1:9 whose runs the probe
+extension aborts before any request, or an in-process scripted provider (pi-ai faux) loaded as
+an extension.
 EOF
 }
 # Emit a fatal error message to stderr and exit 1.
@@ -60,13 +61,16 @@ pi_js=$(realpath "$pi_bin")
   die "PI_BIN must resolve to the npm package launcher (dist/.../cli.js), got $pi_js"
 pi_pkg=${pi_js%/dist/*}
 [[ -f "$pi_pkg/package.json" ]] || die "no package.json above $pi_js"
+# Bind the whole npm node_modules tree that holds Pi: its dependencies are hoisted beside it.
+pi_tree=$pi_pkg
+[[ "$pi_pkg" != */node_modules/* ]] || pi_tree=${pi_pkg%%/node_modules/*}/node_modules
 node_bin=${NODE_BIN:-$(command -v node || true)}
 [[ -n "$node_bin" && -x "$node_bin" ]] || die 'set NODE_BIN or install node on PATH'
 node_bin=$(realpath "$node_bin")
 node_prefix=$(dirname "$(dirname "$node_bin")")
 real_home=$(realpath "${HOME:?HOME must be set}")
-# The Node prefix and the Pi package are bind-mounted back read-only; neither may expose the real home.
-for bound in "$node_prefix" "$pi_pkg"; do
+# The Node prefix and the Pi tree are bind-mounted back read-only; neither may expose the real home.
+for bound in "$node_prefix" "$pi_tree"; do
   [[ "$bound" != / && "$bound" != "$real_home" && "$real_home" != "$bound"/* ]] ||
     die "refusing to bind $bound into the sandbox: it is / or contains the real HOME ($real_home)"
 done
@@ -102,24 +106,27 @@ helper=$root/helper.py
 cp "$helper_src" "$helper"
 h() { python3 "$helper_src" "$@"; }
 
-# Network/home isolation (bwrap): the host tree is read-only, the real home and the user runtime
-# dir (agent/keyring sockets) are hidden behind tmpfs, only the sandbox root is writable, and the
-# network is a private namespace. Node and Pi are bound back read-only. Without bwrap the harness
-# fails closed unless --allow-env-i explicitly accepts the weaker env -i-only sandbox.
+# Network/home isolation (bwrap): the host tree is read-only; the real home, /run (user runtime
+# dir, system bus and container-engine sockets) and /tmp (X11 sockets, other users' files) are
+# hidden behind tmpfs; only the sandbox root is writable; network and PIDs are private namespaces
+# (host processes cannot be signalled, and nothing outlives a call). Node and Pi are bound back
+# read-only. Without bwrap the harness fails closed unless --allow-env-i explicitly accepts the
+# weaker env -i-only sandbox.
 sandbox=env-i
 wrap=()
 bwrap_bin=$(command -v bwrap || true)
 [[ -z "$bwrap_bin" ]] || bwrap_bin=$(realpath "$bwrap_bin")
-binds=(--ro-bind / / --dev /dev --proc /proc --tmpfs "$real_home" --tmpfs "/run/user/$(id -u)"
-  --ro-bind "$node_prefix" "$node_prefix" --ro-bind "$pi_pkg" "$pi_pkg" --bind "$root" "$root")
+binds=(--ro-bind / / --dev /dev --proc /proc --tmpfs "$real_home" --tmpfs /run --tmpfs /tmp
+  --ro-bind "$node_prefix" "$node_prefix" --ro-bind "$pi_tree" "$pi_tree" --bind "$root" "$root")
 # The repo is read-only on the host side; bind it back only when it lives outside the hidden home.
 [[ "$repo" == "$real_home"/* ]] || binds+=(--ro-bind "$repo" "$repo")
+binds+=(--unshare-net --unshare-pid --die-with-parent)
 if [[ -n "$bwrap_bin" ]] &&
-  env -i PATH=/usr/bin:/bin "$bwrap_bin" "${binds[@]}" --unshare-net /bin/true >/dev/null 2>&1; then
+  env -i PATH=/usr/bin:/bin "$bwrap_bin" "${binds[@]}" /bin/true >/dev/null 2>&1; then
   sandbox=bwrap-netns
-  wrap=("$bwrap_bin" "${binds[@]}" --unshare-net --)
+  wrap=("$bwrap_bin" "${binds[@]}" --)
 elif ((!allow_env_i)); then
-  die 'bubblewrap with --unshare-net is unavailable; refusing to run without network/home isolation (pass --allow-env-i to override)'
+  die 'bubblewrap with --unshare-net/--unshare-pid is unavailable; refusing to run without network/home isolation (pass --allow-env-i to override)'
 fi
 
 case_home=
@@ -458,7 +465,7 @@ run rpc-hooks python3 "$helper" rpc "$root/tmp/hooks.frames" "$node_bin" "$pi_js
   --model spike-faux/scripted -e "$root/ext/faux.ts" -e "$root/ext/hooks.ts"
 extra_env=()
 assert_rc 0 'scripted hook session'
-has rpc-hooks 'BLOCKED-BY-SPIKE' 'PARENT-DONE'
+has rpc-hooks 'PARENT-DONE BLOCKED-BY-SPIKE'
 absent "$root/hook-ran"
 chk seen-has "$root/probe/hooks.json.hooks" session_start tool_call:bash agent_settled
 log 'PASS extensions: a throwing extension (-e or package) aborts startup rc=1 (`Failed to load extension`); tool_call returning {block} stops a scripted bash call (no side effect) and the reason reaches the model; session_start/agent_settled fire'

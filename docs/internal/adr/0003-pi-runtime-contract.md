@@ -47,8 +47,11 @@
   - **Unchanged since 1.3.0.** `.agents/skills` auto-discovery is on, gated by trust for project
     copies. `pi mcp add|remove|list|login|logout` and `pi.registerMcpServer` exist. There are still
     no built-in subagents.
-  - **Packages cannot ship MCP or agents.** The plan assumed a native path for both; there is none.
-    A Pi package carries only extensions, skills, prompts, and themes.
+  - **No native package entries for MCP or agents.** The plan assumed a native path for both;
+    there is none. A Pi manifest declares only extensions, skills, prompts, and themes, and Pi
+    never loads `mcp.json`, settings, rules, or agents from a package by itself. A package can
+    still carry them as plain files that its own extension reads, which Decisions 3, 4, and 6
+    rely on: `ycc` ships agent definitions, `ycc-mcp` the server set, and `ycc-rules` rule files.
   - **git identity.** Pi identifies a git package by repo URL. One ystack git URL can therefore
     install only one package.
 
@@ -69,8 +72,9 @@ run. It found these gaps for ycc:
 - No subagents. The upstream example extension works, but a verbatim ycc agent fails: its Claude
   model alias resolved to Bedrock, and Claude tool names enable no tools.
 - No shell hooks, no `hooks.json`, no worktree event.
-- Packages cannot carry MCP config, settings, rules, or agents. Two settings entries for one git
-  repo URL load only the first.
+- A Pi manifest has no entries for MCP config, settings, rules, or agents; only a package's own
+  extension can load such files from it. Two settings entries for one git repo URL load only the
+  first.
 - `${CLAUDE_PLUGIN_ROOT}`, `/ycc:` references, and `$ARGUMENTS` stay literal in skill bodies.
   A prompt template that emits `/skill:x` is not expanded again.
 - User-scope packages and MCP load with no prompt. A throwing extension stops Pi from starting.
@@ -118,17 +122,17 @@ run. It found these gaps for ycc:
 
 ### Package matrix (Pi)
 
-| Package                     | Pi mechanism                                                                      | Verdict     | Notes                                                                                                                              |
-| --------------------------- | --------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `ycc`                       | Generated package: skills, `_shared`, command and subagent extensions, agent data | adapter     | Rewrite `${CLAUDE_PLUGIN_ROOT}`, `/ycc:`, `$ARGUMENTS`, and `_shared` paths. The 9 `disable-model-invocation` skills map natively. |
-| `ycc-mcp`                   | Extension package (`pi.registerMcpServer`)                                        | adapter     | `.mcp.json` parses unchanged. Packages cannot ship `mcp.json`. No SSE servers ship.                                                |
-| `ycc-hooks`                 | none                                                                              | excluded    | herdr: `herdr integration install pi`. `WorktreeCreate` is unsupported.                                                            |
-| `ycc-rules`                 | Extension package (path-rule injector) + rule files                               | adapter     | Always rules use the `installer-fallback` `AGENTS.md` link.                                                                        |
-| `ycc-all`                   | none                                                                              | fallback    | Pi packages cannot depend on Pi packages.                                                                                          |
-| `ycc-agents`                | none                                                                              | n/a         | Deferred to v7 (ADR 0001); agents ship inside `ycc`.                                                                               |
-| `@yandy-r/ycc-opencode`     | none                                                                              | n/a         | opencode-specific.                                                                                                                 |
-| `installer-fallback`        | `<agentDir>` files                                                                | fallback    | `AGENTS.md` link, opt-in `settings.json`/`mcp.json` merges, owned `~/.agents` dedupe overrides; user scope only.                   |
-| Status line, status-bar mod | `ctx.ui.setStatus`/`setWidget`/`setFooter`                                        | unsupported | A different module API. A port is new code, outside the lockstep.                                                                  |
+| Package                     | Pi mechanism                                                                      | Verdict     | Notes                                                                                                                                           |
+| --------------------------- | --------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ycc`                       | Generated package: skills, `_shared`, command and subagent extensions, agent data | adapter     | Rewrite `${CLAUDE_PLUGIN_ROOT}`, `/ycc:`, `$ARGUMENTS`, and `_shared` paths. The 9 `disable-model-invocation` skills map natively.              |
+| `ycc-mcp`                   | Extension package (`pi.registerMcpServer`)                                        | adapter     | A disabled copy of `.mcp.json` parses. Pi does not read `mcp.json` from a package; the registrar reads it as package data. No SSE servers ship. |
+| `ycc-hooks`                 | none                                                                              | excluded    | herdr: `herdr integration install pi`. `WorktreeCreate` is unsupported.                                                                         |
+| `ycc-rules`                 | Extension package (path-rule injector) + rule files                               | adapter     | Always rules use the `installer-fallback` `AGENTS.md` link.                                                                                     |
+| `ycc-all`                   | none                                                                              | fallback    | Pi packages cannot depend on Pi packages.                                                                                                       |
+| `ycc-agents`                | none                                                                              | n/a         | Deferred to v7 (ADR 0001); agents ship inside `ycc`.                                                                                            |
+| `@yandy-r/ycc-opencode`     | none                                                                              | n/a         | opencode-specific.                                                                                                                              |
+| `installer-fallback`        | `<agentDir>` files                                                                | fallback    | `AGENTS.md` link, opt-in `settings.json`/`mcp.json` merges, owned `~/.agents` dedupe overrides; user scope only.                                |
+| Status line, status-bar mod | `ctx.ui.setStatus`/`setWidget`/`setFooter`                                        | unsupported | A different module API. A port is new code, outside the lockstep.                                                                               |
 
 The full per-component matrix is in the
 [spike, section 3](../spikes/pi-runtime-contract.md#3-component--verdict-matrix).
