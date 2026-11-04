@@ -397,6 +397,30 @@ test_prep_artifact_gitignore() {
   run_prep "$repo" demo
   assert_exit "$PREP_RC" 1 'prep: rejects unrelated untracked gitignore rule'
 
+  # Bash strings drop NUL bytes, so each blob read as text must still hash.
+  repo="$(mkrepo)"
+  commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
+  printf 'existing/\n.ycc/artifacts/\n\0' >"${repo}/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects a NUL byte after the cache rule'
+
+  repo="$(mkrepo)"
+  commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
+  printf 'existing/\n.ycc/artifacts/\n\0' >"${repo}/.gitignore"
+  git -C "$repo" add .gitignore
+  printf 'existing/\n.ycc/artifacts/\n' >"${repo}/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects a staged NUL byte behind a cache-only working tree'
+
+  repo="$(mkrepo)"
+  printf 'existing/\n\0' >"${repo}/.gitignore"
+  git -C "$repo" add .gitignore
+  git -C "$repo" commit -q -m 'chore: ignore existing files with a NUL byte'
+  printf 'existing/\n.ycc/artifacts/\n' >"${repo}/.gitignore"
+  git -C "$repo" add .gitignore
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects dropping a committed NUL byte'
+
   test_prep_artifact_gitignore_crlf autocrlf
   test_prep_artifact_gitignore_crlf attributes
   test_prep_artifact_gitignore_crlf_head

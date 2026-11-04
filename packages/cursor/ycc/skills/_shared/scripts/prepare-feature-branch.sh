@@ -201,7 +201,7 @@ is_blob_text() {
 # the rule; the latter only when that content is the bytes with CRLF turned
 # into LF. Content holding NUL bytes, which bash strings drop, is refused.
 is_artifact_gitignore() {
-  local path="$1" file head='' index work norm='' entry mode type oid stage
+  local path="$1" file head='' index work norm entry mode type oid stage
   local head_mode='' index_mode='' index_oid='' work_mode clean_oid
   file="$REPO_ROOT/$path"
   [[ -f "$file" && ! -L "$file" ]] || return 1
@@ -210,10 +210,6 @@ is_artifact_gitignore() {
   work=${work%x}
   oid=$(git -C "$REPO_ROOT" hash-object --no-filters -- "$path") || return 1
   is_blob_text "$oid" "$work" || return 1
-  clean_oid=$(git -C "$REPO_ROOT" hash-object --path="$path" -- "$path") || return 1
-  if [[ "$clean_oid" != "$oid" ]] && is_blob_text "$clean_oid" "${work//$'\r\n'/$'\n'}"; then
-    norm=${work//$'\r\n'/$'\n'}
-  fi
   # ls-tree -z: "<mode> <type> <oid>\t<path>".
   while IFS= read -r -d '' entry; do
     [[ "${entry#*$'\t'}" == "$path" ]] || continue
@@ -248,7 +244,11 @@ is_artifact_gitignore() {
   fi
   is_head_plus_rule "$head" "$index" || return 1
   if ! is_head_plus_rule "$head" "$work"; then
-    [[ -n "$norm" ]] && is_head_plus_rule "$head" "$norm" || return 1
+    # Only a clean conversion that just turns CRLF into LF may qualify.
+    norm=${work//$'\r\n'/$'\n'}
+    [[ "$norm" != "$work" ]] || return 1
+    clean_oid=$(git -C "$REPO_ROOT" hash-object --path="$path" -- "$path") || return 1
+    is_blob_text "$clean_oid" "$norm" && is_head_plus_rule "$head" "$norm" || return 1
     work=$norm
   fi
   [[ "$work" != "$head" || "$index" != "$head" ]]
