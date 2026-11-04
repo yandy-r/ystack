@@ -1,7 +1,7 @@
 # @yandy-r/ycc-opencode
 
 Experimental, opt-in [OpenCode](https://opencode.ai) V2 plugin carrying the ycc bundle
-(version 6.1.1). It is unlisted and never the default install: the
+(version 6.2.0). It is unlisted and never the default install: the
 `install.sh --target opencode` file copy remains the primary path.
 
 Requires OpenCode `>=2.0.30` (V2 plugin API; V1 hook plugins are not supported).
@@ -11,7 +11,7 @@ Requires OpenCode `>=2.0.30` (V2 plugin API; V1 hook plugins are not supported).
 Add the package to the V2 `plugins` array in your own `opencode.json`, pinned to an exact release:
 
 ```json
-{ "plugins": ["@yandy-r/ycc-opencode@6.1.1"] }
+{ "plugins": ["@yandy-r/ycc-opencode@6.2.0"] }
 ```
 
 Pin the version instead of using the bare name. Right after a release, the registry can briefly serve

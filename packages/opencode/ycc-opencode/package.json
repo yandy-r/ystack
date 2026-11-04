@@ -1,6 +1,6 @@
 {
   "name": "@yandy-r/ycc-opencode",
-  "version": "6.1.1",
+  "version": "6.2.0",
   "description": "Experimental opt-in OpenCode V2 plugin registering the ycc bundle (skills, agents, commands, MCP servers, and session instructions) through its setup hook. The file-copy install remains the primary path.",
   "type": "module",
   "main": "./index.js",
