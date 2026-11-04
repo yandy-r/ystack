@@ -19,8 +19,9 @@
 #                plan-workflow regressions, per-runtime worktree roots (scripts/test-worktree-roots.sh) and
 #                the clean skill report generator (scripts/test-clean-report.sh), the
 #                grep -c fallback regression suite (scripts/test-grep-count-helpers.sh), the
-#                pipefail grep regression suite (scripts/test-pipefail-grep-helpers.sh) and
-#                artifact-store regressions (scripts/test-artifact-store.sh)
+#                pipefail grep regression suite (scripts/test-pipefail-grep-helpers.sh),
+#                artifact-store regressions (scripts/test-artifact-store.sh) and the live-harness
+#                sandbox helper regressions (scripts/test-omp-harness-sandbox.sh)
 #   - omp        checks generated OMP skill, agent and command drift (bytes and modes), content policy and golden
 #                tests, plus native package manifests, catalog listing, lockstep versions and closure, and the
 #                built-in command pin against a live omp (warns and skips when omp is absent)
@@ -260,6 +261,8 @@ run_target() {
             "${REPO_ROOT}/scripts/test-implement-plan-scripts.sh" || fail "test-implement-plan-scripts.sh"
             echo "== validate: artifact body regressions =="
             "${REPO_ROOT}/scripts/test-artifact-body.sh" || fail "test-artifact-body.sh"
+            echo "== validate: live-harness sandbox helper regressions =="
+            "${REPO_ROOT}/scripts/test-omp-harness-sandbox.sh" || fail "test-omp-harness-sandbox.sh"
             echo "== validate: formatter bundle smoke =="
             "${REPO_ROOT}/scripts/validate-formatters-bundle.sh" || fail "validate-formatters-bundle.sh"
             echo "== validate: style.sh Node CLI resolution =="

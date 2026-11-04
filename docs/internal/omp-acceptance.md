@@ -20,6 +20,20 @@ Each harness runs every omp call under `env -i` with HOME, XDG and TMPDIR inside
 `mktemp` tree under `/tmp`. No credentials are present and no request leaves the sandbox. The
 models are either a null provider on `127.0.0.1:9` or the scripted loopback provider below.
 
+Since YAN-1905 every harness (and the Pi spike) builds one bubblewrap layout through
+`omp_h_sandbox` in `scripts/lib/omp-harness-common.sh`: a read-only host tree, fresh `/dev`
+and `/proc`, the real home, `/run`, `/tmp` and `/var/tmp` hidden behind tmpfs, the omp binary
+(and the checkout or herdr where a harness needs them) bound back read-only, only the sandbox
+root writable, private network, PID and IPC namespaces, and a new session. It refuses bound
+paths that are not canonical, are `/`, re-expose a hidden directory, or sit inside the
+writable root. A probe (bounded to 60 s) fails the harness if any socket or FIFO the sandbox
+user can write to is visible outside the sandbox root, `/proc`, `/sys` and `/dev`, if
+`/run/user`, `/run/dbus` or `/tmp/.X11-unix` exists, if PID 1 is not bwrap, if an interface
+other than `lo` exists, or if the real home shows anything besides bound mount points.
+`scripts/test-omp-harness-sandbox.sh` (run by `validate.sh --only inventory`) covers the
+refusals and the probe. The environment table above records the earlier run, which used
+`--dev-bind / /` with only the real home hidden.
+
 ## How to reproduce
 
 ```bash
@@ -124,10 +138,12 @@ the release's `SHA256SUMS.txt`); a job checks that the lowest matrix version equ
 `MIN_OMP_VERSION`. The weekly cron re-tests those pins against runner-image drift; it does
 not discover new omp releases.
 
-Linux legs probe `bwrap --dev-bind / / --unshare-net /bin/true`; on Ubuntu 24.04 this fails
-until `kernel.apparmor_restrict_unprivileged_userns=0` (a runner-level sysctl, applied only
-when the probe fails and re-probed). The legs fail if bwrap still does not work; they never
-fall back to `--allow-env-i`.
+Linux legs probe the capabilities the harness layout needs (`bwrap --ro-bind / / --dev /dev
+--proc /proc --tmpfs` over the home, `/run`, `/tmp` and `/var/tmp`, `--unshare-net
+--unshare-pid --unshare-ipc --new-session --die-with-parent /bin/true`); on Ubuntu 24.04
+this fails until `kernel.apparmor_restrict_unprivileged_userns=0` (a runner-level sysctl,
+applied only when the probe fails and re-probed). The legs fail if bwrap still does not work;
+they never fall back to `--allow-env-i`.
 
 The harnesses are portable to macOS through `scripts/lib/omp-harness-common.sh`: resolved
 sandbox root (`/tmp` is a symlink to `/private/tmp`), a `/bin/sh` directory wrapper instead of

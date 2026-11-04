@@ -2,21 +2,23 @@
 # Opt-in live checks for OMP herdr session reporting (YAN-1174): herdr's own OMP integration
 # (`herdr integration install omp`) reports sessions; ycc ships no OMP hook code. Not part of CI.
 # No credentials, no network inside the sandbox, no model inference, never the real herdr.
+# shellcheck disable=SC2154 # sandbox and wrap come from lib/omp-harness-common.sh
 set -euo pipefail
 umask 077
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/omp-harness-common.sh"
 
 usage() {
   cat <<'EOF'
 Usage: test-omp-herdr-hooks.sh [--keep] [--allow-env-i] [--herdr-pane]
 
 Requires omp >=18.12.2 (OMP_BIN overrides PATH), herdr (HERDR_BIN overrides PATH), git,
-python3 with the repository's generator dependencies, timeout, and bubblewrap with a working
---unshare-net. Both binaries must be self-contained: the sandbox hides the real home behind a
-tmpfs and runs with PATH=/usr/local/bin:/usr/bin:/bin. Missing omp or herdr prints SKIP and
-exits 2 (this harness is opt-in).
+python3 with the repository's generator dependencies, timeout, and bubblewrap with working
+--unshare-net/--unshare-pid. Both binaries must be self-contained: the sandbox hides the real
+home, /run and /tmp behind tmpfs and runs with PATH=/usr/local/bin:/usr/bin:/bin. Missing omp
+or herdr prints SKIP and exits 2 (this harness is opt-in).
 
 Every omp and herdr call runs under env -i with HOME/XDG/TMPDIR inside a mktemp sandbox, and
-under bwrap with a private network namespace and the real home hidden. Without bwrap the
+under bwrap with private network and PID namespaces and a read-only host tree. Without bwrap the
 harness refuses to run unless --allow-env-i accepts the weaker env -i sandbox. Every HERDR_*
 variable of the calling shell is dropped; the only herdr sockets are a Python fake recorder
 and (with --herdr-pane) an isolated `herdr server`, both inside the sandbox. The only model is
@@ -79,7 +81,7 @@ omp=$(realpath "$omp")
 herdr=$(realpath "$herdr")
 python=$(command -v python3)
 real_home=$(realpath "${HOME:?HOME must be set}")
-root=$(mktemp -d /tmp/omp-herdr-hooks.XXXXXX)
+root=$(omp_h_mktemp_root omp-herdr-hooks)
 [[ "$root" != "$real_home" && "$root" != "$real_home"/* ]] || die 'sandbox must not live under the real HOME'
 pids=()
 herdr_pgid=
@@ -121,18 +123,7 @@ mkdir -p "$case_home"/{home,config,data,state,cache,runtime}
 : >"$home/.zshrc"
 : >"$home/.profile"
 
-sandbox=env-i
-wrap=()
-bwrap_bin=$(command -v bwrap || true)
-[[ -z "$bwrap_bin" ]] || bwrap_bin=$(realpath "$bwrap_bin")
-if [[ -n "$bwrap_bin" ]] &&
-  "$bwrap_bin" --dev-bind / / --tmpfs "$real_home" --unshare-net /bin/true >/dev/null 2>&1; then
-  sandbox=bwrap-netns
-  wrap=("$bwrap_bin" --dev-bind / / --tmpfs "$real_home" --ro-bind "$omp" "$omp"
-    --ro-bind "$herdr" "$herdr" --unshare-net --)
-elif ((!allow_env_i)); then
-  die 'bubblewrap with --unshare-net is unavailable; refusing to run without network/home isolation (pass --allow-env-i to override)'
-fi
+omp_h_sandbox "$allow_env_i" "$root" "$real_home" "$omp" "$herdr"
 
 # No inherited environment; isolated HOME/XDG tree; file-only git. Callers may append
 # NAME=VALUE assignments (env parses them) before the command.

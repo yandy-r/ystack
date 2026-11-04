@@ -48,7 +48,10 @@ All observations come from `bash scripts/test-omp-runtime-contract-spike.sh` (pa
 - Every `omp` call runs as `env -i PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 TERM=dumb NO_COLOR=1`.
 - `HOME`, `XDG_{CONFIG,DATA,STATE,CACHE}_HOME`, `XDG_RUNTIME_DIR`, and `TMPDIR` point into a per-case tree under `mktemp -d /tmp/omp-runtime-contract-spike.XXXXXX`.
 - A guard aborts if `HOME` would resolve outside the sandbox or under the real home.
-- Each call also runs as `bwrap --dev-bind / / --tmpfs $REAL_HOME --ro-bind <omp> <omp> --unshare-net --`. That gives a private network namespace and hides the real home, so the real `~/.omp` is unreachable. The harness fails closed if bwrap cannot create the network namespace, unless `--allow-env-i` is passed. The verified run used `sandbox=bwrap-netns`.
+- Each call also runs under the shared bubblewrap layout of `omp_h_sandbox` (`scripts/lib/omp-harness-common.sh`, YAN-1905): `bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs $REAL_HOME --tmpfs /run --tmpfs /tmp --tmpfs /var/tmp --ro-bind <omp> <omp> --bind <sandbox> <sandbox> --unshare-net --unshare-pid --unshare-ipc --new-session --die-with-parent --`.
+  - The host tree is read-only and only the sandbox root is writable. The real home (so the real `~/.omp`), `/run` (user runtime dir, system D-Bus, container-engine sockets), `/tmp` and `/var/tmp` (X11 sockets) are hidden; network, PIDs and IPC are private namespaces.
+  - A probe (bounded to 60 s) fails the harness if any socket or FIFO the sandbox user can write to is visible outside the sandbox root, `/proc`, `/sys` and `/dev`, if `/run/user`, `/run/dbus` or `/tmp/.X11-unix` exists, if PID 1 is not bwrap, if any network interface other than `lo` exists, or if the real home shows anything besides the mount points of bound paths. An `omp --version` preflight inside the sandbox rejects a non-self-contained `OMP_BIN`.
+  - The harness fails closed if bwrap cannot build this layout, unless `--allow-env-i` is passed. The original spike run used `sandbox=bwrap-netns` with the earlier `--dev-bind / / --tmpfs $REAL_HOME` layout.
 - Git is file-only:
   - `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null`, `GIT_ALLOW_PROTOCOL=file`, and an empty credential helper;
   - `url.file://<bare>.insteadOf` rewrites of `https://omp-spike.invalid/{omp,claude}.git`.
@@ -396,4 +399,4 @@ OMP_BIN=/abs/path/to/omp bash scripts/test-omp-runtime-contract-spike.sh
 bash scripts/test-omp-runtime-contract-spike.sh --allow-env-i   # weaker sandbox when bwrap netns is unavailable
 ```
 
-Requirements: `omp >= 18.12.2`, `git`, `python3`, `timeout`, and `bwrap` with a working `--unshare-net`. Without it the harness exits 1 (`refusing to run without network/home isolation`). `--allow-env-i` overrides that and runs with `sandbox=env-i`, which has no network namespace and does not hide the real home; only the `env -i` HOME guard remains.
+Requirements: `omp >= 18.12.2`, `git`, `python3`, `timeout`, and `bwrap` with working `--unshare-net` and `--unshare-pid` (the `omp_h_sandbox` layout). Without it the harness exits 1 (`refusing to run without network/home isolation`). `--allow-env-i` overrides that and runs with `sandbox=env-i`, which has no network or PID namespace and hides neither the real home nor `/run` and `/tmp`; only the `env -i` HOME guard remains.

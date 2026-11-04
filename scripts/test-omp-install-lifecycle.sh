@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Opt-in live checks for `./install.sh --target omp` against real omp (YAN-1172).
 # Not part of CI. No credentials, no network inside the sandbox, no model inference.
-# shellcheck disable=SC2154 # omp_in_dir comes from lib/omp-harness-common.sh
+# shellcheck disable=SC2154 # omp_in_dir, sandbox and wrap come from lib/omp-harness-common.sh
 set -euo pipefail
 umask 077
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/omp-harness-common.sh"
@@ -13,12 +13,13 @@ Usage: test-omp-install-lifecycle.sh [--keep] [--allow-env-i]
 Runs the real ./install.sh --target omp (YCC_INSTALL_SKIP_BUILD=1: no generator, validator
 or formatter touches the checkout) against real omp >=18.12.2 (OMP_BIN overrides PATH;
 default ~/.local/bin/omp). Requires git, python3 with the repository's generator
-dependencies, timeout, tar, and bubblewrap with a working --unshare-net.
+dependencies, timeout, tar, and bubblewrap with working --unshare-net/--unshare-pid.
 
 Every command runs under env -i with HOME/XDG/TMPDIR inside a mktemp sandbox under /tmp
 and PATH=<sandbox>/bin:/usr/local/bin:/usr/bin:/bin (<sandbox>/bin/omp links to OMP_BIN),
-and under bwrap with a private network namespace, the real home hidden behind a tmpfs,
-and this checkout bind-mounted read-only (an installer write into the repo fails).
+and under bwrap with private network and PID namespaces, a read-only host tree, the real
+home, /run and /tmp hidden behind tmpfs, and this checkout bind-mounted read-only (an
+installer write into the repo fails).
 Without bwrap the harness refuses to run unless --allow-env-i accepts the weaker env -i
 sandbox. OMP_BIN must be a self-contained binary (a Bun-installed script fails the
 preflight). The upgrade and migration steps use a sandbox copy of this checkout (tracked
@@ -82,18 +83,7 @@ cd "$root/work"
 safe_path=$(omp_h_safe_path "$allow_env_i" "$root/bin")
 omp_h_check_path_tools "$safe_path" bash git python3 timeout realpath
 
-sandbox=env-i
-wrap=()
-bwrap_bin=$(command -v bwrap || true)
-[[ -z "$bwrap_bin" ]] || bwrap_bin=$(realpath "$bwrap_bin")
-if [[ -n "$bwrap_bin" ]] &&
-  "$bwrap_bin" --dev-bind / / --tmpfs "$real_home" --unshare-net /bin/true >/dev/null 2>&1; then
-  sandbox=bwrap-netns
-  wrap=("$bwrap_bin" --dev-bind / / --tmpfs "$real_home" --ro-bind "$omp" "$omp"
-    --ro-bind "$repo" "$repo" --unshare-net --)
-elif ((!allow_env_i)); then
-  die 'bubblewrap with --unshare-net is unavailable; refusing to run without network/home isolation (pass --allow-env-i to override)'
-fi
+omp_h_sandbox "$allow_env_i" "$root" "$real_home" "$omp" "$repo"
 
 # The current case: its HOME/XDG tree and extra environment (OMP_PROFILE).
 case_home=$root/case

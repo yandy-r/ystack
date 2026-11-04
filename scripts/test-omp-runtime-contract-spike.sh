@@ -3,6 +3,7 @@
 # runtime contract. No real auth, no credentials, no model inference.
 # Evidence dossier: docs/internal/spikes/omp-runtime-contract.md
 # Decision record: docs/internal/adr/0002-omp-runtime-contract.md
+# shellcheck disable=SC2154 # sandbox and wrap come from lib/omp-harness-common.sh
 set -euo pipefail
 umask 077
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/omp-harness-common.sh"
@@ -18,13 +19,14 @@ plus git, python3, timeout, and standard Linux utilities. No inference.
 --output-dir DIR  Existing parent directory under /tmp; implies --keep.
 --allow-env-i     Run without bubblewrap isolation (env -i only; no network
                   namespace, real home not hidden). Without this flag the
-                  harness fails closed when bwrap cannot create a netns.
+                  harness fails closed when bwrap cannot create the sandbox.
 -h, --help        Show help. Default sandbox: mktemp -d under /tmp.
 
 Every omp call runs under `env -i` with HOME, XDG_*, TMPDIR, and git config
-isolated under the sandbox. By default each call also runs under bubblewrap in a
-private network namespace with the invoking user's real home hidden behind a
-tmpfs (only the omp binary is bind-mounted back read-only), so the real ~/.omp
+isolated under the sandbox. By default each call also runs under bubblewrap with
+private network and PID namespaces, a read-only host tree, and the invoking
+user's real home, /run and /tmp hidden behind tmpfs (only the omp binary and
+the sandbox are bound back), so the real ~/.omp
 is unreachable. HTTPS-shaped .invalid URLs are rewritten to local bare repos by
 git `insteadOf`, and GIT_ALLOW_PROTOCOL=file limits git to file://. The only
 "model" is a null openai-completions provider on 127.0.0.1:9; no prompt is ever
@@ -85,20 +87,9 @@ url_cl=https://omp-spike.invalid/claude.git
 bare_omp=$root/omp.git
 bare_cl=$root/claude.git
 
-# Network/home isolation: bwrap (private netns + hidden real home) is required
-# unless --allow-env-i explicitly accepts the weaker env -i-only sandbox.
-sandbox=env-i
-wrap=()
-bwrap_bin=$(command -v bwrap || true)
-[[ -z "$bwrap_bin" ]] || bwrap_bin=$(realpath "$bwrap_bin")
-if [[ -n "$bwrap_bin" ]] &&
-  "$bwrap_bin" --dev-bind / / --tmpfs "$real_home" --ro-bind "$omp" "$omp" --unshare-net "$omp" --version >/dev/null 2>&1; then
-  sandbox=bwrap-netns
-  # Absolute path: clean() launches the wrapper under env -i with the restricted safe_path.
-  wrap=("$bwrap_bin" --dev-bind / / --tmpfs "$real_home" --ro-bind "$omp" "$omp" --unshare-net --)
-elif ((!allow_env_i)); then
-  die 'bubblewrap with --unshare-net is unavailable; refusing to run without network/home isolation (pass --allow-env-i to override)'
-fi
+# Network/home isolation: bwrap (see omp_h_sandbox) is required unless --allow-env-i
+# explicitly accepts the weaker env -i-only sandbox. Only the omp binary is bound back.
+omp_h_sandbox "$allow_env_i" "$root" "$real_home" "$omp"
 
 case_home=
 # Select (and create) the isolated HOME/XDG tree for subsequent omp calls.
@@ -127,6 +118,9 @@ clean() {
     "$@"
 }
 extra_env=()
+# Fail early, with a reason, when omp needs anything the sandbox hides (e.g. a Bun script).
+clean ${wrap[@]+"${wrap[@]}"} timeout -k 5 30 "$omp" --version >/dev/null 2>&1 ||
+  die "OMP_BIN ($omp) does not run inside the $sandbox sandbox: it must be a self-contained binary"
 # Write a status line to stdout and append it to the transcript.
 log() { printf '%s\n' "$*" | tee -a "$root/transcript.log"; }
 rc=0

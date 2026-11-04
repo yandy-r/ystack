@@ -3,6 +3,7 @@
 # runtime contract. No real auth, no credentials, no model inference.
 # Evidence dossier: docs/internal/spikes/pi-runtime-contract.md
 # Decision record: docs/internal/adr/0003-pi-runtime-contract.md
+# shellcheck disable=SC2154 # sandbox and wrap come from lib/omp-harness-common.sh
 set -euo pipefail
 umask 077
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/omp-harness-common.sh"
@@ -19,7 +20,7 @@ timeout, and standard Linux utilities. No inference.
 --output-dir DIR  Existing parent directory under /tmp; implies --keep.
 --allow-env-i     Run without bubblewrap isolation (env -i only; no network
                   namespace, real home not hidden). Without this flag the
-                  harness fails closed when bwrap cannot create a netns.
+                  harness fails closed when bwrap cannot create the sandbox.
 -h, --help        Show help. Default sandbox: mktemp -d under /tmp.
 
 Every pi call runs under `env -i` with HOME, XDG_*, TMPDIR, npm and git config isolated
@@ -69,11 +70,6 @@ node_bin=${NODE_BIN:-$(command -v node || true)}
 node_bin=$(realpath "$node_bin")
 node_prefix=$(dirname "$(dirname "$node_bin")")
 real_home=$(realpath "${HOME:?HOME must be set}")
-# The Node prefix and the Pi tree are bind-mounted back read-only; neither may expose the real home.
-for bound in "$node_prefix" "$pi_tree"; do
-  [[ "$bound" != / && "$bound" != "$real_home" && "$real_home" != "$bound"/* ]] ||
-    die "refusing to bind $bound into the sandbox: it is / or contains the real HOME ($real_home)"
-done
 [[ -d "$parent" ]] || die '--output-dir must exist'
 parent=$(realpath "$parent")
 omp_h_under_tmp "$parent" || die 'output must be under /tmp'
@@ -106,28 +102,14 @@ helper=$root/helper.py
 cp "$helper_src" "$helper"
 h() { python3 "$helper_src" "$@"; }
 
-# Network/home isolation (bwrap): the host tree is read-only; the real home, /run (user runtime
-# dir, system bus and container-engine sockets) and /tmp (X11 sockets, other users' files) are
-# hidden behind tmpfs; only the sandbox root is writable; network and PIDs are private namespaces
-# (host processes cannot be signalled, and nothing outlives a call). Node and Pi are bound back
-# read-only. Without bwrap the harness fails closed unless --allow-env-i explicitly accepts the
-# weaker env -i-only sandbox.
-sandbox=env-i
-wrap=()
-bwrap_bin=$(command -v bwrap || true)
-[[ -z "$bwrap_bin" ]] || bwrap_bin=$(realpath "$bwrap_bin")
-binds=(--ro-bind / / --dev /dev --proc /proc --tmpfs "$real_home" --tmpfs /run --tmpfs /tmp
-  --ro-bind "$node_prefix" "$node_prefix" --ro-bind "$pi_tree" "$pi_tree" --bind "$root" "$root")
-# The repo is read-only on the host side; bind it back only when it lives outside the hidden home.
-[[ "$repo" == "$real_home"/* ]] || binds+=(--ro-bind "$repo" "$repo")
-binds+=(--unshare-net --unshare-pid --die-with-parent)
-if [[ -n "$bwrap_bin" ]] &&
-  env -i PATH=/usr/bin:/bin "$bwrap_bin" "${binds[@]}" /bin/true >/dev/null 2>&1; then
-  sandbox=bwrap-netns
-  wrap=("$bwrap_bin" "${binds[@]}" --)
-elif ((!allow_env_i)); then
-  die 'bubblewrap with --unshare-net/--unshare-pid is unavailable; refusing to run without network/home isolation (pass --allow-env-i to override)'
-fi
+# Network/home isolation (bwrap, see omp_h_sandbox): read-only host tree; the real home, /run and
+# /tmp hidden behind tmpfs; private network and PID namespaces. Node, Pi's tree and (when outside
+# the hidden home) the read-only checkout are bound back; omp_h_sandbox refuses any of them that
+# would re-expose the real home. Without bwrap the harness fails closed unless --allow-env-i
+# explicitly accepts the weaker env -i-only sandbox.
+ro_paths=("$node_prefix" "$pi_tree")
+[[ "$repo" == "$real_home"/* ]] || ro_paths+=("$repo")
+omp_h_sandbox "$allow_env_i" "$root" "$real_home" "${ro_paths[@]}"
 
 case_home=
 agent=
