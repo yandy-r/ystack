@@ -10,6 +10,8 @@ The helper echoes the prepared branch name on success.
 
 "Trunk" means `main`/`master`/`trunk`/`develop`, plus the `trunk` named in `RELEASING.md` when the repo has one (`branching-model.md` in this directory). Rows marked _(RELEASING.md)_ apply only when `release-state.sh get` reports `present=1`; without the file the helper behaves exactly as it did before the release model.
 
+"Plan-only dirty" means every changed, staged or untracked path is a plan artifact for the slug (`docs/plans/<slug>/*`, `docs/orchestration/<slug>*`, `docs/prps/{plans,specs,prds}/<slug>*`), matched from the repository root or from the directory the helper runs in (package-local `scope: local` plans), or a `.gitignore` whose only change, in the working tree, the index or both, appends one `.ycc/artifacts/` rule line.
+
 | Current State                                                      | Helper Behavior                                                                                                                                        |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | On `feat/<slug>`                                                   | Idempotent no-op; echoes branch and exits 0                                                                                                            |

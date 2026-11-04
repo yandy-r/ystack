@@ -345,6 +345,54 @@ test_prep_artifact_gitignore() {
   assert_eq "$(current_branch "$repo")" 'feat/demo' 'prep: switches branch with stage-like dir name'
 
   repo="$(mkrepo)"
+  commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
+  chmod +x "${repo}/.gitignore"
+  printf '%s\n' '.ycc/artifacts/' >>"${repo}/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects working-tree gitignore mode change with cache rule'
+  assert_eq "$(current_branch "$repo")" 'main' 'prep: stays on trunk with working-tree mode change'
+
+  repo="$(mktemp -d "${SANDBOX_ROOT}/repo.XXXXXX")"
+  git -C "$repo" init -q
+  printf '%s\n' '.ycc/artifacts/' >"${repo}/.gitignore"
+  git -C "$repo" add .gitignore
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 0 'prep: accepts staged cache-only gitignore before the first commit'
+  assert_eq "$(current_branch "$repo")" 'feat/demo' 'prep: switches branch before the first commit'
+
+  repo="$(mkrepo)"
+  commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
+  git -C "$repo" checkout -q -b side
+  commit_file "$repo" .gitignore 'side/' 'chore: ignore side files'
+  git -C "$repo" checkout -q main
+  commit_file "$repo" .gitignore 'main/' 'chore: ignore main files'
+  git -C "$repo" merge -q side >/dev/null 2>&1 || true
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects conflicted gitignore'
+
+  repo="$(mkrepo)"
+  printf '%s\n' '.ycc/artifacts/' >"${repo}/.gitignore"
+  git -C "$repo" add -N .gitignore
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 0 'prep: accepts intent-to-add cache-only gitignore'
+  assert_eq "$(current_branch "$repo")" 'feat/demo' 'prep: switches branch with intent-to-add gitignore'
+
+  repo="$(mkrepo)"
+  mkdir -p "${repo}/packages/app/docs/plans/demo"
+  printf '%s\n' 'plan' >"${repo}/packages/app/docs/plans/demo/plan.md"
+  run_prep "${repo}/packages/app" demo
+  assert_exit "$PREP_RC" 0 'prep: accepts package-local plan when run from the package'
+  assert_eq "$(current_branch "$repo")" 'feat/demo' 'prep: switches branch with package-local plan'
+
+  repo="$(mkrepo)"
+  mkdir -p "${repo}/packages/app/docs/plans/demo"
+  printf '%s\n' 'plan' >"${repo}/packages/app/docs/plans/demo/plan.md"
+  printf '%s\n' 'notes' >"${repo}/other.txt"
+  run_prep "${repo}/packages/app" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects unrelated file beside package-local plan'
+  assert_contains "$PREP_ERR" 'other.txt' 'prep: reports unrelated file beside package-local plan'
+
+  repo="$(mkrepo)"
   printf '%s\n' '.ycc/artifacts/' 'unrelated/' >"${repo}/.gitignore"
   run_prep "$repo" demo
   assert_exit "$PREP_RC" 1 'prep: rejects unrelated untracked gitignore rule'

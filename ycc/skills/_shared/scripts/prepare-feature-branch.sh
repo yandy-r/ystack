@@ -9,8 +9,9 @@
 # Behavior:
 #   - Rejects an unrelated dirty checkout (only plan-artifact paths allowed:
 #     docs/plans/<slug>/*, docs/orchestration/<slug>*,
-#     docs/prps/{plans,specs,prds}/<slug>*, plus a .gitignore whose only
-#     change appends one .ycc/artifacts/ rule line).
+#     docs/prps/{plans,specs,prds}/<slug>*, from the repo root or the cwd,
+#     plus a .gitignore whose only change appends one .ycc/artifacts/ rule
+#     line).
 #   - On feat/<slug>: idempotent no-op.
 #   - On trunk (main/master/trunk/develop, plus the RELEASING.md trunk) and
 #     feat/<slug> exists: switch to it.
@@ -178,17 +179,20 @@ is_head_plus_rule() {
 }
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
+# cwd relative to REPO_ROOT ("" at the root, else ending in "/").
+REPO_PREFIX="$(git rev-parse --show-prefix)"
 
 # Accept a .gitignore (path relative to REPO_ROOT) whose working-tree and
 # stage-0 contents each equal its HEAD content (empty when new) or HEAD plus
 # one cache rule line, and at least one differs from HEAD. The working tree
-# must be a regular non-symlink file; the index mode must be 100644 or 100755
-# and equal HEAD's. Refuse conflict stages and staged deletions; no index entry
-# for a path new to HEAD counts as equal to HEAD. Blobs are read by oid so a
-# path like `0:x/.gitignore` is never parsed as a revision.
+# must be a regular non-symlink file whose mode matches the index (or HEAD,
+# else 100644); the index mode must be 100644 or 100755 and equal HEAD's.
+# Refuse conflict stages and staged deletions; no index entry for a path new
+# to HEAD counts as equal to HEAD. Blobs are read by oid so a path like
+# `0:x/.gitignore` is never parsed as a revision.
 is_artifact_gitignore() {
   local path="$1" file head='' index work entry mode type oid stage
-  local head_mode='' index_mode='' index_oid=''
+  local head_mode='' index_mode='' index_oid='' work_mode
   file="$REPO_ROOT/$path"
   [[ -f "$file" && ! -L "$file" ]] || return 1
   # The x sentinel keeps trailing newlines that command substitution strips.
@@ -219,19 +223,37 @@ is_artifact_gitignore() {
   elif [[ -n "$head_mode" ]]; then
     return 1
   fi
+  # diff-files -z --raw: ":<srcmode> <dstmode> <srcoid> <dstoid> <status>\0".
+  if IFS= read -r -d '' entry < <(git -C "$REPO_ROOT" --literal-pathspecs diff-files -z --raw -- "$path"); then
+    read -r _ work_mode _ <<<"${entry#:}"
+    [[ "$work_mode" == "${index_mode:-${head_mode:-100644}}" ]] || return 1
+  fi
   [[ "$work" != "$head" || "$index" != "$head" ]] || return 1
   is_head_plus_rule "$head" "$work" && is_head_plus_rule "$head" "$index"
 }
 
-is_plan_artifact() {
-  local path="$1"
-  case "$path" in
+# Plan-artifact paths relative to the directory the plan was written from.
+is_plan_path() {
+  case "$1" in
     docs/plans/"${FEATURE_SLUG}"/*) return 0 ;;
     docs/orchestration/"${FEATURE_SLUG}"*) return 0 ;;
     docs/prps/plans/"${FEATURE_SLUG}"*) return 0 ;;
     docs/prps/specs/"${FEATURE_SLUG}"*) return 0 ;;
     docs/prps/prds/"${FEATURE_SLUG}"*) return 0 ;;
-    .gitignore|*/.gitignore) is_artifact_gitignore "$path"; return $? ;;
+    *) return 1 ;;
+  esac
+}
+
+# $1 is root-relative. Plan paths match from the root or, for package-local
+# (`scope: local`) plans, from the cwd; .gitignore checks stay root-relative.
+is_plan_artifact() {
+  local path="$1"
+  is_plan_path "$path" && return 0
+  if [[ -n "$REPO_PREFIX" && "$path" == "$REPO_PREFIX"* ]]; then
+    is_plan_path "${path#"$REPO_PREFIX"}" && return 0
+  fi
+  case "$path" in
+    .gitignore|*/.gitignore) is_artifact_gitignore "$path" ;;
     *) return 1 ;;
   esac
 }
@@ -244,9 +266,9 @@ collect_dirty() {
   # `git status --porcelain` and `--untracked-files=all`'s memory cost).
   git -C "$REPO_ROOT" ls-files -z --others --exclude-standard
   # Modified-but-unstaged tracked files.
-  git -C "$REPO_ROOT" diff -z --name-only --no-renames --no-relative
+  git -C "$REPO_ROOT" diff -z --name-only --no-renames
   # Staged tracked files (added/modified/deleted).
-  git -C "$REPO_ROOT" diff -z --name-only --no-renames --no-relative --cached
+  git -C "$REPO_ROOT" diff -z --name-only --no-renames --cached
 }
 
 while IFS= read -r -d '' path; do
