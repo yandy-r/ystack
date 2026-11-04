@@ -34,8 +34,8 @@
 #
 # Sandbox note (YAN-1555, YAN-1905): every harness prefers the shared bwrap layout
 # (omp_h_sandbox in scripts/lib/omp-harness-common.sh): read-only host tree, fresh
-# /dev and /proc, the real home, /run and /tmp hidden behind tmpfs, and private
-# network and PID namespaces. GitHub-hosted macOS runners have no
+# /dev and /proc, the real home, /run, /tmp and /var/tmp hidden behind tmpfs, and
+# private network, PID and IPC namespaces. GitHub-hosted macOS runners have no
 # bubblewrap, so macOS legs pass --allow-env-i EXPLICITLY in that step only:
 # sandbox = env -i with a throwaway HOME/XDG tree and the null/loopback
 # provider, no private network namespace and the real home NOT hidden behind a

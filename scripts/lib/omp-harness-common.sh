@@ -17,6 +17,8 @@
 #   omp_in_dir                                array: prefix, then DIR and a command (portable `env -C`)
 #   omp_h_sandbox ALLOW_ENV_I ROOT REAL_HOME [RO_PATH...]
 #                                             select the sandbox: sets `sandbox` and `wrap`
+#   omp_h_sandbox_probe ROOT REAL_HOME [RO_PATH...]
+#                                             fail unless the selected bwrap sandbox isolates
 #
 # YCC_HARNESS_EXTRA_PATH: colon-separated absolute directories placed after LEAD_DIR and before
 # /usr/local/bin in the sandbox PATH. It exists for macOS runners, where GNU coreutils and a
@@ -99,23 +101,36 @@ omp_h_check_path_tools() {
 # files) are hidden behind tmpfs; /dev and /proc are fresh; network, PID and IPC are private
 # namespaces and the command runs in a new session, so host processes cannot be signalled,
 # the caller's terminal cannot be fed keystrokes, and nothing outlives a call. Each RO_PATH
-# (binaries, the checkout) is bound back read-only, then ROOT read-write. Every path must be
-# canonical; neither ROOT nor an RO_PATH may be / or contain the real home (that would
-# re-expose it), and no RO_PATH may sit inside ROOT (the later ROOT bind would make it
-# writable). A path below the real home is fine: only that subtree becomes visible.
+# (binaries, the checkout) is bound back read-only, then ROOT read-write.
+#
+# Path rules: REAL_HOME, ROOT and every RO_PATH must be absolute and not /. ROOT must not be
+# the real home or sit below it. No path may be or contain the real home, /run, /tmp or
+# /var/tmp (a later bind would re-expose the hidden host directory), and no RO_PATH may sit
+# inside ROOT (the later ROOT bind would make it writable). An RO_PATH below the real home is
+# fine: only that subtree becomes visible. With bwrap present every path must also be
+# canonical, since these string checks do not hold for //, .. or symlinks.
 #
 # Sets `sandbox` to bwrap-netns and `wrap` to the bwrap argv ending in `--` when the layout
 # works and passes omp_h_sandbox_probe. Without a working bwrap it sets `sandbox=env-i` and an
-# empty `wrap` only when ALLOW_ENV_I is 1; otherwise it fails closed.
+# empty `wrap` only when ALLOW_ENV_I is 1 (warning when bwrap exists but failed); otherwise it
+# fails closed.
 omp_h_sandbox() {
-  local allow_env_i=$1 root=$2 real_home=$3 bin path binds err
+  local allow_env_i=$1 root=$2 real_home=$3 bin path hidden binds err=
   shift 3
+  [[ "$real_home" == /* && "$real_home" != / ]] ||
+    omp_h_die "the real HOME must be an absolute path other than /, got '$real_home'"
+  [[ "$root" != "$real_home" && "$root" != "$real_home"/* ]] ||
+    omp_h_die "the sandbox root ($root) must not be or live under the real HOME ($real_home)"
   for path in "$root" "$@"; do
-    [[ "$path" == /* && "$path" != / && "$path" != "$real_home" && "$real_home" != "$path"/* ]] ||
-      omp_h_die "refusing to bind '$path' into the sandbox: it is not absolute, is /, or contains the real HOME ($real_home)"
+    [[ "$path" == /* && "$path" != / ]] ||
+      omp_h_die "refusing to bind '$path' into the sandbox: it is not absolute or is /"
+    for hidden in "$real_home" /run /tmp /var/tmp; do
+      [[ "$path" != "$hidden" && "$hidden" != "$path"/* ]] ||
+        omp_h_die "refusing to bind '$path' into the sandbox: it would re-expose $hidden"
+    done
   done
   for path in "$@"; do
-    [[ "$path" != "$root" && "$path" != "$root"/* ]] ||
+    [[ "$path" != "$root"/* ]] ||
       omp_h_die "refusing to bind '$path' read-only: it is inside the writable sandbox root ($root)"
   done
   binds=(--ro-bind / / --dev /dev --proc /proc --tmpfs "$real_home" --tmpfs /run --tmpfs /tmp
@@ -129,8 +144,7 @@ omp_h_sandbox() {
   bin=$(command -v bwrap || true)
   if [[ -n "$bin" ]]; then
     bin=$(realpath "$bin")
-    # The string checks above only hold for canonical paths (no //, .., or symlinks).
-    for path in "$root" "$@"; do
+    for path in "$real_home" "$root" "$@"; do
       [[ "$(realpath -m -- "$path")" == "$path" ]] ||
         omp_h_die "refusing to bind non-canonical path '$path' into the sandbox"
     done
@@ -141,15 +155,20 @@ omp_h_sandbox() {
       omp_h_sandbox_probe "$root" "$real_home" "$@"
       return 0
     fi
+    err=${err:-bwrap exited non-zero}
   fi
   ((allow_env_i)) ||
     omp_h_die "bubblewrap with --unshare-net/--unshare-pid is unavailable${err:+ ($err)}; refusing to run without network/home isolation (pass --allow-env-i to override)"
+  [[ -z "$err" ]] ||
+    printf 'WARNING: the bubblewrap layout failed (%s); --allow-env-i falls back to env -i\n' "$err" >&2
 }
 
 # omp_h_sandbox_probe ROOT REAL_HOME [RO_PATH...]: fail unless the selected bwrap sandbox
-# isolates. Inside it: no socket under /run, /tmp or /var outside ROOT, the host's runtime dirs
-# are gone, PID 1 is bwrap, the only network interface is lo, and the real home holds nothing
-# but the mount points of RO_PATHs below it.
+# isolates. Inside it (bounded to 60 s): no socket or FIFO the sandbox user can write to
+# exists anywhere outside ROOT, /proc, /sys and /dev (a read-only mount does not stop
+# connect(), so the whole tree is scanned), the host's runtime dirs are gone, PID 1 is bwrap,
+# the only network interface is lo, and the real home holds nothing but the mount points of
+# RO_PATHs below it.
 omp_h_sandbox_probe() {
   local root=$1 real_home=$2 out path allowed=
   shift 2
@@ -158,10 +177,15 @@ omp_h_sandbox_probe() {
     [[ "$path" != "$real_home"/* ]] || { path=${path#"$real_home"/}; allowed+=" ${path%%/*}"; }
   done
   # shellcheck disable=SC2016 # the script runs inside the sandbox: $1 = ROOT, $2 = REAL_HOME
-  out=$(env -i PATH=/usr/bin:/bin "${wrap[@]}" /bin/sh -c '
-    command -v find >/dev/null || { echo "find is missing"; exit 1; }
-    leaked=$(find /run /tmp /var -type s 2>/dev/null | grep -vF -- "$1/") || true
-    [ -z "$leaked" ] || { printf "socket visible: %s\n" "$leaked"; exit 1; }
+  out=$(env -i PATH=/usr/bin:/bin "${wrap[@]}" timeout -k 5 60 /bin/sh -c '
+    for t in find awk cat; do
+      command -v "$t" >/dev/null || { echo "$t is missing"; exit 1; }
+    done
+    found=$(find / \( -path /proc -o -path /sys -o -path /dev \) -prune -o \
+      \( -type s -o -type p \) -writable -print 2>/dev/null)
+    leaked=$(printf "%s\n" "$found" | awk -v p="$1/" "NF && index(\$0, p) != 1") ||
+      { echo "socket scan failed"; exit 1; }
+    [ -z "$leaked" ] || { printf "host socket or FIFO visible: %s\n" "$leaked"; exit 1; }
     for d in /run/user /run/dbus /tmp/.X11-unix; do
       [ ! -e "$d" ] || { printf "host path visible: %s\n" "$d"; exit 1; }
     done
@@ -173,5 +197,5 @@ omp_h_sandbox_probe() {
       case " $3 " in *" ${e##*/} "*) ;; *) printf "real home not hidden: %s\n" "$e"; exit 1 ;; esac
     done
   ' omp-sandbox-probe "$root" "$real_home" "$allowed" 2>&1) ||
-    omp_h_die "bubblewrap sandbox probe failed: ${out:-probe exited non-zero}"
+    omp_h_die "bubblewrap sandbox probe failed: ${out:-probe exited non-zero or timed out}"
 }

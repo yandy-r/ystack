@@ -22,11 +22,16 @@ models are either a null provider on `127.0.0.1:9` or the scripted loopback prov
 
 Since YAN-1905 every harness (and the Pi spike) builds one bubblewrap layout through
 `omp_h_sandbox` in `scripts/lib/omp-harness-common.sh`: a read-only host tree, fresh `/dev`
-and `/proc`, the real home, `/run` and `/tmp` hidden behind tmpfs, the omp binary (and the
-checkout or herdr where a harness needs them) bound back read-only, only the sandbox root
-writable, and private network and PID namespaces. A probe fails the harness if any host
-socket under `/run` or `/tmp`, `/run/user`, `/run/dbus` or `/tmp/.X11-unix` is visible, or if
-PID 1 is not bwrap. The environment table above records the earlier run, which used
+and `/proc`, the real home, `/run`, `/tmp` and `/var/tmp` hidden behind tmpfs, the omp binary
+(and the checkout or herdr where a harness needs them) bound back read-only, only the sandbox
+root writable, private network, PID and IPC namespaces, and a new session. It refuses bound
+paths that are not canonical, are `/`, re-expose a hidden directory, or sit inside the
+writable root. A probe (bounded to 60 s) fails the harness if any socket or FIFO the sandbox
+user can write to is visible outside the sandbox root, `/proc`, `/sys` and `/dev`, if
+`/run/user`, `/run/dbus` or `/tmp/.X11-unix` exists, if PID 1 is not bwrap, if an interface
+other than `lo` exists, or if the real home shows anything besides bound mount points.
+`scripts/test-omp-harness-sandbox.sh` (run by `validate.sh --only inventory`) covers the
+refusals and the probe. The environment table above records the earlier run, which used
 `--dev-bind / /` with only the real home hidden.
 
 ## How to reproduce
