@@ -182,6 +182,12 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 # cwd relative to REPO_ROOT ("" at the root, else ending in "/").
 REPO_PREFIX="$(git rev-parse --show-prefix)"
 
+# is_blob_text <oid> <text> — succeed when <text> hashes to blob <oid>, so
+# content bash read into a string lost no NUL bytes on the way.
+is_blob_text() {
+  [[ "$1" == "$(printf '%s' "$2" | git -C "$REPO_ROOT" hash-object --no-filters --stdin)" ]]
+}
+
 # Accept a .gitignore (path relative to REPO_ROOT) whose working-tree and
 # stage-0 contents each equal its HEAD content (empty when new) or HEAD plus
 # one cache rule line, and at least one differs from HEAD. The working tree
@@ -189,15 +195,21 @@ REPO_PREFIX="$(git rev-parse --show-prefix)"
 # else 100644); the index mode must be 100644 or 100755 and equal HEAD's.
 # Refuse conflict stages and staged deletions; no index entry for a path new
 # to HEAD counts as equal to HEAD. Blobs are read by oid so a path like
-# `0:x/.gitignore` is never parsed as a revision.
+# `0:x/.gitignore` is never parsed as a revision. The working tree passes when
+# either its bytes or, under a line-ending conversion (core.autocrlf, eol=crlf,
+# text=auto), the content Git's clean conversion produces is HEAD or HEAD plus
+# the rule; the latter only when that content is the bytes with CRLF turned
+# into LF. Content holding NUL bytes, which bash strings drop, is refused.
 is_artifact_gitignore() {
-  local path="$1" file head='' index work entry mode type oid stage
-  local head_mode='' index_mode='' index_oid='' work_mode
+  local path="$1" file head='' index work norm entry mode type oid stage
+  local head_mode='' index_mode='' index_oid='' work_mode clean_oid
   file="$REPO_ROOT/$path"
   [[ -f "$file" && ! -L "$file" ]] || return 1
   # The x sentinel keeps trailing newlines that command substitution strips.
   work=$(cat -- "$file" && printf x) || return 1
   work=${work%x}
+  oid=$(git -C "$REPO_ROOT" hash-object --no-filters -- "$path") || return 1
+  is_blob_text "$oid" "$work" || return 1
   # ls-tree -z: "<mode> <type> <oid>\t<path>".
   while IFS= read -r -d '' entry; do
     [[ "${entry#*$'\t'}" == "$path" ]] || continue
@@ -206,6 +218,7 @@ is_artifact_gitignore() {
     head_mode=$mode
     head=$(git -C "$REPO_ROOT" cat-file blob "$oid" && printf x) || return 1
     head=${head%x}
+    is_blob_text "$oid" "$head" || return 1
   done < <(git -C "$REPO_ROOT" --literal-pathspecs ls-tree -z HEAD -- "$path" 2>/dev/null)
   # ls-files -s -z: "<mode> <oid> <stage>\t<path>", one entry per stage.
   while IFS= read -r -d '' entry; do
@@ -220,6 +233,7 @@ is_artifact_gitignore() {
     [[ -z "$head_mode" || "$index_mode" == "$head_mode" ]] || return 1
     index=$(git -C "$REPO_ROOT" cat-file blob "$index_oid" && printf x) || return 1
     index=${index%x}
+    is_blob_text "$index_oid" "$index" || return 1
   elif [[ -n "$head_mode" ]]; then
     return 1
   fi
@@ -228,8 +242,16 @@ is_artifact_gitignore() {
     read -r _ work_mode _ <<<"${entry#:}"
     [[ "$work_mode" == "${index_mode:-${head_mode:-100644}}" ]] || return 1
   fi
-  [[ "$work" != "$head" || "$index" != "$head" ]] || return 1
-  is_head_plus_rule "$head" "$work" && is_head_plus_rule "$head" "$index"
+  is_head_plus_rule "$head" "$index" || return 1
+  if ! is_head_plus_rule "$head" "$work"; then
+    # Only a clean conversion that just turns CRLF into LF may qualify.
+    norm=${work//$'\r\n'/$'\n'}
+    [[ "$norm" != "$work" ]] || return 1
+    clean_oid=$(git -C "$REPO_ROOT" hash-object --path="$path" -- "$path") || return 1
+    is_blob_text "$clean_oid" "$norm" && is_head_plus_rule "$head" "$norm" || return 1
+    work=$norm
+  fi
+  [[ "$work" != "$head" || "$index" != "$head" ]]
 }
 
 # Plan-artifact paths relative to the directory the plan was written from.
