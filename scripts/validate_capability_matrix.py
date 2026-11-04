@@ -10,7 +10,11 @@ ycc/skills/_shared/references/target-capability-matrix.md and check that:
 - every cell is ``supported``, ``partial``, or ``unsupported``;
 - no capability row repeats or has an empty name;
 - every ``partial``/``unsupported`` cell has a ``**CAP:target**`` note in Notes;
-- every ``**X:target**`` note names a known capability and target.
+- every ``**X:target**`` note names a known capability and target;
+- with a repository root, a target in ``GENERATED_TREES`` agrees with its tree: until the
+  tree holds an installable package (``<tree>/*/package.json``) every cell for that target is
+  ``unsupported`` and (with a package manifest) no ``packages.*.runtimes.<target>`` row is
+  ``included``; once it does, ``INSTALL_PATH`` for that target is not ``unsupported``.
 
 Notes without a colon (for example ``**INVOCATION POLICY**``) are free-form.
 Exit 0 when valid, 1 on any error (errors go to stderr).
@@ -29,8 +33,17 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MATRIX_PATH = REPO_ROOT / "ycc/skills/_shared/references/target-capability-matrix.md"
 DEFAULT_SCHEMA_PATH = REPO_ROOT / "ycc/settings/packages.schema.json"
+MANIFEST_REL = Path("ycc/settings/packages.json")
 
-CANONICAL_TARGETS = ("claude", "cursor", "codex", "opencode", "omp")
+CANONICAL_TARGETS = ("claude", "cursor", "codex", "opencode", "omp", "pi")
+# Targets modeled before any installer ships, keyed to their generated tree. The tree counts as
+# present only once it holds an installable package (``<tree>/*/package.json``): skills land under
+# packages/pi/ycc/skills (YAN-1184) before the package generator writes package.json (YAN-1188).
+# The check fails closed both ways, like PI1 in audit-install-assumptions.sh: no installable
+# package means every verdict is `unsupported` and no package row for the target is `included`,
+# and an installable package means INSTALL_PATH can no longer be `unsupported` (ADR 0003).
+GENERATED_TREES = {"pi": Path("packages/pi")}
+INSTALLABLE_MARKER = "*/package.json"
 # Pinned row order. Adding a capability requires updating this tuple and the
 # capability detection in ycc/skills/compatibility-audit/scripts/audit-target-features.sh.
 CANONICAL_CAPABILITIES = (
@@ -138,7 +151,47 @@ def note_keys(lines: Sequence[str]) -> list[tuple[int, str]]:
     return keys
 
 
-def validate(matrix_path: Path, schema_path: Path) -> list[str]:
+def _included_rows(manifest_path: Path, target: str) -> list[str]:
+    """Return ``packages.<key>.runtimes.<target>`` labels whose status is ``included``."""
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    packages = data.get("packages") if isinstance(data, dict) else None
+    if not isinstance(packages, dict):
+        raise MatrixError(f"{manifest_path}: expected a packages object")
+    labels: list[str] = []
+    for key, package in packages.items():
+        runtimes = package.get("runtimes") if isinstance(package, dict) else None
+        entry = runtimes.get(target) if isinstance(runtimes, dict) else None
+        if isinstance(entry, dict) and entry.get("status") == "included":
+            labels.append(f"packages.{key}.runtimes.{target}")
+    return labels
+
+
+def generated_tree_errors(matrix: Matrix, repo_root: Path, manifest_path: Path | None = None) -> list[str]:
+    """Fail closed when a GENERATED_TREES target's verdicts or package rows disagree with its tree."""
+    errors: list[str] = []
+    for target, tree in GENERATED_TREES.items():
+        present = any(path.is_file() for path in (repo_root / tree).glob(INSTALLABLE_MARKER))
+        marker = f"{tree}/{INSTALLABLE_MARKER}"
+        if not present and manifest_path is not None:
+            errors.extend(
+                f"{label} is included but {marker} does not exist" for label in _included_rows(manifest_path, target)
+            )
+        if target not in matrix.targets:
+            continue
+        column = matrix.targets.index(target)
+        verdicts = {capability: cells[column] for capability, cells in matrix.rows if len(cells) > column}
+        if not present:
+            claimed = [f"{cap}:{target}={verdict}" for cap, verdict in verdicts.items() if verdict != "unsupported"]
+            if claimed:
+                errors.append(f"{marker} does not exist but the matrix claims {', '.join(claimed)}")
+        elif verdicts.get("INSTALL_PATH") == "unsupported":
+            errors.append(f"{marker} exists but the matrix marks INSTALL_PATH:{target} unsupported")
+    return errors
+
+
+def validate(
+    matrix_path: Path, schema_path: Path, repo_root: Path | None = None, manifest_path: Path | None = None
+) -> list[str]:
     errors: list[str] = []
     lines = matrix_path.read_text(encoding="utf-8").splitlines()
     matrix = parse_matrix(lines, errors)
@@ -192,6 +245,8 @@ def validate(matrix_path: Path, schema_path: Path) -> list[str]:
     for key in needed:
         if key not in present:
             errors.append(f"partial/unsupported cell {key} has no **{key}** note")
+    if repo_root is not None:
+        errors.extend(generated_tree_errors(matrix, repo_root, manifest_path))
     return errors
 
 
@@ -199,11 +254,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
     parser.add_argument("--matrix", type=Path, default=DEFAULT_MATRIX_PATH)
     parser.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA_PATH)
+    parser.add_argument("--manifest", type=Path, default=None, help="Default: <repo-root>/" + str(MANIFEST_REL))
+    parser.add_argument("--repo-root", type=Path, default=REPO_ROOT, help="Root holding the generated trees.")
     args = parser.parse_args(argv)
     matrix_path: Path = args.matrix
     schema_path: Path = args.schema
+    repo_root: Path = args.repo_root
+    manifest_path: Path = args.manifest if args.manifest is not None else repo_root / MANIFEST_REL
     try:
-        errors = validate(matrix_path, schema_path)
+        errors = validate(matrix_path, schema_path, repo_root, manifest_path)
     except (OSError, ValueError, MatrixError) as exc:
         print(f"validate_capability_matrix: {exc}", file=sys.stderr)
         return 1

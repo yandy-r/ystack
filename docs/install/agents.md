@@ -79,6 +79,14 @@ Run `./install.sh install --target omp --only dedupe` to hide them. Do not
 delete `~/.agents/skills` for OMP's sake. See
 [OMP coexistence](omp.md#coexistence-with-other-runtimes).
 
+### Pi
+
+Pi (`@earendil-works/pi-coding-agent`) also reads `~/.agents/skills` by default.
+A copy here outranks a Pi package skill with the same name, and Pi loads it
+unadapted (Pi does not namespace skills). ycc has no Pi target yet: the planned
+one (ADR 0003) hides these copies inside Pi with owned
+`-~/.agents/skills/<name>/SKILL.md` overrides (YAN-1193).
+
 ## Adding a target
 
 Each `scripts/lib/install/targets/<t>.sh` declares `<t>_reads_agents_skills`

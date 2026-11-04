@@ -56,6 +56,7 @@ STYLE_EXCLUDES=(
     .omp-plugin
     packages/opencode
     packages/omp
+    packages/pi
 
     # Managed formatter bundle assets copied into downstream repos. Keep these
     # as exact file paths so user-authored files under scripts/templates/ still lint.

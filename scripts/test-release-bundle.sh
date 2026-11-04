@@ -656,6 +656,8 @@ if OUT="$(YCC_REPO_ROOT="${FIX}" "${SCRIPTS}/draft-notes.sh" 6.0.0 2>&1)"; then
   assert_contains "notes: included listed omp mcp package" "${NOTES}" "| ycc-mcp | omp | included | native | yes | 6.0.0 |"
   assert_contains "notes: included listed omp rules package" "${NOTES}" "| ycc-rules | omp | included | native | yes | 6.0.0 |"
   assert_contains "notes: excluded omp target" "${NOTES}" "| ycc-hooks | omp | excluded | native | no | target v6.1.0 |"
+  assert_contains "notes: deferred pi row" "${NOTES}" "| ycc | pi | deferred |"
+  assert_not_contains "notes: no included pi row" "${NOTES}" "| pi | included |"
   assert_contains "notes: opencode npm release" "${NOTES}" "| @yandy-r/ycc-opencode | opencode | included | npm | no | 6.0.0 | experimental; opt-in; not yet published"
   assert_not_contains "notes: installer-fallback row omitted" "${NOTES}" "| installer-fallback |"
   assert_contains "notes: file-copy fallback note" "${NOTES}" "File-copy packages"
@@ -721,6 +723,34 @@ rm "${FIX}/.omp-plugin/marketplace.json"
 for manifest in "${OMP_MANIFESTS[@]}"; do jset_all_versions "${manifest}" "0.0.1"; done
 commit_fix "deferred omp row"
 if run_pf "${FIX}"; then ok "model: deferred omp row ignores stale OMP manifests"; else not_ok "model: deferred omp ignored" "${OUT}"; fi
+
+# A deferred pi row suppresses a stale generated packages/pi/<key>/package.json (YAN-1184/1188).
+git -C "${FIX}" checkout -q -- .
+wf "packages/pi/ycc/package.json" <<<'{"name":"@yandy-r/ycc-pi","version":"0.0.1"}'
+commit_fix "deferred pi row with stale package.json"
+if run_pf "${FIX}"; then ok "model: deferred pi row ignores a stale pi package.json"; else not_ok "model: deferred pi ignored" "${OUT}"; fi
+rm -rf "${FIX}/packages/pi"
+commit_fix "drop pi fixture tree"
+
+# An included native pi row has no manifest layout yet (YAN-1188): fail closed.
+python3 - "${FIX}/ycc/settings/packages.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+with open(path, encoding="utf-8") as fh:
+    model = json.load(fh)
+model["packages"]["ycc"]["runtimes"]["pi"]["status"] = "included"
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(model, fh, indent=2)
+PY
+commit_fix "included pi row"
+SOURCE_HASHES="$(sha "ycc/.claude-plugin/plugin.json");$(sha ".claude-plugin/marketplace.json")"
+if run_pf "${FIX}"; then not_ok "model: included pi row fails check"; else
+  assert_contains "model: included pi row named" "${OUT}" "packages.ycc.runtimes.pi"
+  assert_not_contains "model: included pi has no traceback" "${OUT}" "Traceback"
+fi
+if run_bump "${FIX}" "6.3.0"; then not_ok "model: included pi row fails bump"; else
+  assert_eq "model: included pi row has no mutation" "${SOURCE_HASHES}" "$(sha "ycc/.claude-plugin/plugin.json");$(sha ".claude-plugin/marketplace.json")"
+fi
 
 # A model error must be clean and must precede all bump writes.
 for bad_model in '{' '{}' '{"version_source":"ycc/.claude-plugin/plugin.json","packages":{"ycc":{}}}' \

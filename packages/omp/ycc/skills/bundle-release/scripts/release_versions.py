@@ -49,7 +49,7 @@ MANIFEST_SUBDIRS = (".claude-plugin", ".codex-plugin", ".cursor-plugin")
 OMP_MANIFEST_SUBDIRS = (".omp-plugin", ".claude-plugin")
 EXCLUDED_NAME = "ycc-mods"
 EXCLUDED_SOURCE_PREFIX = "ycc/mods"
-PACKAGE_RUNTIMES = ("claude", "codex", "cursor", "opencode", "agents", "omp")
+PACKAGE_RUNTIMES = ("claude", "codex", "cursor", "opencode", "agents", "omp", "pi")
 MODEL_REL = "ycc/settings/packages.json"
 Key = str | int
 
@@ -194,6 +194,14 @@ def _model_manifests(root: Path) -> list[tuple[str, str, bool, bool]]:
                 base = f"packages/{runtime}/{key}"
                 for rel in (*(f"{base}/{sub}/plugin.json" for sub in OMP_MANIFEST_SUBDIRS), f"{base}/package.json"):
                     manifests.append((label, rel, status == "included", required))
+                continue
+            if runtime == "pi" and mechanism == "native" and "/" not in key:
+                # A Pi package's only manifest is packages/pi/<key>/package.json (ADR 0003), but its
+                # layout is not final until the packages/pi generator (YAN-1188) lands: an included
+                # row fails closed, and a deferred or excluded row suppresses that manifest, like OMP.
+                if status == "included":
+                    raise ReleaseError(f"{MODEL_REL}: {label}: Pi manifest layout is not defined yet")
+                manifests.append((label, f"packages/{runtime}/{key}/package.json", False, required))
                 continue
             if mechanism == "native" and runtime in PACKAGE_RUNTIMES[:3] and "/" not in key:
                 subdir = MANIFEST_SUBDIRS[PACKAGE_RUNTIMES.index(runtime)]

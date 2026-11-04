@@ -405,6 +405,10 @@ run_target() {
 		echo "== validate: target capability matrix =="
 		python3 "${REPO_ROOT}/scripts/test_validate_capability_matrix.py" || fail "test_validate_capability_matrix.py"
 		python3 "${REPO_ROOT}/scripts/validate_capability_matrix.py" || fail "validate_capability_matrix.py"
+		echo "== validate: compatibility audit (pi install assumptions, PI1) =="
+		"${REPO_ROOT}/scripts/test-pi-install-assumptions.sh" || fail "test-pi-install-assumptions.sh"
+		"${REPO_ROOT}/ycc/skills/compatibility-audit/scripts/audit-install-assumptions.sh" --target=pi "${REPO_ROOT}" \
+			|| fail "audit-install-assumptions.sh --target=pi"
 		;;
         release)
             local -a release_tests=("${REPO_ROOT}"/scripts/test-release-*.sh)

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # audit-install-assumptions.sh — validate install-path assumptions for each
-# generated compatibility target (Claude, Cursor, Codex, opencode, omp).
+# generated compatibility target (Claude, Cursor, Codex, opencode, omp, pi).
 #
 # Flags:
-#   --target=<claude|cursor|codex|opencode|omp|all>  (default: all)
+#   --target=<claude|cursor|codex|opencode|omp|pi|all>  (default: all)
 #   --format=<human|json>                        (default: human)
 #   --help, -h                                   print usage and exit 0
 #
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 usage() { cat <<'EOF'
-Usage: audit-install-assumptions.sh [--target=<claude|cursor|codex|opencode|omp|all>]
+Usage: audit-install-assumptions.sh [--target=<claude|cursor|codex|opencode|omp|pi|all>]
                                     [--format=<human|json>] [--help|-h]
                                     [repo-root]
 
@@ -42,7 +42,7 @@ for arg in "$@"; do
       ;;
   esac
 done
-case "$TARGET" in all|claude|cursor|codex|opencode|omp) ;;
+case "$TARGET" in all|claude|cursor|codex|opencode|omp|pi) ;;
   *) echo "audit-install-assumptions.sh: unknown --target: $TARGET" >&2; usage >&2; exit 2 ;; esac
 case "$FORMAT" in human|json) ;;
   *) echo "audit-install-assumptions.sh: unknown --format: $FORMAT" >&2; usage >&2; exit 2 ;; esac
@@ -357,6 +357,62 @@ PY
 }
 
 # ---------------------------------------------------------------------------
+# pi checks
+# ---------------------------------------------------------------------------
+run_pi_checks() {
+  local pdir="${REPO_ROOT}/packages/pi"
+  local matrix="${REPO_ROOT}/ycc/skills/_shared/references/target-capability-matrix.md"
+
+  # PI1: the installable tree and every matrix pi verdict must agree (ADR 0003). The tree
+  # counts as present only once packages/pi/*/package.json exists (YAN-1188): skills land
+  # under packages/pi/ycc/skills earlier (YAN-1184). With no installable package every pi
+  # cell must be unsupported; with one, INSTALL_PATH:pi must no longer be unsupported.
+  if [[ ! -f "$matrix" ]]; then
+    record "pi" "PI1" "FAIL" "${matrix} does not exist — cannot read the pi column"; return
+  fi
+  local verdicts; set +e
+  verdicts=$(python3 - "$matrix" <<'PY'
+import sys
+header = None
+for raw in open(sys.argv[1], encoding="utf-8"):
+    s = raw.strip()
+    if not s.startswith("|"):
+        if header is not None:
+            break
+        continue
+    cells = [c.strip() for c in s.strip("|").split("|")]
+    if all(c and set(c) == {"-"} for c in cells):
+        continue
+    if header is None:
+        header = cells
+        continue
+    if "pi" in header and len(cells) == len(header):
+        print(f"{cells[0]}={cells[header.index('pi')]}")
+PY
+  ); local parse_rc=$?; set -e
+  if [[ $parse_rc -ne 0 ]]; then
+    record "pi" "PI1" "FAIL" "matrix parse failed (python rc=${parse_rc})"; return
+  fi
+  local install_path marker="${pdir}/*/package.json"
+  install_path="$(sed -n 's/^INSTALL_PATH=//p' <<<"$verdicts")"
+  if [[ -z "$install_path" ]]; then
+    record "pi" "PI1" "FAIL" "INSTALL_PATH:pi not found in ${matrix}"
+  elif ! compgen -G "$marker" >/dev/null; then
+    local claimed
+    claimed="$(grep -v '=unsupported$' <<<"$verdicts" | tr '\n' ' ' || true)"
+    if [[ -z "${claimed// /}" ]]; then
+      record "pi" "PI1" "PASS" "${marker} not generated yet (every matrix pi verdict is unsupported)"
+    else
+      record "pi" "PI1" "FAIL" "${marker} does not exist but the matrix claims ${claimed% }"
+    fi
+  elif [[ "$install_path" == "unsupported" ]]; then
+    record "pi" "PI1" "FAIL" "${marker} exists but matrix INSTALL_PATH:pi=unsupported"
+  else
+    record "pi" "PI1" "PASS" ""
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
 case "$TARGET" in
@@ -365,7 +421,8 @@ case "$TARGET" in
   codex)    run_codex_checks  ;;
   opencode) run_opencode_checks ;;
   omp)      run_omp_checks ;;
-  all)      run_claude_checks; run_cursor_checks; run_codex_checks; run_opencode_checks; run_omp_checks ;;
+  pi)       run_pi_checks ;;
+  all)      run_claude_checks; run_cursor_checks; run_codex_checks; run_opencode_checks; run_omp_checks; run_pi_checks ;;
 esac
 
 OVERALL_RC=0
@@ -375,7 +432,7 @@ for s in "${CS[@]}"; do [[ "$s" == "FAIL" ]] && { OVERALL_RC=1; break; }; done
 # Human output
 # ---------------------------------------------------------------------------
 emit_human() {
-  local tgts=(); [[ "$TARGET" == "all" ]] && tgts=(claude cursor codex opencode omp) || tgts=("$TARGET")
+  local tgts=(); [[ "$TARGET" == "all" ]] && tgts=(claude cursor codex opencode omp pi) || tgts=("$TARGET")
   local n=${#CI[@]}
   for tgt in "${tgts[@]}"; do
     local pass=0 fail=0 i=0
@@ -419,7 +476,7 @@ ss=[rd(f"{tmp}/s_{i}") for i in range(n)]; ds=[rd(f"{tmp}/d_{i}") for i in range
 def build(t):
     ch=[{"id":ids[i],"status":ss[i],"detail":ds[i] or None} for i in range(n) if ts[i]==t]
     return {"checks":ch,"ok":all(c["status"]!="FAIL" for c in ch)}
-names=["claude","cursor","codex","opencode","omp"] if tgt=="all" else [tgt]
+names=["claude","cursor","codex","opencode","omp","pi"] if tgt=="all" else [tgt]
 out={t:build(t) for t in names}
 print(json.dumps({"as_of":datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "targets":out,"ok":all(v["ok"] for v in out.values())},indent=2))
