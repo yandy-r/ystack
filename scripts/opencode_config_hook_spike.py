@@ -28,12 +28,20 @@ class Api:
         self.directory = directory
         self.headers = {"Authorization": "Basic " + base64.b64encode(f"opencode:{PASSWORD}".encode()).decode()}
 
-    def request(self, path: str, body: dict[str, Any] | None = None, scoped: bool = False) -> Any:
-        """Fetch JSON or submit a JSON body to the private OpenCode server."""
+    def request(
+        self, path: str, body: dict[str, Any] | None = None, scoped: bool = False, method: str | None = None
+    ) -> Any:
+        """Fetch JSON or submit a JSON body to the private OpenCode server.
+
+        The method defaults to GET, or POST when a body is given.
+        """
         query = "?" + urllib.parse.urlencode({"location[directory]": str(self.directory)}) if scoped else ""
         data = json.dumps(body).encode() if body is not None else None
         request = urllib.request.Request(
-            self.base + path + query, data=data, headers={**self.headers, "Content-Type": "application/json"}
+            self.base + path + query,
+            data=data,
+            headers={**self.headers, "Content-Type": "application/json"},
+            method=method,
         )
         try:
             with urllib.request.urlopen(request, timeout=15) as response:

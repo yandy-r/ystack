@@ -10,9 +10,10 @@ an unrestricted agent keep working. Further scenarios load the generated npm
 package directory instead of the file copy, load a package copy without the
 guard under host-wide allow rules (the packaged agent rules must still hold),
 ask restricted npm agents before external directories despite a host-wide
-allow until the user answers "always", and run the file copy with the guard
-absent or removed by project config (restricted specialists must have no
-search tool). Run through scripts/test-opencode-sensitive-guard.sh, never
+allow until the user answers "always" and again once that saved approval is
+removed (the package's saved-approval probe sessions must not remain), and
+run the file copy with the guard absent or removed by project config
+(restricted specialists must have no search tool). Run through scripts/test-opencode-sensitive-guard.sh, never
 directly against a real home.
 """
 
@@ -27,6 +28,8 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -71,6 +74,8 @@ class Probe:
     offered_within: frozenset[str] = frozenset()
     # When set, classify() must report exactly this layer.
     layer_expected: str = ""
+    # Runs against the scenario's server before the probe's session starts.
+    before: Callable[[Scenario], None] | None = None
     key: str = ""
     result: str = ""
     layer: str = ""
@@ -209,6 +214,8 @@ def wait_ready(sc: Scenario, plugin_id: str | None, agents: tuple[str, ...]) -> 
 
 def run_probe(sc: Scenario, provider: Provider, probe: Probe, index: int, session_dir: Path) -> None:
     """Create a session as the probe's agent, force its tool call, wait for the result."""
+    if probe.before is not None:
+        probe.before(sc)
     probe.key = f"PROBE-{sc.name.replace('-', '')}-{index}"
     provider.probes[probe.key] = probe
     body = {
@@ -404,9 +411,25 @@ def external_search_probes(work: Path, canary: str) -> list[Probe]:
     ]
 
 
+# Title of the child sessions the npm package creates to ask the host whether
+# saved approvals cover a directory (scripts/opencode_templates/package-index.js).
+SAVED_APPROVAL_PROBE_TITLE = "ycc saved-approval probe"
+
+
+def remove_saved_external_approvals(sc: Scenario) -> None:
+    """Remove every saved external_directory approval, as a user would in OpenCode."""
+    saved = [item for item in sc.api.request("/api/permission/saved")["data"] if item["action"] == "external_directory"]
+    check("saved external_directory approval present before removal", True, len(saved) > 0)
+    for item in saved:
+        sc.api.request(f"/api/permission/saved/{item['id']}", method="DELETE")
+    left = [item for item in sc.api.request("/api/permission/saved")["data"] if item["action"] == "external_directory"]
+    check("saved external_directory approvals removed", [], left)
+
+
 def npm_external_allow_probes(work: Path, control: str) -> list[Probe]:
     """On npm a host-wide external-directory allow still asks a restricted
-    agent; once answered "always" the same directory is not asked again."""
+    agent; once answered "always" the same directory is not asked again, and
+    once that saved approval is removed it is asked again."""
     outside = work.parent / f"{work.name}-outside"
     outside.mkdir(exist_ok=True)
     (outside / "notes.txt").write_text(f"OUTSIDE {control}\n", encoding="utf-8")
@@ -430,6 +453,16 @@ def npm_external_allow_probes(work: Path, control: str) -> list[Probe]:
             "control",
             reply="reject",
             must_not_ask="external_directory",
+        ),
+        Probe(
+            "npm external allow: removed saved approval is asked again",
+            "pr-comment-fixer",
+            "grep",
+            search,
+            "clean",
+            reply="reject",
+            must_ask="external_directory",
+            before=remove_saved_external_approvals,
         ),
         Probe(
             "npm external allow: unrestricted agent keeps the host allow",
@@ -648,6 +681,10 @@ def scenario(
         for index, probe in enumerate(probes):
             run_probe(sc, provider, probe, index, work)
         evaluate(probes, canary, control)
+        if plugin_id == PACKAGE_ID:
+            sessions = sc.api.request("/api/session?" + urllib.parse.urlencode({"limit": "500"}))["data"]
+            probes_left = [s["id"] for s in sessions if s.get("title") == SAVED_APPROVAL_PROBE_TITLE]
+            check(f"{name}: no saved-approval probe session remains", [], probes_left)
         if probes_for in (file_copy_probes, session_location_probes):
             check(".env unchanged on disk", f"API_TOKEN={canary}\n", (work / ".env").read_text(encoding="utf-8"))
             check("control edit applied", True, "/* edited */" in (work / "src/app.ts").read_text(encoding="utf-8"))

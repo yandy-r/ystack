@@ -273,19 +273,21 @@ Two layers enforce it:
     the agent, and a call to it is rejected. This also covers tools that never
     request a permission.
   - A restricted agent still asks before it reaches a directory outside the
-    project, even with a host-wide `external_directory` allow. When you
-    answer such a prompt "always", the package records the approved
-    directories for the project, as OpenCode saves them, and does not ask
-    again for them, also after a restart.
+    project, even with a host-wide `external_directory` allow. A directory
+    you approved with "always" is not asked again, also after a restart.
   - The package never loosens a decision, and it turns an allow into a prompt
     only for `external_directory`. Your rules can still make a restricted
     agent stricter.
 
-  The package learns about saved approvals only from the prompts it sees
-  answered. Directories you approved before installing it, or while it was not
-  loaded, prompt once more. Removing a saved approval in OpenCode does not
-  remove the package's record, so with a host-wide `external_directory` allow
-  that directory is not asked again.
+  OpenCode does not tell plugins which approvals are saved, so the package
+  asks OpenCode each time: it creates a short-lived child session, checks the
+  directory there against your saved approvals only, and removes the session
+  again. The check never prompts. Removing a saved approval in OpenCode
+  therefore takes effect at once, and approvals saved before the package was
+  installed or loaded are honoured. The same check also asks about a
+  directory that no approval should cover. If another plugin approves every
+  request automatically, or a saved approval covers `/`, that answer is allow
+  too, and the restricted agent asks you instead.
 
   The file-copy install needs none of this, because there the agent's own
   rules already come after host-wide rules.
