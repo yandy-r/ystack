@@ -106,7 +106,7 @@ checksum or `omp --version` does not match the pin, then runs
 cron, pushes/PRs touching `scripts/*omp*`, `ycc/**`,
 `packages/omp/**`, `.omp-plugin/**`, the workflow itself and related paths, and
 `workflow_dispatch` (with an optional harness allow-list). Matrix: `ubuntu-latest`
-and `macos-latest`, omp `18.12.2` (the `MIN_OMP_VERSION` floor) and `18.12.6`,
+and `macos-latest`, omp `18.12.2` (the `MIN_OMP_VERSION` floor), `18.12.6` and `18.16.0`,
 `fail-fast: false`.
 
 | Harness                              | In CI | Notes                                                                                                                                                                                          |

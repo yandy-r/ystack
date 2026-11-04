@@ -910,7 +910,8 @@ def install(
                 print(f"[ok] {selector(step.package)} disabled at {scope} scope: kept")
         mutated = bool(changes) or bool(marketplace_action)
         if changes:
-            # omp GCs caches on upgrade and forced reinstall; recorded projects elsewhere may now dangle.
+            # omp < 18.13.0, and project installs made before upgrading omp to 18.13.0, can lose their
+            # cache on upgrade and forced reinstall (oh-my-pi#16827); recorded projects elsewhere may now dangle.
             check_dangling_projects(cli, live)
         if mutated:
             print(restart_line(packages))
@@ -1201,7 +1202,8 @@ def remove(scope: str, project_root: Path, *, dry_run: bool = False) -> None:
         print("[ok] nothing ycc-owned to remove for omp")
     if mutated:
         if profile is not None and not dry_run:
-            # omp GCs caches on uninstall too; recorded projects elsewhere may now dangle.
+            # omp < 18.13.0, and project installs made before upgrading omp to 18.13.0, can lose their
+            # cache on uninstall too (oh-my-pi#16827); recorded projects elsewhere may now dangle.
             check_dangling_projects(cli, profile)
         print("[ok] running omp sessions: run /reload-plugins (skills, commands, agents, MCP)")
 

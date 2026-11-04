@@ -467,9 +467,12 @@ omp plugin disable --scope project ycc@ycc
 ycc never enables or disables plugins: a disabled install stays disabled
 across updates and reinstalls.
 
-A user-scope upgrade can make omp garbage-collect the cache a project install
-still points at. The installer detects this and prints the repair command,
-using the absolute path of the checkout's `install.sh`:
+A user-scope upgrade or uninstall can make omp garbage-collect the cache a
+project install still points at. omp 18.13.0 and later keep the cache for
+project installs they made; project installs made with older omp can still
+lose it. On any omp version the installer detects a lost cache and prints the
+repair command, using the absolute path of the checkout's `install.sh`. When
+the cache survives, the same command upgrades the project install:
 
 ```bash
 cd <project-root> && <checkout>/install.sh install --target omp --project
@@ -813,7 +816,7 @@ for the profile.
 | `marketplace ycc has a different source (…); retained …`                                      | Another `ycc` marketplace is registered. Inspect it with `omp plugin marketplace list`; migrate or `omp plugin marketplace remove ycc` if it is not yours to keep.              |
 | `<export> exists but is not the recorded ycc export; rerun with --force to replace it`        | The export directory was edited or not made by ycc. Re-run with `--force`.                                                                                                      |
 | `[!!] <pkg>@ycc … the export changed but its version did not …`                               | You regenerated packages without a version bump; re-run with `--force`.                                                                                                         |
-| `[!!] <pkg>@ycc project install at <root> lost its cache (omp GC); repair: …`                 | Run the printed `cd <root> && <checkout>/install.sh install --target omp --project`.                                                                                            |
+| `[!!] <pkg>@ycc project install at <root> lost its cache (omp GC); repair: …`                 | A project install made with omp older than 18.13.0 lost its cache. Run the printed `cd <root> && <checkout>/install.sh install --target omp --project`.                         |
 | `[!!] <pkg>@ycc is already installed (<scope>) and not recorded as ycc-owned; left untouched` | You installed it yourself; ycc will not take it over. Uninstall it with `omp plugin uninstall`, then re-run.                                                                    |
 | `/ycc:<skill>` or agents missing in a running session                                         | `/reload-plugins`, or restart; restart after a `ycc` install or update so the scope guard loads.                                                                                |
 | A skill shows as `agents/<name>` or `ycc/<name>`                                              | See [Warnings](#warnings): W2 means run `--only dedupe`; W4 means Claude skills outrank the package.                                                                            |

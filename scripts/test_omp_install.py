@@ -653,6 +653,16 @@ class OmpInstallTests(unittest.TestCase):
         self.assert_installed(("ycc",), "project", BUMPED)
         self.assert_installed(("ycc",), "user", BUMPED)
 
+    def test_dangling_check_still_runs_on_omp_18_13_and_later(self) -> None:
+        # omp >= 18.13.0 keeps only caches its own project installs registered (oh-my-pi#16830);
+        # a project installed by older omp still loses its cache, so the check must not be version-gated.
+        os.environ["FAKE_OMP_VERSION"] = "18.16.0"
+        self.install("project")
+        self.install("user")
+        self.bump(("ycc",))
+        result = self.install("user")
+        self.assertIn(f"[!!] ycc@ycc project install at {self.project.resolve()} lost its cache (omp GC)", result.out)
+
     def test_profiles_are_recorded_and_removed_separately(self) -> None:
         with patch.dict(os.environ, {"OMP_PROFILE": "work"}):
             self.install("user")

@@ -26,8 +26,9 @@ and untracked, non-ignored files) with a bumped version source, so nothing write
 
 Checks: install --dry-run writes nothing; user install and idempotent re-run; --project
 install shadows the user install; a project-scope disable survives a re-run; a newer
-checkout upgrades the user install and repairs the GC'd project cache with disabled kept;
-remove --project then remove leave no plugin, registry, lock, link, cache, marketplace,
+checkout upgrades the user install, then a --project re-run repairs the GC'd project
+cache (omp <18.13.0) or upgrades the intact project install (omp >=18.13.0) with disabled
+kept; remove --project then remove leave no plugin, registry, lock, link, cache, marketplace,
 state or export; migrate retires an `omp plugin link` of this checkout (dry-run keeps it);
 the core matrix again with OMP_PROFILE=work and with an XDG data root ($XDG_DATA_HOME/omp).
 --keep    Retain the sandbox and transcript (always retained when a check fails).
@@ -234,7 +235,18 @@ def profile(path, key):
     return json.dumps(json.loads(Path(path).read_text())["profiles"][key], sort_keys=True)
 
 
-COMMANDS = {"item": item, "count": count, "npm": npm, "profiles": profiles, "profile": profile}
+def cache(path, plugin_id, scope):
+    """The single PLUGIN_ID item at SCOPE has an existing installPath directory (its cache survived)."""
+    found = [i for i in items(path, plugin_id) if i.get("scope") == scope]
+    if len(found) != 1:
+        fail(f"{path}: expected one {plugin_id} ({scope}) item, got {found}")
+    install_path = found[0]["entries"][0].get("installPath")
+    if not isinstance(install_path, str) or not Path(install_path).is_dir():
+        fail(f"{path}: {plugin_id} ({scope}) cache {install_path!r} is not an existing directory")
+    return f"{plugin_id} ({scope}) cache present: {install_path}"
+
+
+COMMANDS = {"item": item, "count": count, "npm": npm, "profiles": profiles, "profile": profile, "cache": cache}
 print(COMMANDS[sys.argv[1]](*sys.argv[2:]))
 PY
 checks=$root/checks.py
@@ -258,6 +270,14 @@ version_text=$(<"$root/logs/version.stdout")
 import re, sys
 match = re.search(r"(\d+)\.(\d+)\.(\d+)", sys.argv[1])
 sys.exit(0 if match and tuple(map(int, match.groups())) >= (18, 12, 2) else 1)
+PY
+# omp >=18.13.0 keeps the cache dirs of project installs it made itself (oh-my-pi#16827, fixed by
+# #16830); older omp GCs them on a user-scope upgrade. The harness installs the project with this omp.
+keeps_linked_cache=0
+if "$python" - "$version_text" <<'PY'; then keeps_linked_cache=1; fi
+import re, sys
+match = re.search(r"(\d+)\.(\d+)\.(\d+)", sys.argv[1])
+sys.exit(0 if match and tuple(map(int, match.groups())) >= (18, 13, 0) else 1)
 PY
 version=$("$python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' \
   "$repo/ycc/.claude-plugin/plugin.json")
@@ -337,19 +357,33 @@ ycc upgrade "$home" "$checkout" install --target omp
 assert_rc 0 'install (newer checkout)'
 has upgrade "[ok] exported OMP packages → $(export_root) (ycc $next)" '[ok] omp plugin marketplace update ycc' \
   '[ok] omp plugin upgrade --scope user ycc@ycc' "Upgraded ycc@ycc (user) to $next" \
-  "[ok] ycc@ycc $version -> $next upgraded (user)" \
-  "[!!] ycc@ycc project install at $proj lost its cache (omp GC)"
+  "[ok] ycc@ycc $version -> $next upgraded (user)"
 listing list-upgraded "$home"
 check upgraded-proof "$smoke" installed "$root/logs/list-upgraded.stdout" "$(export_root)" "$next"
 listing list-upgraded-project "$proj"
 check upgraded-disabled "$checks" item "$root/logs/list-upgraded-project.stdout" ycc@ycc project 'enabled=false'
-ycc repair "$proj" "$checkout" install --target omp --project
-assert_rc 0 'repair install --project'
-has repair '[ok] omp plugin install --force --scope project ycc@ycc' "[ok] ycc@ycc $next reinstalled (project)" \
-  '[ok] ycc@ycc disabled at project scope: kept'
+if ((keeps_linked_cache)); then
+  # The user upgrade leaves the project install's cache alone: it still lists the old version.
+  check upgraded-cache "$checks" cache "$root/logs/list-upgraded-project.stdout" ycc@ycc project
+  check upgraded-kept "$checks" item "$root/logs/list-upgraded-project.stdout" ycc@ycc project "version=\"$version\""
+  lacks upgrade 'lost its cache'
+  ycc upgrade-project "$proj" "$checkout" install --target omp --project
+  assert_rc 0 'upgrade install --project'
+  has upgrade-project '[ok] omp plugin upgrade --scope project ycc@ycc' \
+    "[ok] ycc@ycc $version -> $next upgraded (project)" '[ok] ycc@ycc disabled at project scope: kept'
+  lacks upgrade-project 'install --force'
+  project_outcome="keeps the project cache ($version, no GC report); a --project re-run upgrades it to $next"
+else
+  has upgrade "[!!] ycc@ycc project install at $proj lost its cache (omp GC)"
+  ycc repair "$proj" "$checkout" install --target omp --project
+  assert_rc 0 'repair install --project'
+  has repair '[ok] omp plugin install --force --scope project ycc@ycc' "[ok] ycc@ycc $next reinstalled (project)" \
+    '[ok] ycc@ycc disabled at project scope: kept'
+  project_outcome="reports the GC'd project cache; a --project re-run repairs it at $next"
+fi
 listing list-repaired "$proj"
 check repaired-proof "$checks" item "$root/logs/list-repaired.stdout" ycc@ycc project "version=\"$next\"" 'enabled=false'
-log "PASS upgrade: a $next checkout re-exports, updates the marketplace and upgrades user $version -> $next; the GC'd project cache is reported, repaired at $next and stays disabled"
+log "PASS upgrade: a $next checkout re-exports, updates the marketplace and upgrades user $version -> $next; omp $project_outcome, and it stays disabled"
 
 # --- 6. Remove --project, then remove ---------------------------------------------------------
 ycc remove-project "$proj" "$repo" remove --target omp --only base --project
