@@ -165,10 +165,11 @@ omp_h_sandbox() {
 
 # omp_h_sandbox_probe ROOT REAL_HOME [RO_PATH...]: fail unless the selected bwrap sandbox
 # isolates. Inside it (bounded to 60 s): no socket or FIFO the sandbox user can write to
-# exists anywhere outside ROOT, /proc, /sys and /dev (a read-only mount does not stop
-# connect(), so the whole tree is scanned), the host's runtime dirs are gone, PID 1 is bwrap,
-# the only network interface is lo, and the real home holds nothing but the mount points of
-# RO_PATHs below it.
+# exists outside ROOT (a read-only mount does not stop connect(), so the scan covers the
+# whole tree except /proc, /sys, /dev and the large package trees /usr, /opt, /snap, /boot
+# and /nix/store, which hold no daemon sockets and take minutes to walk on CI runners), the
+# host's runtime dirs are gone, PID 1 is bwrap, the only network interface is lo, and the real
+# home holds nothing but the mount points of RO_PATHs below it.
 omp_h_sandbox_probe() {
   local root=$1 real_home=$2 out path allowed=
   shift 2
@@ -181,7 +182,8 @@ omp_h_sandbox_probe() {
     for t in find awk cat; do
       command -v "$t" >/dev/null || { echo "$t is missing"; exit 1; }
     done
-    found=$(find / \( -path /proc -o -path /sys -o -path /dev \) -prune -o \
+    found=$(find / \( -path /proc -o -path /sys -o -path /dev -o -path /usr -o -path /opt \
+      -o -path /snap -o -path /boot -o -path /nix/store \) -prune -o \
       \( -type s -o -type p \) -writable -print 2>/dev/null)
     leaked=$(printf "%s\n" "$found" | awk -v p="$1/" "NF && index(\$0, p) != 1") ||
       { echo "socket scan failed"; exit 1; }
