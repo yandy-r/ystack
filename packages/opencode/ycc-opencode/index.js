@@ -47,9 +47,9 @@
 //         short-circuits before hooks) and its mutated effect/message is
 //         final (plugin/src/promise/permission.ts). It turns the effect into
 //         deny when the packaged rules deny any resource, and an
-//         external_directory allow into ask when the packaged rules ask for a
-//         resource no saved approval covers. The event's agent is optional;
-//         without it the session's agent is used, as the host does.
+//         external_directory allow into ask unless a saved approval covers
+//         every resource the packaged rules ask for. The event's agent is
+//         optional; without it the session's agent is used, as the host does.
 //       * ctx.tool.hook("execute.before") rejects a call to a tool whose
 //         permission action the packaged rules wholly deny, which also covers
 //         tools that never request a permission.
@@ -60,23 +60,40 @@
 //     and request settings, because config.agent mutates them in place.
 //
 //     Saved approvals: an "always" reply makes the host save the request's
-//     `save` patterns for the project (permission.ts reply, saved.add) and
-//     append them as allow rules after every configured rule, so the evaluate
-//     event cannot tell a saved approval from a config-level allow, and no
-//     plugin API lists saved permissions (v2.0.30-v2.1.1). The host publishes
-//     permission.asked (the request, `save` included) and permission.replied
-//     on the bus that ctx.event.subscribe streams for this location, so the
-//     package records the same patterns in its own storage, one key per
-//     pattern under the project (ctx.storage.scan reads them back), and keeps
-//     an allow they cover. After saving, the host re-evaluates every other
-//     pending request in the same fiber and publishes an "always" reply,
-//     without saving anything, for each one that now evaluates to allow. At
-//     least one resource of such a request is covered by the patterns just
-//     recorded (the rest may be allowed by config), so a reply to a request
-//     any recorded pattern already partly covers records nothing. Recording
-//     happens in memory before any await, so that same-fiber re-evaluation
-//     already sees it.
-//
+//     `save` patterns for the project (permission.ts reply, saved.add). The
+//     evaluate event cannot tell a saved approval from a config-level allow,
+//     and plugins get no API or bus event for saved approvals (v2.0.30-v2.2.5;
+//     ctx.permission is list/get/reply for pending requests, hook, assert).
+//     The floor therefore asks the host itself, with a saved-approval probe:
+//     a child session of the asking session (ctx.session.create with
+//     parentID), run as the same agent, whose own permissions are
+//     `external_directory * ask`, and a ctx.permission.assert there for the
+//     resources in question. evaluateInput merges the agent's rules (config
+//     rules included) with the session's, so the session's ask comes last
+//     and overrides any config-level allow; it then appends the project's
+//     saved approvals as allow rules after all of them. The probe's effect is
+//     therefore allow exactly when saved approvals cover every resource, as
+//     long as no evaluate hook running before this package's changed it. So
+//     a second assert in the same session asks for a sentinel directory no
+//     real approval covers; if that also comes back allow (a hook approves
+//     every request, or a saved approval covers `/`), the probe proves
+//     nothing and the floor prompts. This package's own evaluate hook
+//     recognises each probe evaluation by the session id and a per-assert
+//     metadata token, records the effect, and turns it into deny so the probe
+//     never prompts; the assert's rejection is expected. An assert that does
+//     not settle within PROBE_TIMEOUT_MS (this hook gone, e.g. the plugin
+//     unloaded mid-probe) has its pending request rejected
+//     (ctx.permission.list/reply). The probe session is removed again
+//     (ctx.session.remove) in every case. Because the host is asked each
+//     time, a removed saved approval takes effect at once and one saved
+//     before this package loaded is honoured. Each loaded copy of this module
+//     has its own probe map: another copy whose hook runs first sees this
+//     copy's probe evaluation as an ordinary check and may run one nested
+//     probe of its own, whose evaluation this copy's hook then sees already
+//     denied and leaves alone, so the nesting stops after one level and both
+//     copies reach the same answer. Older package versions kept their own
+//     copy of saved approvals in plugin storage; setup removes those records.
+
 // Coexistence with the primary file-copy install (install.sh --target
 // opencode): config agents/skills/commands apply in the `post` plugin group,
 // which replays after any user package on every state rebuild
@@ -98,6 +115,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute, join, relative as relativePath } from "node:path";
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
 
 import { registerSensitiveGuard } from "./ycc-sensitive-guard/index.js";
 
@@ -115,6 +133,12 @@ const RESTRICTED_RULES = new Map(
 const FLOOR_DENIED = "Permission denied by ycc restricted-agent rules: ";
 // The only action the floor raises from allow to ask.
 const EXTERNAL = "external_directory";
+// Saved-approval probe asserts in flight: metadata token -> { sessionID, effect }.
+const PROBES = new Map();
+const PROBE_KEY = "yccSavedApprovalProbe";
+const PROBE_TITLE = "ycc saved-approval probe";
+// How long one probe assert may take before its pending request is rejected.
+const PROBE_TIMEOUT_MS = 5000;
 
 // Token the generator writes where a package asset path is needed; it points
 // at the *rendered* tree created below, which sits beside the package root.
@@ -363,93 +387,121 @@ async function sessionAgent(ctx, sessionID) {
   return (session?.data ?? session)?.agent;
 }
 
-// Saved external_directory approvals of one project, mirrored from the host:
-// one storage key per pattern, so instances sharing a project never
-// overwrite each other's records.
-function savedPrefix(ctx) {
-  return `saved/${EXTERNAL}/${encodeURIComponent(ctx.location.project.id)}/`;
-}
-
-async function storedPatterns(ctx) {
-  const patterns = [];
-  const prefix = savedPrefix(ctx);
-  let after;
-  do {
-    const page = await ctx.storage.scan({ prefix, after });
-    for (const entry of page.entries) if (typeof entry.value === "string") patterns.push(entry.value);
-    after = page.next;
-  } while (after !== undefined);
-  return patterns;
-}
-
-// Recorded patterns: this instance's in-memory records (loaded at setup, then
-// set as soon as a reply arrives) plus those other locations of the project
-// stored since.
-async function savedPatterns(ctx, recorded) {
+// Reject every pending permission request of a probe session. Best effort.
+async function rejectPending(ctx, sessionID) {
   try {
-    return [...recorded, ...(await storedPatterns(ctx))];
+    const listed = await ctx.permission.list({ sessionID });
+    const requests = listed?.data ?? listed;
+    for (const request of Array.isArray(requests) ? requests : []) {
+      try {
+        await ctx.permission.reply({ sessionID, requestID: request.id, decision: "reject" });
+      } catch {
+        // The request may have settled meanwhile.
+      }
+    }
   } catch {
-    return [...recorded];
+    // Removing the session ends whatever is left.
   }
 }
 
-function matches(resource, patterns) {
-  return patterns.some((pattern) => wildcardMatch(resource, pattern));
+// One probe assert in the probe session: the effect this package's evaluate
+// hook saw for it, or undefined when it saw none or the assert timed out.
+async function probeEffect(ctx, sessionID, agent, resources) {
+  const token = randomUUID();
+  const slot = { sessionID, effect: undefined };
+  PROBES.set(token, slot);
+  let timer;
+  try {
+    const settled = Promise.resolve()
+      .then(() =>
+        ctx.permission.assert({ sessionID, agent, action: EXTERNAL, resources, metadata: { [PROBE_KEY]: token } }),
+      )
+      .then(
+        () => "settled",
+        // Expected: the evaluate hook denies every probe evaluation.
+        () => "settled",
+      );
+    const expired = new Promise((resolve) => {
+      timer = setTimeout(resolve, PROBE_TIMEOUT_MS, "expired");
+    });
+    if ((await Promise.race([settled, expired])) === "expired") {
+      await rejectPending(ctx, sessionID);
+      return undefined;
+    }
+    return slot.effect;
+  } finally {
+    clearTimeout(timer);
+    PROBES.delete(token);
+  }
 }
 
-// Record the `save` patterns of every external_directory request the user
-// answers "always", as the host saves them (any agent and session of the
-// project). A reply this package never saw asked, any other reply, and a reply
-// to a request a recorded pattern already partly covers (the host's
-// re-evaluation of other pending requests, which saves nothing) record
-// nothing; the cost is one more prompt when a genuine "always" overlaps an
-// earlier record. Events are handled one at a time; a failed write loses only
-// that record, until this instance is rebuilt.
-function trackSavedApprovals(ctx, signal, recorded) {
-  const asked = new Map();
-  void (async () => {
-    for await (const event of ctx.event.subscribe({ signal })) {
+// Whether the project's saved approvals cover every resource for this agent,
+// asked of the host in a short-lived child session (see the contract above).
+// The sentinel sits at the filesystem root rather than under the temp
+// directory, which users commonly approve. Any failure, or no effect seen,
+// counts as not covered.
+async function savedApprovalsCover(ctx, sessionID, agent, resources) {
+  let probe;
+  try {
+    const created = await ctx.session.create({
+      parentID: sessionID,
+      agent,
+      title: PROBE_TITLE,
+      permissions: [{ action: EXTERNAL, resource: "*", effect: "ask" }],
+    });
+    probe = (created?.data ?? created)?.id;
+    if (typeof probe !== "string") return false;
+    if ((await probeEffect(ctx, probe, agent, resources)) !== "allow") return false;
+    const sentinel = await probeEffect(ctx, probe, agent, [`/ycc-saved-approval-probe-${randomUUID()}/*`]);
+    return sentinel !== undefined && sentinel !== "allow";
+  } catch {
+    return false;
+  } finally {
+    if (probe !== undefined) {
       try {
-        if (event.type === "permission.asked") {
-          const { id, action, resources, save } = event.data;
-          if (action === EXTERNAL && save?.length) asked.set(id, { resources, save });
-        } else if (event.type === "permission.replied") {
-          const request = asked.get(event.data.requestID);
-          asked.delete(event.data.requestID);
-          if (!request || event.data.reply !== "always") continue;
-          const known = [...recorded];
-          if (request.resources.some((resource) => matches(resource, known))) continue;
-          for (const pattern of request.save) recorded.add(pattern);
-          for (const pattern of request.save) {
-            await ctx.storage.set(savedPrefix(ctx) + encodeURIComponent(pattern), pattern);
-          }
-        }
+        await ctx.session.remove({ sessionID: probe });
       } catch {
-        // Unrecorded patterns prompt again once this instance is rebuilt.
+        // Best effort: the probe holds no pending request by now.
       }
     }
-  })().catch(() => {
-    // Without the event stream nothing is recorded: saved approvals prompt.
-  });
+  }
+}
+
+// Old package versions kept their own record of saved approvals, one key per
+// pattern under this prefix. Best effort; setup never waits for it.
+async function removeStaleRecords(ctx) {
+  const prefix = `saved/${EXTERNAL}/${encodeURIComponent(ctx.location.project.id)}/`;
+  const keys = [];
+  let after;
+  do {
+    const page = await ctx.storage.scan({ prefix, after });
+    for (const entry of page.entries) keys.push(entry.key);
+    after = page.next;
+  } while (after !== undefined);
+  for (const key of keys) await ctx.storage.remove(key);
 }
 
 // A packaged deny is enforced on top of the host's effect for every action.
 // Every restricted ruleset starts with `* * deny`, so any action or resource
 // outside the agent's own allowlist is denied here. The packaged `ask` a
 // restricted agent ships is external_directory: a host allow is raised back
-// to ask unless a recorded saved approval covers every resource it asks for,
+// to ask unless the host's saved approvals cover every resource it asks for,
 // so a config-level allow cannot skip the prompt and an "always" answer is not
 // prompted again. Every other action keeps the host's allow or ask.
-async function registerPermissionFloor(ctx, signal) {
+async function registerPermissionFloor(ctx) {
   if (RESTRICTED_RULES.size === 0) return;
-  const recorded = new Set();
-  trackSavedApprovals(ctx, signal, recorded);
-  try {
-    for (const pattern of await storedPatterns(ctx)) recorded.add(pattern);
-  } catch {
-    // Unloaded records are still read by the evaluate hook's own scan.
-  }
+  void removeStaleRecords(ctx).catch(() => {
+    // Stale records grant nothing; they only take up storage.
+  });
   await ctx.permission.hook("evaluate", async (event) => {
+    const token = event.metadata?.[PROBE_KEY];
+    const probe = typeof token === "string" ? PROBES.get(token) : undefined;
+    if (probe && probe.sessionID === event.sessionID) {
+      // This copy's saved-approval probe: keep the effect, never prompt.
+      probe.effect = event.effect;
+      event.effect = "deny";
+      return;
+    }
     if (event.effect === "deny") return;
     let agent = event.agent;
     if (agent === undefined) {
@@ -473,9 +525,7 @@ async function registerPermissionFloor(ctx, signal) {
     if (event.effect !== "allow" || event.action !== EXTERNAL) return;
     const asked = event.resources.filter((_, index) => effects[index] === "ask");
     if (asked.length === 0) return;
-    if (asked.every((resource) => matches(resource, [...recorded]))) return;
-    const saved = await savedPatterns(ctx, recorded);
-    if (!asked.every((resource) => matches(resource, saved))) event.effect = "ask";
+    if (!(await savedApprovalsCover(ctx, event.sessionID, agent, asked))) event.effect = "ask";
   });
   await ctx.tool.hook("execute.before", async (event) => {
     const rules = RESTRICTED_RULES.get(event.agent);
@@ -501,18 +551,14 @@ export default {
   id: "yandy-r.ycc-opencode",
   async setup(ctx) {
     const renderedRoot = renderTree();
-    const events = new AbortController();
-    const dispose = () => {
-      events.abort();
-      teardown(renderedRoot);
-    };
+    const dispose = () => teardown(renderedRoot);
     try {
       await registerSkills(ctx, renderedRoot);
       await registerAgents(ctx, renderedRoot);
       await registerCommands(ctx);
       await registerMcp(ctx);
       await registerInstructions(ctx);
-      await registerPermissionFloor(ctx, events.signal);
+      await registerPermissionFloor(ctx);
       await registerSensitiveGuard(ctx);
     } catch (error) {
       dispose();

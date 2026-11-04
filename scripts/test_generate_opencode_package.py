@@ -90,27 +90,52 @@ await cleanup();
 # transform, then replays permission.evaluate, tool execute.before, and
 # session context events through the latest setup's hooks. The fake tool
 # inventory carries the built-ins' permission names (write/patch -> edit).
-# `event` cases publish a host bus event to every live subscriber (or only to
-# the setups listed in `targets`, i.e. other locations of the project) and
-# wait `settle` ms (default 30); `rebuild` sets the adapter up again over the
-# same plugin storage; `storage` makes later writes fail (`fail`), wait until a
-# `release` (`hold`), or succeed (`ok`), or sets how many ms a scan takes
-# (`scanDelay`). Storage calls resolve a tick later, as the host's do, and scan
-# pages two entries at a time.
+# A plain case is one evaluate event whose `effect` is the one the host's
+# merged rules produced (an `external_check` passes the allow a host-wide
+# external_directory allow gives). The fake host also implements what the
+# floor calls itself: session.create/get/remove and permission.assert, which
+# evaluates like core/src/permission.ts evaluateInput (agent rules, host rules
+# appended, then the session's; any deny wins without hooks; the project's
+# saved approvals are appended as allow rules; the evaluate hooks run; deny
+# throws, ask records a prompt the user rejects). `saved` (payload) holds the
+# project's saved external_directory approvals before setup; `save`/`unsave`
+# cases add or remove them; `host` cases make session.create or
+# permission.assert fail, or (`unhooked`) make assert skip the evaluate hooks
+# and leave an ask pending until permission.reply settles it; `event` cases
+# publish a host bus event to every subscriber; `storage` (payload) seeds
+# plugin storage before setup. `preHooks: "allow-all"` registers another
+# plugin's evaluate hook ahead of the package that turns every ask into
+# allow; `copies: 2` loads a second copy of the package module after the first.
 FLOOR_DRIVER = r"""
 import { pathToFileURL } from "node:url";
 import { readFileSync } from "node:fs";
 const [root] = process.argv.slice(2);
-const { hostRules, inventory, sessions, cases } = JSON.parse(readFileSync(0, "utf8"));
-const plugin = (await import(pathToFileURL(root + "/index.js").href)).default;
-const storage = new Map(), subscribers = new Set(), held = [];
-let writes = "ok", scanDelay = 0;
+const { hostRules, inventory, sessions, cases, saved: initialSaved, storage: initialStorage, preHooks, copies } =
+  JSON.parse(readFileSync(0, "utf8"));
+const plugins = [];
+for (let copy = 0; copy < (copies ?? 1); copy++) {
+  const dir = copy === 0 ? root : `${root}-copy${copy}`;
+  plugins.push((await import(pathToFileURL(dir + "/index.js").href)).default);
+}
+const storage = new Map(Object.entries(initialStorage ?? {})), subscribers = new Set();
+const saved = [...(initialSaved ?? [])], children = new Map(), created = [], prompts = [];
+const failing = new Set(), pending = new Map(), replies = [];
+let current, requests = 0;
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
-function subscriber(owner) {
-  return (options) => ({ [Symbol.asyncIterator]() {
+// core/src/util/wildcard.ts match(), as the package ports it.
+function match(input, pattern) {
+  let escaped = pattern.replaceAll("\\", "/").replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*").replace(/\?/g, ".");
+  if (escaped.endsWith(" .*")) escaped = escaped.slice(0, -3) + "( .*)?";
+  return new RegExp("^" + escaped + "$", "s").test(String(input).replaceAll("\\", "/"));
+}
+const evaluate = (rules, action, resource) =>
+  rules.findLast((rule) => match(action, rule.action) && match(resource, rule.resource))?.effect ?? "ask";
+function subscriber(options) {
+  return { [Symbol.asyncIterator]() {
     const queue = [];
     let wake, done = false;
-    const sub = { owner, push(event) { queue.push(event); wake?.(); } };
+    const sub = { push(event) { queue.push(event); wake?.(); } };
     const stop = () => { done = true; subscribers.delete(sub); wake?.(); };
     subscribers.add(sub);
     options?.signal?.addEventListener("abort", stop, { once: true });
@@ -121,67 +146,134 @@ function subscriber(owner) {
       },
       async return() { stop(); return { done: true, value: undefined }; },
     };
-  } });
+  } };
 }
 const pluginStorage = {
   get: async (key) => { await tick(); return structuredClone(storage.get(key)); },
-  set: async (key, value) => {
-    await tick();
-    if (writes === "fail") throw new Error("kv write failed");
-    if (writes === "hold") await new Promise((resolve) => held.push(resolve));
-    storage.set(key, structuredClone(value));
-  },
+  set: async (key, value) => { await tick(); storage.set(key, structuredClone(value)); },
   remove: async (key) => { await tick(); storage.delete(key); },
   scan: async ({ prefix, after, limit = 2 }) => {
-    // The query reads storage when it starts; a slow scan returns that snapshot.
+    await tick();
     const keys = [...storage.keys()]
       .filter((key) => key.startsWith(prefix) && (after === undefined || key > after)).sort();
     const entries = keys.slice(0, limit).map((key) => ({ key, value: structuredClone(storage.get(key)) }));
-    await new Promise((resolve) => setTimeout(resolve, scanDelay));
     return keys.length > limit ? { entries, next: entries.at(-1).key } : { entries };
   },
 };
-let setups = 0;
+function sessionInfo(sessionID) {
+  if (children.has(sessionID)) return children.get(sessionID);
+  if (!(sessionID in sessions)) throw new Error(`session not found: ${sessionID}`);
+  return { id: sessionID, agent: sessions[sessionID] ?? undefined, permissions: [] };
+}
+const hostSession = {
+  get: async ({ sessionID }) => {
+    await tick();
+    const info = sessionInfo(sessionID);
+    return { data: { ...structuredClone(info), location: { directory: process.cwd() } } };
+  },
+  create: async (input) => {
+    await tick();
+    if (failing.has("create")) throw new Error("session create failed");
+    sessionInfo(input.parentID);
+    const info = { id: `ses_child_${created.length}`, parentID: input.parentID, agent: input.agent,
+      title: input.title, permissions: structuredClone(input.permissions ?? []) };
+    children.set(info.id, info);
+    created.push(structuredClone(info));
+    return { data: structuredClone(info) };
+  },
+  remove: async ({ sessionID }) => {
+    await tick();
+    if (!children.delete(sessionID)) throw new Error(`session not found: ${sessionID}`);
+  },
+};
+class BlockedError extends Error {}
+async function assert(input) {
+  await tick();
+  if (failing.has("assert")) throw new Error("permission service unavailable");
+  const session = sessionInfo(input.sessionID);
+  const agent = input.agent ?? session.agent;
+  const rules = [...(current.agents.get(agent)?.permissions ?? hostRules), ...session.permissions];
+  if (input.resources.some((resource) => evaluate(rules, input.action, resource) === "deny")) {
+    throw new BlockedError("blocked by rules");
+  }
+  const all = [...rules, ...saved.map((resource) => ({ action: "external_directory", resource, effect: "allow" }))];
+  const effects = input.resources.map((resource) => evaluate(all, input.action, resource));
+  const event = { sessionID: input.sessionID, agent: input.agent, action: input.action, resources: input.resources,
+    metadata: input.metadata ?? {}, source: input.source, effect: effects.includes("ask") ? "ask" : "allow" };
+  if (failing.has("unhooked")) {
+    // No plugin hook runs (e.g. the package was unloaded): an ask waits for a reply.
+    if (event.effect === "allow") return;
+    const id = `per_${requests++}`;
+    return new Promise((resolve, reject) => {
+      pending.set(id, { sessionID: input.sessionID, settle: (decision) =>
+        (decision === "reject" ? reject(new Error("rejected by the user")) : resolve()) });
+    });
+  }
+  for (const cb of current.hooks.evaluate) await cb(event);
+  if (event.effect === "deny") throw new BlockedError(event.message ?? "blocked");
+  if (event.effect === "ask") {
+    prompts.push({ sessionID: input.sessionID, action: input.action, resources: input.resources });
+    throw new Error("rejected by the user");
+  }
+}
 async function setup() {
-  const owner = setups++;
   const agents = new Map(), hooks = { evaluate: [], "execute.before": [], context: [] };
+  if (preHooks === "allow-all") {
+    hooks.evaluate.push((event) => {
+      if (event.effect === "ask") event.effect = "allow";
+    });
+  }
   const add = (name, cb) => { if (name in hooks) hooks[name].push(cb); };
   const ctx = {
     location: { directory: process.cwd(),
       project: { id: "prj", directory: process.cwd(), canonical: process.cwd() } },
-    event: { subscribe: subscriber(owner) },
+    event: { subscribe: subscriber },
     storage: pluginStorage,
     tool: {
       hook: async (name, cb) => add(name, cb),
       transform: async (cb) => cb({ get: () => undefined }),
       list: async () => inventory.map((tool) => ({ ...tool, execute: async () => ({}) })),
     },
-    permission: { hook: async (name, cb) => add(name, cb) },
+    permission: {
+      hook: async (name, cb) => add(name, cb),
+      assert,
+      // session.permission.list/reply: inputs { sessionID } and
+      // { sessionID, requestID, decision }; list resolves the request array.
+      list: async ({ sessionID }) => {
+        await tick();
+        sessionInfo(sessionID);
+        return [...pending].filter(([, item]) => item.sessionID === sessionID)
+          .map(([id, item]) => ({ id, sessionID: item.sessionID, action: "external_directory" }));
+      },
+      reply: async ({ sessionID, requestID, decision }) => {
+        await tick();
+        const request = pending.get(requestID);
+        if (!request || request.sessionID !== sessionID || !["once", "always", "reject"].includes(decision)) {
+          throw new Error(`invalid reply: ${JSON.stringify({ sessionID, requestID, decision })}`);
+        }
+        pending.delete(requestID);
+        replies.push({ sessionID, requestID, decision });
+        request.settle(decision);
+      },
+    },
     skill: { transform: async (cb) => cb({ get: () => undefined, add: () => {} }) },
     agent: { transform: async (cb) => cb({
       get: (id) => agents.get(id),
       update: (id, fn) => { const record = agents.get(id) ?? { id }; fn(record); agents.set(id, record); } }) },
     command: { transform: async (cb) => cb({ add: () => {} }) },
     mcp: { transform: async (cb) => cb({ get: () => undefined, set: () => {} }) },
-    session: {
-      hook: async (name, cb) => add(name, cb),
-      get: async ({ sessionID }) => {
-        if (!(sessionID in sessions)) throw new Error(`session not found: ${sessionID}`);
-        return { data: { id: sessionID, agent: sessions[sessionID] ?? undefined,
-          location: { directory: process.cwd() } } };
-      },
-    },
+    session: { hook: async (name, cb) => add(name, cb), ...hostSession },
   };
-  const cleanup = await plugin.setup(ctx);
+  const cleanups = [];
+  for (const plugin of plugins) cleanups.push(await plugin.setup(ctx));
   // opencode.config.agent pushes host rules into every existing agent in place.
   for (const record of agents.values()) record.permissions?.push(...structuredClone(hostRules));
-  return { agents, hooks, cleanup };
+  return { agents, hooks, cleanup: async () => { for (const cleanup of cleanups) await cleanup(); } };
 }
 const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
 const first = await setup();
 const second = await setup();
-const states = [first, second];
-let current = second;
+current = second;
 await settle();
 const results = [];
 for (const item of cases) {
@@ -189,24 +281,20 @@ for (const item of cases) {
   try {
     if (item.kind === "event") {
       for (const event of item.events ?? [item]) {
-        for (const sub of subscribers) {
-          if (!event.targets || event.targets.includes(sub.owner)) {
-            sub.push({ id: "evt", created: 0, type: event.type, data: event.data });
-          }
-        }
+        for (const sub of subscribers) sub.push({ id: "evt", created: 0, type: event.type, data: event.data });
       }
-      await new Promise((resolve) => setTimeout(resolve, item.settle ?? 30));
-      results.push({ ok: true });
-    } else if (item.kind === "storage") {
-      if (item.scanDelay !== undefined) scanDelay = item.scanDelay;
-      else writes = item.writes;
-      if (item.writes === "release") { writes = "ok"; held.splice(0).forEach((resolve) => resolve()); }
       await settle();
       results.push({ ok: true });
-    } else if (item.kind === "rebuild") {
-      current = await setup();
-      states.push(current);
-      await settle();
+    } else if (item.kind === "save" || item.kind === "unsave") {
+      for (const pattern of item.patterns) {
+        const index = saved.indexOf(pattern);
+        if (item.kind === "save" && index === -1) saved.push(pattern);
+        if (item.kind === "unsave" && index !== -1) saved.splice(index, 1);
+      }
+      results.push({ ok: true });
+    } else if (item.kind === "host") {
+      failing.clear();
+      for (const name of item.fail) failing.add(name);
       results.push({ ok: true });
     } else if (item.kind === "execute") {
       const event = { sessionID, messageID: "msg", id: "call", agent: item.agent, tool: item.tool,
@@ -235,8 +323,16 @@ const count = (state, id) => state.agents.get(id).permissions.length;
 console.log(JSON.stringify({
   counts: { first: count(first, "pr-comment-fixer"), second: count(second, "pr-comment-fixer") },
   results,
+  // Child sessions the package created, those still present, and every prompt
+  // raised in one of them.
+  created,
+  leftover: [...children.keys()],
+  childPrompts: prompts.filter((prompt) => created.some((info) => info.id === prompt.sessionID)),
+  pending: [...pending.keys()],
+  replies,
+  storage: Object.fromEntries(storage),
 }));
-for (const state of states) await state.cleanup();
+for (const state of [first, second]) await state.cleanup();
 """
 
 # Built-in tool names and the permission action each is gated by.
@@ -292,31 +388,21 @@ def external_check(agent: str, resources: list[str], session: str = "ses") -> di
     }
 
 
-def external_asked(
-    request: str, resources: list[str], save: list[str], session: str = "ses", targets: list[int] | None = None
-) -> dict[str, Any]:
+def external_asked(request: str, resources: list[str], save: list[str], session: str = "ses") -> dict[str, Any]:
     """The host's permission.asked event for one external_directory request."""
     data = {"id": request, "sessionID": session, "action": "external_directory", "resources": resources, "save": save}
-    event: dict[str, Any] = {"kind": "event", "type": "permission.asked", "data": data}
-    if targets is not None:
-        event["targets"] = targets
-    return event
+    return {"kind": "event", "type": "permission.asked", "data": data}
 
 
-def external_replied(
-    request: str, reply: str, session: str = "ses", targets: list[int] | None = None
-) -> dict[str, Any]:
+def external_replied(request: str, reply: str, session: str = "ses") -> dict[str, Any]:
     """The host's permission.replied event."""
     data = {"sessionID": session, "requestID": request, "reply": reply}
-    event: dict[str, Any] = {"kind": "event", "type": "permission.replied", "data": data}
-    if targets is not None:
-        event["targets"] = targets
-    return event
+    return {"kind": "event", "type": "permission.replied", "data": data}
 
 
-def external_batch(*events: dict[str, Any]) -> dict[str, Any]:
-    """Events published back to back, without waiting between them."""
-    return {"kind": "event", "events": list(events)}
+def host_saved(kind: str, *patterns: str) -> dict[str, Any]:
+    """Add (`save`) or remove (`unsave`) saved approvals of the project on the host."""
+    return {"kind": kind, "patterns": list(patterns)}
 
 
 class OpencodeNpmPackageTests(unittest.TestCase):
@@ -547,11 +633,27 @@ class OpencodeNpmPackageTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "escapes the package root"):
             run_driver(moved)
 
-    def run_floor(self, name: str, host: list[dict[str, str]], cases: list[dict[str, Any]]) -> dict[str, Any]:
-        """Drive the package's floor hooks with host rules appended after setup."""
+    def run_floor(
+        self,
+        name: str,
+        host: list[dict[str, str]],
+        cases: list[dict[str, Any]],
+        saved: list[str] | None = None,
+        storage: dict[str, Any] | None = None,
+        pre_hooks: str | None = None,
+        copies: int = 1,
+    ) -> dict[str, Any]:
+        """Drive the package's floor hooks with host rules appended after setup.
+
+        `saved` are the project's saved approvals and `storage` the plugin
+        storage, both as they are before the package is set up. `pre_hooks`
+        and `copies` are FLOOR_DRIVER's `preHooks` and `copies`.
+        """
         assert NODE is not None
         moved = self.tmp / name / "ycc-opencode"
         shutil.copytree(self.root, moved)
+        for copy in range(1, copies):
+            shutil.copytree(self.root, moved.parent / f"ycc-opencode-copy{copy}")
         script = moved.parent / "floor.mjs"
         script.write_text(FLOOR_DRIVER, encoding="utf-8")
         payload = {
@@ -559,6 +661,10 @@ class OpencodeNpmPackageTests(unittest.TestCase):
             "inventory": FAKE_INVENTORY,
             "sessions": {"ses": None, "ses-fixer": "pr-comment-fixer", "ses-finder": "code-finder"},
             "cases": cases,
+            "saved": saved or [],
+            "storage": storage or {},
+            "preHooks": pre_hooks,
+            "copies": copies,
         }
         result = subprocess.run(
             [NODE, str(script), str(moved)],
@@ -628,164 +734,194 @@ class OpencodeNpmPackageTests(unittest.TestCase):
         packaged = next(a for a in self.registration["agents"] if a["id"] == fixer)["permissions"]
         self.assertEqual(observed["counts"], {"first": len(packaged) + len(host), "second": len(packaged) + len(host)})
 
-    def run_external(self, name: str, steps: list[tuple[dict[str, Any], str | None]]) -> None:
-        """Replay external-directory checks and events under a host-wide allow."""
+    def run_external(
+        self,
+        name: str,
+        steps: list[tuple[dict[str, Any], str | None]],
+        saved: list[str] | None = None,
+        pre_hooks: str | None = None,
+        copies: int = 1,
+    ) -> dict[str, Any]:
+        """Replay external-directory checks under a host-wide allow.
+
+        Every saved-approval probe must leave no session or request behind and never prompt.
+        """
         host = [{"action": "external_directory", "resource": "*", "effect": "allow"}]
-        observed = self.run_floor(name, host, [step for step, _ in steps])
+        observed = self.run_floor(
+            name, host, [step for step, _ in steps], saved=saved, pre_hooks=pre_hooks, copies=copies
+        )
         for index, ((step, effect), outcome) in enumerate(zip(steps, observed["results"], strict=True)):
             with self.subTest(index=index, step=json.dumps(step)):
                 self.assertTrue(outcome["ok"], outcome)
                 if effect is not None:
                     self.assertEqual(outcome["effect"], effect)
                     self.assertIsNone(outcome["message"])
+        self.assertEqual(observed["leftover"], [])
+        self.assertEqual(observed["childPrompts"], [])
+        self.assertEqual(observed["pending"], [])
+        return observed
 
     @unittest.skipIf(NODE is None, "node is required")
-    def test_host_external_directory_allow_prompts_restricted_agents_until_saved(self) -> None:
+    def test_removed_saved_approval_prompts_restricted_agents_again(self) -> None:
+        # The user answers "always": the host saves /elsewhere/* and publishes
+        # the request and the reply. Removing the saved approval in OpenCode
+        # must take effect for the restricted agent at once.
         self.run_external(
-            "external",
+            "unsaved",
             [
-                # A config-level allow does not reach a restricted agent's own `ask`.
+                (external_asked("per_1", ["/elsewhere/a/*"], ["/elsewhere/*"]), None),
+                (host_saved("save", "/elsewhere/*"), None),
+                (external_replied("per_1", "always"), None),
+                (external_check(FIXER, ["/elsewhere/a/*"]), "allow"),
+                (host_saved("unsave", "/elsewhere/*"), None),
+                (external_check(FIXER, ["/elsewhere/a/*"]), "ask"),
+                (external_check(FIXER, ["/elsewhere/b/*"]), "ask"),
+            ],
+        )
+
+    @unittest.skipIf(NODE is None, "node is required")
+    def test_host_external_directory_allow_alone_prompts_only_restricted_agents(self) -> None:
+        observed = self.run_external(
+            "config-allow",
+            [
                 (external_check(FIXER, ["/elsewhere/a/*"]), "ask"),
                 (external_check("code-finder", ["/elsewhere/a/*"]), "allow"),
-                # The user answers that prompt "always"; the host saves the project root.
-                (external_asked("per_1", ["/elsewhere/a/*"], ["/elsewhere/*"]), None),
-                (external_replied("per_1", "always"), None),
+                # A check without an agent is judged by the session's agent.
+                ({**external_check(FIXER, ["/elsewhere/a/*"], "ses-fixer"), "agent": None}, "ask"),
+                ({**external_check(FIXER, ["/elsewhere/a/*"], "ses-finder"), "agent": None}, "allow"),
+            ],
+        )
+        # Only restricted agents' checks probe, in a child of the asking session.
+        self.assertEqual(
+            [(info["parentID"], info["agent"]) for info in observed["created"]],
+            [("ses", FIXER), ("ses-fixer", FIXER)],
+        )
+        for info in observed["created"]:
+            self.assertEqual(info["permissions"], [{"action": "external_directory", "resource": "*", "effect": "ask"}])
+
+    @unittest.skipIf(NODE is None, "node is required")
+    def test_saved_approval_from_before_setup_is_honoured(self) -> None:
+        # Saved while the package was not loaded: no event was ever seen.
+        self.run_external(
+            "saved-before",
+            [
                 (external_check(FIXER, ["/elsewhere/a/*"]), "allow"),
-                (external_check(FIXER, ["/elsewhere/b/*"]), "allow"),
-                (external_check(FIXER, ["/elsewhere/b/*", "/other/*"]), "ask"),
-                # "once" saves nothing, so the next call prompts again.
-                (external_asked("per_2", ["/other/*"], ["/other/*"]), None),
-                (external_replied("per_2", "once"), None),
+                (external_check("review-fixer", ["/elsewhere/b/*"]), "allow"),
                 (external_check(FIXER, ["/other/*"]), "ask"),
-                # A reply to a request never seen asked records nothing; "reject" neither.
-                (external_replied("per_unknown", "always"), None),
-                (external_asked("per_3", ["/third/*"], ["/third/*"]), None),
-                (external_replied("per_3", "reject"), None),
-                (external_check(FIXER, ["/third/*"]), "ask"),
-                # Saved approvals are per project, for every agent and session, as the host saves them.
-                (external_asked("per_4", ["/fourth/*"], ["/fourth/*"], "ses-finder"), None),
-                (external_replied("per_4", "always", "ses-finder"), None),
-                (external_check(FIXER, ["/fourth/x/*"]), "allow"),
-                # The approval outlives a state rebuild.
-                ({"kind": "rebuild"}, None),
+            ],
+            saved=["/elsewhere/*"],
+        )
+
+    @unittest.skipIf(NODE is None, "node is required")
+    def test_every_asked_resource_must_be_covered(self) -> None:
+        self.run_external(
+            "mixed",
+            [
+                (external_check(FIXER, ["/elsewhere/a/*", "/other/*"]), "ask"),
+                (external_check(FIXER, ["/other/*", "/elsewhere/a/*"]), "ask"),
+                (host_saved("save", "/other/*"), None),
+                (external_check(FIXER, ["/elsewhere/a/*", "/other/*"]), "allow"),
+            ],
+            saved=["/elsewhere/*"],
+        )
+
+    @unittest.skipIf(NODE is None, "node is required")
+    def test_failed_saved_approval_probe_prompts(self) -> None:
+        self.run_external(
+            "probe-failure",
+            [
+                ({"kind": "host", "fail": ["create"]}, None),
+                (external_check(FIXER, ["/elsewhere/a/*"]), "ask"),
+                ({"kind": "host", "fail": ["assert"]}, None),
+                (external_check(FIXER, ["/elsewhere/a/*"]), "ask"),
+                ({"kind": "host", "fail": []}, None),
+                (external_check(FIXER, ["/elsewhere/a/*"]), "allow"),
+            ],
+            saved=["/elsewhere/*"],
+        )
+
+    @unittest.skipIf(NODE is None, "node is required")
+    def test_another_plugins_allow_hook_cannot_pass_the_probe(self) -> None:
+        # A plugin whose evaluate hook runs first approves every request,
+        # including the probe's: the sentinel exposes it and the floor prompts.
+        self.run_external(
+            "allow-all-hook",
+            [
+                (external_check(FIXER, ["/elsewhere/a/*"]), "ask"),
+                (external_check(FIXER, ["/other/*"]), "ask"),
+                (external_check("code-finder", ["/other/*"]), "allow"),
+            ],
+            saved=["/elsewhere/*"],
+            pre_hooks="allow-all",
+        )
+
+    @unittest.skipIf(NODE is None, "node is required")
+    def test_saved_approval_covering_everything_prompts(self) -> None:
+        # A saved approval that covers the sentinel too proves nothing.
+        self.run_external("broad-saved", [(external_check(FIXER, ["/elsewhere/a/*"]), "ask")], saved=["/*"])
+
+    @unittest.skipIf(NODE is None, "node is required")
+    def test_two_package_copies_reach_the_same_answer(self) -> None:
+        # Each copy has its own probes; one copy's probe is an ordinary check
+        # for the other, which nests at most one probe of its own.
+        observed = self.run_external(
+            "two-copies",
+            [
                 (external_check(FIXER, ["/elsewhere/a/*"]), "allow"),
                 (external_check(FIXER, ["/other/*"]), "ask"),
+                (host_saved("unsave", "/elsewhere/*"), None),
+                (external_check(FIXER, ["/elsewhere/a/*"]), "ask"),
             ],
+            saved=["/elsewhere/*"],
+            copies=2,
         )
+        parents = {info["parentID"] for info in observed["created"]}
+        depth = {info["id"]: 0 if info["parentID"] == "ses" else 1 for info in observed["created"]}
+        self.assertLessEqual(parents, {"ses", *depth})
+        for info in observed["created"]:
+            if info["parentID"] != "ses":
+                self.assertEqual(depth[info["parentID"]], 0, info)
 
     @unittest.skipIf(NODE is None, "node is required")
-    def test_host_auto_resolved_external_requests_record_nothing(self) -> None:
-        # Two prompts pend; the user answers the narrow one "always". The host
-        # saves /repo/d/* only, then auto-resolves the covered /repo/d/sub/*
-        # request with an "always" reply whose wider `save` it never stores.
-        self.run_external(
-            "auto-resolve",
-            [
-                (external_asked("per_a", ["/repo/d/*"], ["/repo/d/*"]), None),
-                (external_asked("per_b", ["/repo/d/sub/*"], ["/repo/*"]), None),
-                (external_batch(external_replied("per_a", "always"), external_replied("per_b", "always")), None),
-                (external_check(FIXER, ["/repo/d/sub/*"]), "allow"),
-                (external_check(FIXER, ["/repo/e/*"]), "ask"),
-                ({"kind": "rebuild"}, None),
-                (external_check(FIXER, ["/repo/e/*"]), "ask"),
-            ],
+    def test_probe_without_the_hook_times_out_and_rejects_its_request(self) -> None:
+        # No evaluate hook denies the probe (e.g. the plugin unloaded
+        # mid-probe), so its request stays pending until the timeout.
+        observed = self.run_external(
+            "unhooked",
+            [({"kind": "host", "fail": ["unhooked"]}, None), (external_check(FIXER, ["/other/*"]), "ask")],
         )
+        (probe,) = observed["created"]
+        self.assertEqual([(r["sessionID"], r["decision"]) for r in observed["replies"]], [(probe["id"], "reject")])
 
     @unittest.skipIf(NODE is None, "node is required")
-    def test_auto_resolved_request_partly_allowed_by_config_records_nothing(self) -> None:
-        # One batched request: /home/u/p2/sub/* is allowed by the user's config,
-        # /r/d/sub/* asks. The user answers another request for /r/d/* "always";
-        # the host saves only /r/d/* and auto-resolves the batched request.
-        self.run_external(
-            "auto-resolve-partial",
+    def test_saved_approval_probe_never_prompts_or_leaks_a_session(self) -> None:
+        observed = self.run_external(
+            "probe-cleanup",
             [
-                (external_asked("per_a", ["/r/d/*"], ["/r/d/*"]), None),
-                (external_asked("per_b", ["/home/u/p2/sub/*", "/r/d/sub/*"], ["/home/u/p2/*", "/r/*"]), None),
-                (external_batch(external_replied("per_a", "always"), external_replied("per_b", "always")), None),
-                (external_check(FIXER, ["/r/d/sub/*"]), "allow"),
-                (external_check(FIXER, ["/r/e/*"]), "ask"),
-                (external_check(FIXER, ["/home/u/p2/x/*"]), "ask"),
-                ({"kind": "rebuild"}, None),
-                (external_check(FIXER, ["/r/e/*"]), "ask"),
-                (external_check(FIXER, ["/home/u/p2/x/*"]), "ask"),
+                (external_check(FIXER, ["/elsewhere/a/*"]), "ask"),
+                (host_saved("save", "/elsewhere/*"), None),
+                (external_check(FIXER, ["/elsewhere/a/*"]), "allow"),
+                (external_check("review-fixer", ["/elsewhere/a/*"], "ses-fixer"), "allow"),
+                # Probes run only where the packaged rules ask under a host allow.
+                ({**external_check(FIXER, ["/elsewhere/a/*"]), "effect": "ask"}, "ask"),
+                ({**external_check(FIXER, ["src/*"]), "action": "read"}, "allow"),
             ],
         )
+        self.assertEqual(len(observed["created"]), 3)
 
     @unittest.skipIf(NODE is None, "node is required")
-    def test_failed_approval_write_does_not_stop_recording(self) -> None:
-        self.run_external(
-            "write-failure",
-            [
-                ({"kind": "storage", "writes": "fail"}, None),
-                (external_asked("per_1", ["/one/*"], ["/one/*"]), None),
-                (external_replied("per_1", "always"), None),
-                ({"kind": "storage", "writes": "ok"}, None),
-                (external_asked("per_2", ["/two/*"], ["/two/*"]), None),
-                (external_replied("per_2", "always"), None),
-                ({"kind": "rebuild"}, None),
-                (external_check(FIXER, ["/two/*"]), "allow"),
-                # The write that failed is not stored: it prompts once more after a rebuild.
-                (external_check(FIXER, ["/one/*"]), "ask"),
-            ],
+    def test_stale_saved_approval_records_are_removed_at_setup(self) -> None:
+        stale = {f"saved/external_directory/prj/{index}": f"/stale/{index}/*" for index in range(5)}
+        other = {"saved/external_directory/other-project/x": "/x/*", "unrelated": "kept"}
+        observed = self.run_floor(
+            "stale-records",
+            [{"action": "external_directory", "resource": "*", "effect": "allow"}],
+            [external_check(FIXER, ["/stale/0/x/*"])],
+            storage={**stale, **other},
         )
-
-    @unittest.skipIf(NODE is None, "node is required")
-    def test_approval_applies_before_its_storage_write_lands(self) -> None:
-        self.run_external(
-            "pending-write",
-            [
-                ({"kind": "storage", "writes": "hold"}, None),
-                (external_asked("per_1", ["/one/*"], ["/one/*"]), None),
-                (external_replied("per_1", "always"), None),
-                # The host re-evaluates a parallel request right after the reply.
-                (external_check(FIXER, ["/one/sub/*"]), "allow"),
-                ({"kind": "storage", "writes": "release"}, None),
-                ({"kind": "rebuild"}, None),
-                (external_check(FIXER, ["/one/sub/*"]), "allow"),
-            ],
-        )
-
-    @unittest.skipIf(NODE is None, "node is required")
-    def test_approval_applies_before_a_slow_storage_scan_finishes(self) -> None:
-        # The host's re-evaluation of pending requests runs right after it
-        # publishes the reply, long before a slow storage scan returns.
-        self.run_external(
-            "slow-scan",
-            [
-                ({"kind": "storage", "scanDelay": 300}, None),
-                (external_asked("per_1", ["/one/*"], ["/one/*"]), None),
-                ({**external_replied("per_1", "always"), "settle": 5}, None),
-                (external_check(FIXER, ["/one/sub/*"]), "allow"),
-                # A request asked alongside it and answered "always" is still recorded.
-                (external_asked("per_2", ["/two/*"], ["/two/*"]), None),
-                ({**external_replied("per_2", "always"), "settle": 5}, None),
-                (external_check(FIXER, ["/two/sub/*"]), "allow"),
-            ],
-        )
-
-    @unittest.skipIf(NODE is None, "node is required")
-    def test_concurrent_approvals_from_two_locations_are_both_kept(self) -> None:
-        # Setups 0 and 1 stand for two directories (worktrees) of one project,
-        # each streaming its own location's events into the shared storage.
-        self.run_external(
-            "two-locations",
-            [
-                ({"kind": "storage", "writes": "hold"}, None),
-                (
-                    external_batch(
-                        external_asked("per_a", ["/a/*"], ["/a/*"], targets=[0]),
-                        external_asked("per_b", ["/b/*"], ["/b/*"], targets=[1]),
-                        external_replied("per_a", "always", targets=[0]),
-                        external_replied("per_b", "always", targets=[1]),
-                    ),
-                    None,
-                ),
-                ({"kind": "storage", "writes": "release"}, None),
-                ({"kind": "rebuild"}, None),
-                (external_check(FIXER, ["/a/*"]), "allow"),
-                (external_check(FIXER, ["/b/*"]), "allow"),
-            ],
-        )
+        self.assertEqual(observed["storage"], other)
+        # A stale record grants nothing.
+        self.assertEqual(observed["results"][0]["effect"], "ask")
 
     @unittest.skipIf(NODE is None, "node is required")
     def test_host_wildcard_allow_cannot_widen_a_restricted_agents_tools(self) -> None:
