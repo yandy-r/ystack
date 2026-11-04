@@ -27,10 +27,6 @@
       "type": "http",
       "url": "https://mcp.linear.app/mcp"
     },
-    "linear-personal": {
-      "type": "http",
-      "url": "https://mcp.linear.app/mcp"
-    },
     "vercel": {
       "type": "http",
       "url": "https://mcp.vercel.com"

@@ -338,7 +338,7 @@ def mixed(path, shipped, agents):
     providers = Counter(i["provider"] for i in winners)
     return (f"no agents/codex/opencode alias; bare plan from ~/.claude/skills (ycc/plan kept); {len(data['agents'])} "
             f"agents only from ycc; 1 context file (native); {len(winners)} MCP winners, each connection once "
-            f"({dict(providers)}), ycc-mcp:linear-personal {'loaded' if 'ycc-mcp:linear-personal' in {i['name'] for i in winners} else 'MISSING'}")
+            f"({dict(providers)})")
 
 
 def project(path, root):

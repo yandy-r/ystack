@@ -12,7 +12,7 @@ home="$(new_home)"
 install_must_succeed "${home}" list-mcps
 out="${INSTALL_OUT}"
 assert_contains "${out}" "github" "list-mcps lists shared servers"
-assert_contains "${out}" "linear-personal" "list-mcps includes linear-personal"
+assert_contains "${out}" "vercel" "list-mcps includes vercel"
 # Parity: every MCP-capable target manages the same servers.
 install_must_succeed "${home}" list-mcps
 all_names="${INSTALL_OUT}"
@@ -47,15 +47,15 @@ echo
 echo "== install.sh --mcps: every MCP-capable target =="
 
 home="$(new_home)"
-install_must_succeed "${home}" sync --target all --intent mcp --mcps github,linear-personal
+install_must_succeed "${home}" sync --target all --intent mcp --mcps github,vercel
 for f in .mcp.json .cursor/mcp.json opencode.json; do
     merged="$(cat "${home}/project/${f}" 2>/dev/null)"
     assert_contains "${merged}" '"github"' "--mcps writes github to ${f}"
-    assert_contains "${merged}" '"linear-personal"' "--mcps writes linear-personal to ${f}"
+    assert_contains "${merged}" '"vercel"' "--mcps writes vercel to ${f}"
     assert_not_contains "${merged}" '"stripe"' "--mcps skips unselected servers in ${f}"
 done
 merged="$(cat "${home}/project/.codex/config.toml")"
-assert_contains "${merged}" "[mcp_servers.linear-personal]" "--mcps writes linear-personal to codex"
+assert_contains "${merged}" "[mcp_servers.vercel]" "--mcps writes vercel to codex"
 assert_contains "${merged}" 'command = "sh"' "codex keeps its github bridge override"
 assert_contains "${merged}" 'mcp-remote https://api.githubcopilot.com/mcp/' "codex bridges to the remote github endpoint"
 assert_contains "${merged}" 'gh auth token' "codex resolves github authentication at startup"
@@ -124,9 +124,9 @@ else
     printf '[skip] zsh completion behavior (zsh not installed)\n'
 fi
 out="$(PATH="${REPO_ROOT}:${PATH}" bash -c 'source "$1"
-    COMP_WORDS=(install.sh sync --target codex --intent mcp --mcps github,li); COMP_CWORD=7; _ycc; echo "${COMPREPLY[*]}"' \
+    COMP_WORDS=(install.sh sync --target codex --intent mcp --mcps github,ve); COMP_CWORD=7; _ycc; echo "${COMPREPLY[*]}"' \
     _ "${REPO_ROOT}/scripts/completions/ycc.bash")"
-assert_contains "${out}" "github,linear-personal" "bash completes --mcps for the line's --target"
+assert_contains "${out}" "github,vercel" "bash completes --mcps for the line's --target"
 # Readline splits 'name@mkt' at '@' (default COMP_WORDBREAKS): feed the words
 # and COMP_LINE the way a real shell does. It then replaces the current word
 # together with a '@' right before it (a bash special prefix), so replies

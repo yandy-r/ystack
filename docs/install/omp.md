@@ -181,9 +181,8 @@ does not load plugin extensions, and `--no-extensions` turns it off.
 
 ## MCP Servers
 
-`ycc-mcp@ycc` ships the servers from `mcp-configs/mcp.json` as the package's
-`.mcp.json` (only `linear-personal`'s URL differs, see Duplicates below). omp
-loads them at session start and names each one
+`ycc-mcp@ycc` ships the servers from `mcp-configs/mcp.json` byte-for-byte as
+the package's `.mcp.json`. omp loads them at session start and names each one
 `ycc-mcp:<server>` (for example `ycc-mcp:github`). Generated files hold only
 `${VAR}` placeholders, never secret values.
 
@@ -223,12 +222,10 @@ loads them at session start and names each one
   user file. `mcp.enableProjectConfig: false` drops the project files.
 - **Duplicates.** Servers with different names but the same connection (same
   URL and headers, or same command, args and env) collapse to the
-  higher-priority one. `ycc-mcp:linear-personal` shares `ycc-mcp:linear`'s
-  URL in `mcp-configs/mcp.json`, so the OMP package alone ships it as
-  `https://mcp.linear.app/mcp?ycc-server=linear-personal` (YAN-1291). Linear
-  ignores the parameter, so both servers load, and each has its own OAuth
-  login (`/mcp reauth ycc-mcp:linear-personal`). The Claude, Codex, Cursor and
-  opencode packages keep the plain URL. A native or Claude server with the
+  higher-priority one. The generator would give a later duplicate in
+  `mcp-configs/mcp.json` a `?ycc-server=<name>` URL parameter in the OMP
+  package only (YAN-1291) so both load; the current source has none. A native
+  or Claude server with the
   same connection shadows the `ycc-mcp` one; an equivalent Codex, opencode or
   Cursor import is itself shadowed by `ycc-mcp`. Foreign user-level configs
   (`~/.claude.json`, `~/.codex/config.toml`, `~/.cursor/mcp.json`, opencode)
@@ -611,7 +608,7 @@ except `~/.agents`. Widening it changes what wins:
   user `mcp.json`, for example:
 
   ```json
-  { "disabledServers": ["github", "linear", "linear-personal"] }
+  { "disabledServers": ["github", "linear"] }
   ```
 
 ### Profiles And `PI_CODING_AGENT_DIR`

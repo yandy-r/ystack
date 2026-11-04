@@ -53,9 +53,6 @@
     "linear": {
       "url": "https://mcp.linear.app/mcp"
     },
-    "linear-personal": {
-      "url": "https://mcp.linear.app/mcp"
-    },
     "vercel": {
       "url": "https://mcp.vercel.com"
     },

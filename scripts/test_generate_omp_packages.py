@@ -345,20 +345,13 @@ class GenerateOmpPackagesTests(unittest.TestCase):
             if path.is_file():
                 self.assertNotIn(SENTINEL.encode(), path.read_bytes(), path)
 
-    def test_omp_mcp_disambiguates_only_linear_personal_in_the_real_source(self) -> None:
+    def test_omp_mcp_matches_the_real_source_without_duplicate_connections(self) -> None:
         source = (gen.REPO_ROOT / gen.SOURCE_MCP_PATH).read_bytes()
         rendered = gen.omp_mcp_bytes(source)
-        before, after = json.loads(source)["mcpServers"], json.loads(rendered)["mcpServers"]
-        self.assertEqual(list(after), list(before))
-        self.assertEqual(after["linear-personal"]["url"], "https://mcp.linear.app/mcp?ycc-server=linear-personal")
-        after["linear-personal"]["url"] = before["linear-personal"]["url"]
-        self.assertEqual(after, before)
-        self.assertEqual(
-            [line for line in rendered.splitlines() if line not in source.splitlines()],
-            [b'      "url": "https://mcp.linear.app/mcp?ycc-server=linear-personal"'],
-        )
-        keys = {gen.mcp_connection_key(server) for server in json.loads(rendered)["mcpServers"].values()}
-        self.assertEqual(len(keys), len(after))
+        self.assertEqual(rendered, source)
+        servers = json.loads(rendered)["mcpServers"]
+        keys = {gen.mcp_connection_key(server) for server in servers.values()}
+        self.assertEqual(len(keys), len(servers))
 
     def test_omp_mcp_keeps_unique_sources_and_existing_queries(self) -> None:
         unique = self.write_mcp_servers(
@@ -462,8 +455,13 @@ class GenerateOmpPackagesTests(unittest.TestCase):
         self.assert_has(self.errors(), f"{MCP / gen.MCP_CONFIG}: invalid JSON")
 
     def test_validator_reports_raw_source_bytes_as_mcp_drift(self) -> None:
+        source = self.write_mcp_servers(
+            {
+                "a": {"type": "http", "url": "https://x.invalid/mcp"},
+                "b": {"type": "http", "url": "https://x.invalid/mcp"},
+            }
+        )
         self.generate()
-        source = (self.root / gen.SOURCE_MCP_PATH).read_bytes()
         self.assertNotEqual(gen.omp_mcp_bytes(source), source)
         (self.root / MCP / gen.MCP_CONFIG).write_bytes(source)
         self.assertEqual(

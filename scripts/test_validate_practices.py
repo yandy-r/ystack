@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import validate_practices as vp  # noqa: E402
 
 GOOD_DESC = "Fix things. Use when the user asks to fix something."
-MCP_JSON = {"mcpServers": {"github": {"type": "http"}, "linear-personal": {"type": "http"}}}
+MCP_JSON = {"mcpServers": {"github": {"type": "http"}, "linear-team": {"type": "http"}}}
 
 
 def write_skill(root: Path, text: str, name: str = "demo") -> Path:
@@ -230,7 +230,7 @@ class TestSkillRules(Fixture):
         )
 
     def test_s9_tools_forms(self) -> None:
-        ok = ["Read", "Bash(git status:*)", "mcp__github__add_issue_comment", "mcp__linear-personal__get_workspace"]
+        ok = ["Read", "Bash(git status:*)", "mcp__github__add_issue_comment", "mcp__linear-team__get_workspace"]
         write_skill(self.root, sk(allowed=ok))
         self.assertEqual(ids(self.rep(), "S9"), set())
         write_skill(self.root, sk(allowed="Read, Task, mcp__github__x, Bash(git status:*), WebFetch"))
@@ -273,7 +273,7 @@ class TestAgentRules(Fixture):
         self.assertEqual(len(ids(r, "A1")), 1)
 
     def test_a2_tools(self) -> None:
-        tools = ["Read", "MultiEdit", "mcp__linear-personal__get_workspace", "mcp__github__*"]
+        tools = ["Read", "MultiEdit", "mcp__linear-team__get_workspace", "mcp__github__*"]
         (self.root / "ycc" / "agents" / "helper.md").write_text(ag(tools=tools))
         got = {v.item for v in self.rep().violations if v.rule == "A2"}
         self.assertEqual(got, {"unknown tool 'MultiEdit'"})
