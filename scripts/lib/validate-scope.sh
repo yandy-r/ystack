@@ -120,6 +120,9 @@ validate_scope_owned_targets() {
         # check (validate_omp_native.py) also reads the OMP install doc, the ADR and the spike.
         docs/install/*) echo "packages omp" ;;
         docs/internal/spikes/omp-runtime-contract.md | docs/internal/adr/0002-omp-runtime-contract.md) echo "omp" ;;
+        # Pi runtime-contract spike (YAN-1182): opt-in live harness and its helper. No Pi validate
+        # target exists yet (YAN-1194), and no validator reads them.
+        scripts/test-pi-runtime-contract-spike.sh | scripts/pi_runtime_spike.py) ;;
         # Experimental OpenCode npm package source and boundary tests.
         scripts/generate_opencode_package.py | scripts/generate-opencode-package.sh | scripts/opencode_package* | scripts/test_generate_opencode_package.py | scripts/test-opencode-npm-package.sh | scripts/opencode_npm_release.py | scripts/test_opencode_npm_release.py) echo "opencode release" ;;
 

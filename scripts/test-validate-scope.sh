@@ -105,6 +105,8 @@ expect_targets "OMP scripted-session live harness selects omp" "omp" scripts/tes
 expect_targets "OMP built-in command drift guard selects omp and types" "omp types" scripts/omp_builtin_commands.py
 expect_targets "OMP built-in command drift tests select omp and types (mypy files)" "omp types" \
     scripts/test_omp_builtin_commands.py
+expect_targets "Pi spike harness selects nothing" "" scripts/test-pi-runtime-contract-spike.sh
+expect_targets "Pi spike helper selects only types (non-test scripts/*.py)" "types" scripts/pi_runtime_spike.py
 expect_targets "unrelated package output selects everything" "${ALL}" packages/other/ycc-mcp/mcp.json
 expect_targets "Cursor hook source selects everything" "${ALL}" ycc/settings/cursor/herdr-session-start.sh
 expect_targets "vendored Cursor schemas select cursor native and config" "cursor cursor-native config" scripts/vendor/cursor/plugin.schema.json
