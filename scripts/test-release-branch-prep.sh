@@ -396,6 +396,91 @@ test_prep_artifact_gitignore() {
   printf '%s\n' '.ycc/artifacts/' 'unrelated/' >"${repo}/.gitignore"
   run_prep "$repo" demo
   assert_exit "$PREP_RC" 1 'prep: rejects unrelated untracked gitignore rule'
+
+  test_prep_artifact_gitignore_crlf autocrlf
+  test_prep_artifact_gitignore_crlf attributes
+  test_prep_artifact_gitignore_crlf_head
+}
+
+# crlf_repo <mode> — repo whose committed .gitignore is checked out with CRLF
+# endings, via core.autocrlf=true or a .gitattributes eol=crlf rule.
+crlf_repo() {
+  local mode="$1" repo
+  repo="$(mkrepo)"
+  if [[ "$mode" == attributes ]]; then
+    commit_file "$repo" .gitattributes '.gitignore eol=crlf' 'chore: check out gitignore with CRLF'
+  fi
+  commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
+  if [[ "$mode" == autocrlf ]]; then git -C "$repo" config core.autocrlf true; fi
+  rm "${repo}/.gitignore"
+  git -C "$repo" checkout -q -- .gitignore 2>/dev/null
+  echo "$repo"
+}
+
+test_prep_artifact_gitignore_crlf() {
+  local mode="$1" repo
+  repo="$(crlf_repo "$mode")"
+  assert_eq "$(od -An -c "${repo}/.gitignore" | tr -d ' \n')" 'existing/\r\n' "prep ${mode}: fixture checks out CRLF"
+  (cd "$repo" && bash "${SHARED}/resolve-artifact-store.sh" --store=linear --ensure --kind=parallel-plan --slug=demo) >/dev/null 2>&1
+  assert_eq "$(od -An -c "${repo}/.gitignore" | tr -d ' \n')" 'existing/\r\n.ycc/artifacts/\n' "prep ${mode}: ensure appended the rule"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 0 "prep ${mode}: accepts ensured cache rule on a CRLF checkout"
+  assert_eq "$(current_branch "$repo")" 'feat/demo' "prep ${mode}: switches branch with ensured CRLF cache rule"
+
+  repo="$(crlf_repo "$mode")"
+  printf '.ycc/artifacts/\r\n' >>"${repo}/.gitignore"
+  git -C "$repo" add .gitignore 2>/dev/null
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 0 "prep ${mode}: accepts staged hand-written CRLF cache rule"
+
+  repo="$(crlf_repo "$mode")"
+  printf '.ycc/artifacts/\r\nunrelated/\r\n' >>"${repo}/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 "prep ${mode}: rejects CRLF cache rule plus unrelated addition"
+  assert_eq "$(current_branch "$repo")" 'main' "prep ${mode}: stays on trunk with unrelated CRLF rule"
+
+  repo="$(crlf_repo "$mode")"
+  printf 'existing/\r\r\n.ycc/artifacts/\r\n' >"${repo}/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 "prep ${mode}: rejects a stray CR the clean filter keeps"
+
+  repo="$(crlf_repo "$mode")"
+  mkdir -p "${repo}/sub"
+  printf '.ycc/artifacts/\n' >>"${repo}/.gitignore"
+  run_prep "${repo}/sub" demo
+  assert_exit "$PREP_RC" 0 "prep ${mode}: accepts CRLF cache rule when run from a subdirectory"
+
+  repo="$(crlf_repo "$mode")"
+  printf 'existing/\r\n.ycc/artifacts/\r\n\0' >"${repo}/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 "prep ${mode}: rejects a NUL byte after the CRLF cache rule"
+}
+
+# A CRLF blob committed before normalization stays CRLF under autocrlf or
+# text=auto, and git add keeps it, so the raw append must still pass.
+test_prep_artifact_gitignore_crlf_head() {
+  local mode repo
+  for mode in autocrlf text-auto; do
+    repo="$(mkrepo)"
+    printf 'existing/\r\n' >"${repo}/.gitignore"
+    git -C "$repo" add .gitignore
+    git -C "$repo" commit -q -m 'chore: ignore existing files with CRLF'
+    if [[ "$mode" == autocrlf ]]; then
+      git -C "$repo" config core.autocrlf true
+    else
+      printf '* text=auto\n' >"${repo}/.git/info/attributes"
+    fi
+    printf '.ycc/artifacts/\n' >>"${repo}/.gitignore"
+    run_prep "$repo" demo
+    assert_exit "$PREP_RC" 0 "prep ${mode}: accepts cache rule after a committed CRLF gitignore"
+  done
+
+  repo="$(mkrepo)"
+  commit_file "$repo" .gitattributes '.gitignore -text' 'chore: keep gitignore bytes'
+  commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
+  printf 'existing/\r\n.ycc/artifacts/\r\n' >"${repo}/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep -text: rejects a CRLF rewrite Git would stage as is'
 }
 
 test_prep_state_trunk_nonstandard() {
