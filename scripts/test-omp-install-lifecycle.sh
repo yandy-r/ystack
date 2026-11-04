@@ -379,7 +379,7 @@ else
   assert_rc 0 'repair install --project'
   has repair '[ok] omp plugin install --force --scope project ycc@ycc' "[ok] ycc@ycc $next reinstalled (project)" \
     '[ok] ycc@ycc disabled at project scope: kept'
-  project_outcome="reports the GC'd project cache; a --project re-run repairs it at $next"
+  project_outcome="GCs the project cache and the installer reports it; a --project re-run repairs it at $next"
 fi
 listing list-repaired "$proj"
 check repaired-proof "$checks" item "$root/logs/list-repaired.stdout" ycc@ycc project "version=\"$next\"" 'enabled=false'

@@ -467,7 +467,7 @@ omp plugin disable --scope project ycc@ycc
 ycc never enables or disables plugins: a disabled install stays disabled
 across updates and reinstalls.
 
-A user-scope upgrade or uninstall can make omp garbage-collect the cache a
+A user-scope upgrade, forced reinstall or uninstall can make omp garbage-collect the cache a
 project install still points at. omp 18.13.0 and later keep the cache for
 project installs they made; project installs made with older omp can still
 lose it. On any omp version the installer detects a lost cache and prints the
