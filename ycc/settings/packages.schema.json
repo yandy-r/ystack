@@ -61,7 +61,7 @@
           "minProperties": 1,
           "description": "Runtime to per-runtime package entry; a runtime appears only where the package exists there.",
           "propertyNames": {
-            "enum": ["claude", "codex", "cursor", "opencode", "agents", "omp"]
+            "enum": ["claude", "codex", "cursor", "opencode", "agents", "omp", "pi"]
           },
           "additionalProperties": {
             "$ref": "#/$defs/RuntimePackage"
@@ -115,7 +115,7 @@
           "description": "Bare-name dependencies; only Claude native packages may declare them."
         },
         "target_release": {
-          "enum": ["v6.0.0", "v6.1.0", "v7.0.0"],
+          "enum": ["v6.0.0", "v6.1.0", "v6.3.0", "v7.0.0"],
           "description": "Release a deferred or planned listing targets; deferred entries cannot target v6.0.0."
         },
         "experimental": {

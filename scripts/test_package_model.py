@@ -28,7 +28,7 @@ from package_model import (  # noqa: E402
 
 MANIFEST = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
 SCHEMA = json.loads(DEFAULT_SCHEMA_PATH.read_text(encoding="utf-8"))
-RUNTIME = ("claude", "codex", "cursor", "opencode", "agents", "omp")
+RUNTIME = ("claude", "codex", "cursor", "opencode", "agents", "omp", "pi")
 
 
 def clone() -> dict:
@@ -92,6 +92,32 @@ class CheckedInModelTests(unittest.TestCase):
         self.assertEqual(tuple(fallback.components), ("instructions", "settings"))
         self.assertEqual(fallback.gates, ())
 
+    def test_pi_rows_modeled_but_not_shipping(self) -> None:
+        # ADR 0003 package matrix: adapters deferred, ycc-hooks and ycc-all excluded, no ycc-agents.
+        model = load_package_model()
+        releases: set[str] = set()
+        expected = {
+            "ycc": "deferred",
+            "ycc-mcp": "deferred",
+            "ycc-rules": "deferred",
+            "installer-fallback": "deferred",
+            "ycc-hooks": "excluded",
+            "ycc-all": "excluded",
+        }
+        for package in model.packages:
+            entry = model.lookup(package.key, "pi")
+            with self.subTest(package=package.key):
+                if package.key not in expected:
+                    self.assertIsNone(entry)
+                    continue
+                assert entry is not None
+                self.assertEqual(entry.status, expected[package.key])
+                self.assertFalse(entry.listed)
+                releases.add(entry.target_release)
+        # One shared later release for every pi row; the literal lives in packages.json only.
+        self.assertEqual(len(releases), 1, releases)
+        self.assertNotIn("v6.0.0", releases)
+
     def test_claude_ycc_agents_deferred_to_v7(self) -> None:
         entry = load_package_model().lookup("ycc-agents", "claude")
         assert entry is not None
@@ -116,7 +142,7 @@ class CheckedInModelTests(unittest.TestCase):
 
     def test_installer_fallback_file_copy_unlisted(self) -> None:
         package = next(p for p in load_package_model().packages if p.key == "installer-fallback")
-        self.assertEqual(len(package.runtimes), 6)
+        self.assertEqual(len(package.runtimes), 7)
         for entry in package.runtimes:
             self.assertEqual(entry.mechanism, "file-copy")
             self.assertFalse(entry.listed)
@@ -152,7 +178,7 @@ class NegativeTests(unittest.TestCase):
         self.expect(data, "status")
 
     def test_unknown_and_stale_runtime_keys_rejected(self) -> None:
-        for name in ("omp2", "pi"):
+        for name in ("omp2", "pie"):
             with self.subTest(runtime=name):
                 data = clone()
                 runtimes = data["packages"]["ycc"]["runtimes"]

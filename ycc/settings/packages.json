@@ -76,6 +76,26 @@
           ],
           "gates": [],
           "notes": "Generated OMP package under packages/omp/ycc (omp >=18.12.2) with .omp-plugin and .claude-plugin manifests and package.json, rewritten ${CLAUDE_PLUGIN_ROOT}, /ycc: and _shared references, agents translated to @role models, and one commands/<skill>.md entrypoint per public skill (/ycc:<skill>). Listed in the root .omp-plugin/marketplace.json (YAN-1180). install.sh --target omp exports it to a local marketplace (--mode local) or registers the repository catalog (--mode repo) and installs it through omp plugin (user or project scope)."
+        },
+        "pi": {
+          "status": "deferred",
+          "listed": false,
+          "mechanism": "native",
+          "components": ["skills", "agents", "commands", "shared"],
+          "requires": [],
+          "target_release": "v6.3.0",
+          "experimental": false,
+          "opt_in": false,
+          "evidence": ["docs/internal/adr/0003-pi-runtime-contract.md", "docs/internal/spikes/pi-runtime-contract.md"],
+          "gates": [
+            "YAN-1184 skill and _shared generation into packages/pi/ycc/skills with the body rewriter",
+            "YAN-1185 ycc:<name> extension commands",
+            "YAN-1186 ycc subagent extension with package-local agent data",
+            "YAN-1188 packages/pi/* generator with package.json#pi and the lockstep version",
+            "YAN-1189 install.sh --target pi lifecycle",
+            "YAN-1195 live acceptance on the 1.2.0 floor and current Pi"
+          ],
+          "notes": "Deferred: generated Pi package under packages/pi/ycc (pi >=1.2.0, recommended 1.5.0) with skills, _shared, ycc:<name> command and subagent extensions, and agent data; rewrites ${CLAUDE_PLUGIN_ROOT}, /ycc: and $ARGUMENTS, which Pi leaves literal. Pi has no catalog: install.sh --target pi will run pi install <abs path>. No generator or installer ships yet."
         }
       }
     },
@@ -145,6 +165,23 @@
           ],
           "gates": [],
           "notes": "Generated OMP package under packages/omp/ycc-mcp (omp >=18.12.2) with .omp-plugin and .claude-plugin manifests, package.json, and a root .mcp.json byte-identical to mcp-configs/mcp.json (secret-literal audited; ${VAR} env placeholders stay unexpanded until omp starts a server). Servers load as ycc-mcp:<server>. Listed in the root .omp-plugin/marketplace.json (YAN-1180). install.sh --target omp installs it next to ycc through omp plugin (user or project scope); a running session picks it up after /reload-plugins or a restart."
+        },
+        "pi": {
+          "status": "deferred",
+          "listed": false,
+          "mechanism": "native",
+          "components": ["mcp"],
+          "requires": [],
+          "target_release": "v6.3.0",
+          "experimental": false,
+          "opt_in": false,
+          "evidence": ["docs/internal/adr/0003-pi-runtime-contract.md", "docs/internal/spikes/pi-runtime-contract.md"],
+          "gates": [
+            "YAN-1190 ycc-mcp registrar extension with explicit exposure",
+            "YAN-1188 packages/pi/* generator with package.json#pi and the lockstep version",
+            "YAN-1195 live acceptance on the 1.2.0 floor and current Pi"
+          ],
+          "notes": "Deferred: extension package (pi >=1.2.0) whose registrar calls pi.registerMcpServer for the shipped server set read as package data, because Pi never reads mcp.json from a package; a same-name user mcp.json entry wins, tools become mcp__<server>__<tool>, and SSE servers are rejected. An opt-in install.sh --mcp merge into <agentDir>/mcp.json is the fallback for pi mcp shell commands."
         }
       }
     },
@@ -222,6 +259,19 @@
           ],
           "gates": [],
           "notes": "Excluded: herdr ships its own OMP integration (herdr integration install omp), which reports the session and agent state; a ycc reporter is ignored by herdr (non-herdr source) or corrupts herdr's ordering (herdr:omp). WorktreeCreate has no OMP event. ycc ships no OMP hooks (YAN-1174); its only OMP extension is the agent scope guard inside the ycc package (YAN-1250)."
+        },
+        "pi": {
+          "status": "excluded",
+          "listed": false,
+          "mechanism": "native",
+          "components": ["hooks"],
+          "requires": [],
+          "target_release": "v6.3.0",
+          "experimental": false,
+          "opt_in": false,
+          "evidence": ["docs/internal/adr/0003-pi-runtime-contract.md", "docs/internal/spikes/pi-runtime-contract.md"],
+          "gates": [],
+          "notes": "Excluded: Pi never runs shell hooks or hooks.json, and WorktreeCreate has no Pi event. herdr reporting is herdr's own integration (herdr integration install pi), and ycc ships no Pi hook extension (ADR 0003)."
         }
       }
     },
@@ -259,6 +309,19 @@
           ],
           "gates": [],
           "notes": "Excluded: the OMP marketplace does not read plugin dependencies, so ycc-all (on Claude the union of ycc, ycc-mcp, and ycc-hooks) is omitted from the OMP catalog; install ycc and ycc-mcp separately; herdr reporting comes from `herdr integration install omp`."
+        },
+        "pi": {
+          "status": "excluded",
+          "listed": false,
+          "mechanism": "native",
+          "components": ["skills", "agents", "shared", "mcp", "hooks"],
+          "requires": [],
+          "target_release": "v6.3.0",
+          "experimental": false,
+          "opt_in": false,
+          "evidence": ["docs/internal/adr/0003-pi-runtime-contract.md", "docs/internal/spikes/pi-runtime-contract.md"],
+          "gates": [],
+          "notes": "Excluded: Pi packages cannot depend on Pi packages, so ycc-all (on Claude the union of ycc, ycc-mcp, and ycc-hooks) has no Pi package; install ycc and ycc-mcp separately; ycc-hooks is excluded on Pi and herdr reporting comes from `herdr integration install pi`."
         }
       }
     },
@@ -287,7 +350,7 @@
       }
     },
     "ycc-rules": {
-      "description": "Language and common coding rules for Cursor and OMP.",
+      "description": "Language and common coding rules for Cursor, OMP, and Pi.",
       "version_policy": "lockstep",
       "runtimes": {
         "cursor": {
@@ -323,6 +386,23 @@
           ],
           "gates": [],
           "notes": "Generated package under packages/omp/ycc-rules (omp >=18.12.2): 31 flat rules named ycc-<family>-<stem>, paths→globs, description kept, alwaysApply only when true. Language rules are rulebook entries read via rule://; 5 description-less ycc-<family>-trigger TTSR rules (glob-gated edit/write, interruptMode never) attach them once per session and once per subagent that edits a matching file. Listed in the root .omp-plugin/marketplace.json (YAN-1180)."
+        },
+        "pi": {
+          "status": "deferred",
+          "listed": false,
+          "mechanism": "native",
+          "components": ["rules"],
+          "requires": [],
+          "target_release": "v6.3.0",
+          "experimental": false,
+          "opt_in": false,
+          "evidence": ["docs/internal/adr/0003-pi-runtime-contract.md", "docs/internal/spikes/pi-runtime-contract.md"],
+          "gates": [
+            "YAN-1192 ycc-rules path-rule injector extension",
+            "YAN-1188 packages/pi/* generator with package.json#pi and the lockstep version",
+            "YAN-1195 live acceptance on the 1.2.0 floor and current Pi"
+          ],
+          "notes": "Deferred: extension package (pi >=1.2.0) carrying the rule files and a path-rule injector that attaches a family's rules after a matching read, edit, or write. Always rules use the installer-fallback AGENTS.md link."
         }
       }
     },
@@ -444,6 +524,23 @@
           ],
           "gates": [],
           "notes": "install.sh --target omp, user scope only: --rules links AGENTS.md into the omp agent dir; --settings merges ycc-owned modelRoles.{default,slow,task}, retry.fallbackChains.{default,slow,task} (bare fallback model, keeps the turn's thinking level; OMP also uses default for chat roles without a chain and single-model subagents) and tools.approvalMode into config.yml (hash-owned; user edits and project config win). Rules ship natively in ycc-rules; the status line is unsupported."
+        },
+        "pi": {
+          "status": "deferred",
+          "listed": false,
+          "mechanism": "file-copy",
+          "components": ["instructions", "settings", "mcp"],
+          "requires": [],
+          "target_release": "v6.3.0",
+          "experimental": false,
+          "opt_in": false,
+          "evidence": ["docs/internal/adr/0003-pi-runtime-contract.md", "docs/internal/spikes/pi-runtime-contract.md"],
+          "gates": [
+            "YAN-1189 install.sh --target pi lifecycle",
+            "YAN-1192 --rules AGENTS.md link and opt-in --settings defaultModel merge",
+            "YAN-1193 owned ~/.agents/skills dedupe overrides"
+          ],
+          "notes": "Deferred, user scope only: --rules links AGENTS.md into <agentDir> (never APPEND_SYSTEM.md, which a trusted project file replaces); opt-in --settings merges defaultModel into settings.json and --mcp merges the server set into mcp.json; owned -~/.agents/skills/<n>/SKILL.md overrides hide duplicate ~/.agents copies. Pi has no approval modes or command status line."
         }
       }
     }

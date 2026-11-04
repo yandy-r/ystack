@@ -44,6 +44,9 @@ validate_scope_owned_targets() {
         packages/opencode/*) echo "opencode release packages" ;;
         packages/omp/*) echo "omp" ;;
         .omp-plugin/*) echo "omp" ;;
+        # Pi's generated tree (YAN-1188); until a pi target exists, the capability-matrix
+        # check in `packages` fails closed on its presence (ADR 0003).
+        packages/pi/*) echo "packages" ;;
 
         # The package manifest and its model feed the packages validators and
         # per-runtime package generators, so they must match before the
@@ -56,6 +59,7 @@ validate_scope_owned_targets() {
         scripts/validate_packages.py | scripts/test_validate_packages.py) echo "packages" ;;
         scripts/validate_install_doc_ids.py | scripts/test_validate_install_doc_ids.py) echo "packages" ;;
         scripts/validate_capability_matrix.py | scripts/test_validate_capability_matrix.py) echo "packages" ;;
+        scripts/test-pi-install-assumptions.sh) echo "packages" ;;
         # Generated shell helper-path check; its tests are in the [tool.mypy] file list.
         scripts/validate_generated_shell_paths.py) echo "packages" ;;
         scripts/test_validate_generated_shell_paths.py) echo "packages types" ;;

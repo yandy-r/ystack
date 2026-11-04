@@ -142,7 +142,7 @@ if not isinstance(packages, dict):
     print(f"draft-notes.sh: FAIL: {path}: packages must be an object", file=sys.stderr)
     sys.exit(1)
 
-RUNTIME_ORDER = ("claude", "codex", "cursor", "opencode", "agents", "omp")
+RUNTIME_ORDER = ("claude", "codex", "cursor", "opencode", "agents", "omp", "pi")
 rows = []
 for key in sorted(packages):
     package = packages[key]

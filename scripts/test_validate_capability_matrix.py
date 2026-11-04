@@ -16,25 +16,29 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 from validate_capability_matrix import (  # noqa: E402
     CANONICAL_CAPABILITIES,
     CANONICAL_TARGETS,
+    DEFAULT_MANIFEST_PATH,
     DEFAULT_MATRIX_PATH,
     DEFAULT_SCHEMA_PATH,
+    REPO_ROOT,
     validate,
 )
 
-RUNTIMES = ["claude", "cursor", "codex", "opencode", "omp", "agents"]
+RUNTIMES = ["claude", "cursor", "codex", "opencode", "omp", "agents", "pi"]
 HEADER = "| capability | " + " | ".join(CANONICAL_TARGETS) + " |"
 SEPARATOR = "| --- | " + " | ".join("---" for _ in CANONICAL_TARGETS) + " |"
-# Every capability is supported except INSTALL_PATH:omp, which needs a note.
-NOTE_KEY = "INSTALL_PATH:omp"
+# Every capability is supported except the pi column (the last one), which is all unsupported
+# as the fail-closed rule requires while packages/pi/ is absent, so each pi cell needs a note.
+NOTE_KEY = "INSTALL_PATH:pi"
+PI_NOTES = [line for cap in CANONICAL_CAPABILITIES for line in (f"**{cap}:pi**", "Not shipped yet.", "")]
 
 
-def row(capability: str, last: str = "supported") -> str:
+def row(capability: str, last: str = "unsupported") -> str:
     cells = ["supported"] * (len(CANONICAL_TARGETS) - 1) + [last]
     return f"| {capability} | " + " | ".join(cells) + " |"
 
 
 def fixture_rows() -> list[str]:
-    return [row(cap, "unsupported" if cap == "INSTALL_PATH" else "supported") for cap in CANONICAL_CAPABILITIES]
+    return [row(cap) for cap in CANONICAL_CAPABILITIES]
 
 
 def fixture_matrix(
@@ -45,7 +49,7 @@ def fixture_matrix(
     notes: list[str] | None = None,
 ) -> str:
     table = [header, separator, *(fixture_rows() if rows is None else rows)]
-    note_lines = [f"**{NOTE_KEY}**", "Not installable yet."] if notes is None else notes
+    note_lines = PI_NOTES if notes is None else notes
     return "\n".join(
         [
             "# Matrix",
@@ -81,15 +85,21 @@ class MatrixFixture(unittest.TestCase):
         return matrix_path, schema_path
 
     def errors(self, matrix: str, schema: dict[str, object] | None = None) -> list[str]:
-        return validate(*self.write(matrix, schema))
+        # An empty repository root: the fixture must also satisfy the generated-tree rule.
+        repo = self.root / "repo"
+        repo.mkdir(exist_ok=True)
+        return validate(*self.write(matrix, schema), repo)
 
     def assert_error(self, errors: list[str], needle: str) -> None:
         self.assertTrue(any(needle in error for error in errors), f"{needle!r} not in {errors}")
 
+    def assert_tokens(self, errors: list[str], *tokens: str) -> None:
+        self.assertTrue(any(all(t in error for t in tokens) for error in errors), f"{tokens!r} not in {errors}")
+
 
 class CheckedInMatrixTests(MatrixFixture):
     def test_checked_in_matrix_passes(self) -> None:
-        self.assertEqual(validate(DEFAULT_MATRIX_PATH, DEFAULT_SCHEMA_PATH), [])
+        self.assertEqual(validate(DEFAULT_MATRIX_PATH, DEFAULT_SCHEMA_PATH, REPO_ROOT, DEFAULT_MANIFEST_PATH), [])
 
     def test_fixture_passes(self) -> None:
         self.assertEqual(self.errors(fixture_matrix()), [])
@@ -97,29 +107,31 @@ class CheckedInMatrixTests(MatrixFixture):
 
 class NegativeTests(MatrixFixture):
     def test_unknown_target_column_fails(self) -> None:
-        header = HEADER.replace("| omp |", "| pi |")
+        header = HEADER.replace("| pi |", "| pie |")
         errors = self.errors(fixture_matrix(header=header))
         self.assert_error(errors, "must be exactly")
-        self.assert_error(errors, "target 'pi' is not a runtime")
+        self.assert_error(errors, "target 'pie' is not a runtime")
 
     def test_reordered_targets_fail(self) -> None:
         header = HEADER.replace("| cursor | codex |", "| codex | cursor |")
         self.assert_error(self.errors(fixture_matrix(header=header)), "must be exactly")
 
     def test_stale_target_not_in_schema_fails(self) -> None:
-        schema = fixture_schema([r for r in RUNTIMES if r != "omp"])
-        self.assert_error(self.errors(fixture_matrix(), schema), "target 'omp' is not a runtime")
+        for stale in ("omp", "pi"):
+            with self.subTest(target=stale):
+                schema = fixture_schema([r for r in RUNTIMES if r != stale])
+                self.assert_error(self.errors(fixture_matrix(), schema), f"target '{stale}' is not a runtime")
 
     def test_missing_note_fails(self) -> None:
         errors = self.errors(fixture_matrix(notes=[]))
         self.assert_error(errors, f"{NOTE_KEY} has no **{NOTE_KEY}** note")
 
     def test_stale_note_target_fails(self) -> None:
-        notes = [f"**{NOTE_KEY}**", "x", "", "**SKILLS:pi**", "Stale."]
-        self.assert_error(self.errors(fixture_matrix(notes=notes)), "unknown target 'pi'")
+        notes = [*PI_NOTES, "**SKILLS:pie**", "Stale."]
+        self.assert_error(self.errors(fixture_matrix(notes=notes)), "unknown target 'pie'")
 
     def test_stale_note_capability_fails(self) -> None:
-        notes = [f"**{NOTE_KEY}**", "x", "", "**PLUGINS:omp**", "Stale."]
+        notes = [*PI_NOTES, "**PLUGINS:omp**", "Stale."]
         self.assert_error(self.errors(fixture_matrix(notes=notes)), "unknown capability 'PLUGINS'")
 
     def test_bad_vocab_fails(self) -> None:
@@ -165,8 +177,46 @@ class NegativeTests(MatrixFixture):
         )
 
     def test_colonless_note_is_allowed(self) -> None:
-        notes = [f"**{NOTE_KEY}**", "x", "", "**FREE FORM**", "Prose."]
+        notes = [*PI_NOTES, "**FREE FORM**", "Prose."]
         self.assertEqual(self.errors(fixture_matrix(notes=notes)), [])
+
+
+class GeneratedTreeTests(MatrixFixture):
+    """The pi column fails closed against packages/pi/ both ways (ADR 0003, YAN-1183)."""
+
+    def tree_errors(self, rows: list[str], *, tree: bool, manifest: dict[str, object] | None = None) -> list[str]:
+        repo = self.root / "repo"
+        repo.mkdir(exist_ok=True)
+        if tree:
+            (repo / "packages/pi").mkdir(parents=True, exist_ok=True)
+        manifest_path = None
+        if manifest is not None:
+            manifest_path = self.root / "packages.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        matrix_path, schema_path = self.write(fixture_matrix(rows=rows))
+        return validate(matrix_path, schema_path, repo, manifest_path)
+
+    @staticmethod
+    def manifest(status: str) -> dict[str, object]:
+        return {"packages": {"ycc": {"runtimes": {"pi": {"status": status}}}}}
+
+    def test_absent_tree_with_all_unsupported_passes(self) -> None:
+        self.assertEqual(self.tree_errors(fixture_rows(), tree=False, manifest=self.manifest("deferred")), [])
+
+    def test_absent_tree_with_claimed_support_fails(self) -> None:
+        rows = [row(cap, "partial" if cap == "SKILLS" else "unsupported") for cap in CANONICAL_CAPABILITIES]
+        self.assert_tokens(self.tree_errors(rows, tree=False), "packages/pi", "SKILLS:pi")
+
+    def test_absent_tree_with_included_pi_row_fails(self) -> None:
+        errors = self.tree_errors(fixture_rows(), tree=False, manifest=self.manifest("included"))
+        self.assert_tokens(errors, "packages.ycc.runtimes.pi", "packages/pi")
+
+    def test_present_tree_with_unsupported_install_path_fails(self) -> None:
+        self.assert_tokens(self.tree_errors(fixture_rows(), tree=True), "packages/pi", "INSTALL_PATH:pi")
+
+    def test_present_tree_with_partial_install_path_passes(self) -> None:
+        rows = [row(cap, "partial" if cap == "INSTALL_PATH" else "unsupported") for cap in CANONICAL_CAPABILITIES]
+        self.assertEqual(self.tree_errors(rows, tree=True, manifest=self.manifest("included")), [])
 
 
 class CliTests(MatrixFixture):

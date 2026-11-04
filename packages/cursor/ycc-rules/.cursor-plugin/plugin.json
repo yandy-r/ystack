@@ -2,7 +2,7 @@
   "name": "ycc-rules",
   "displayName": "ycc-rules",
   "version": "6.2.0",
-  "description": "Language and common coding rules for Cursor and OMP.",
+  "description": "Language and common coding rules for Cursor, OMP, and Pi.",
   "author": {
     "name": "yandy-r"
   },

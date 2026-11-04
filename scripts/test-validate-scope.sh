@@ -80,6 +80,8 @@ expect_targets "OMP golden tests select omp and types (mypy files)" "omp types" 
     scripts/test_generate_omp_skills.py scripts/test_generate_omp_agents.py scripts/test_generate_omp_commands.py
 expect_targets "generated OMP manifests and catalog select omp" "omp" \
     packages/omp/ycc/.omp-plugin/plugin.json packages/omp/ycc/package.json .omp-plugin/marketplace.json
+expect_targets "generated Pi tree selects packages (capability-matrix tree check)" "packages" \
+    packages/pi/ycc/package.json
 expect_targets "OMP package generator and policy select omp, config and types" "omp config types" \
     scripts/generate_omp_packages.py scripts/validate_omp_native.py
 expect_targets "OMP smoke driver selects omp and types" "omp types" scripts/omp_native_smoke.py
@@ -175,6 +177,7 @@ expect_targets "install ID validator selects packages and types" "packages types
 expect_targets "install ID tests select packages" "packages" scripts/test_validate_install_doc_ids.py
 expect_targets "capability matrix validator selects packages and types" "packages types" scripts/validate_capability_matrix.py
 expect_targets "capability matrix tests select packages" "packages" scripts/test_validate_capability_matrix.py
+expect_targets "PI1 audit fixture test selects packages" "packages" scripts/test-pi-install-assumptions.sh
 expect_targets "generated shell path validator selects packages and types" "packages types" scripts/validate_generated_shell_paths.py
 expect_targets "generated shell path tests select packages and types (mypy files)" "packages types" scripts/test_validate_generated_shell_paths.py
 expect_targets "capability matrix selects the bundle targets including packages" "${BUNDLES}" ycc/skills/_shared/references/target-capability-matrix.md

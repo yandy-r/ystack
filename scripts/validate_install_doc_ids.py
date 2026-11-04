@@ -19,7 +19,7 @@ from pathlib import Path
 from package_model import DEFAULT_MANIFEST_PATH, REPO_ROOT, PackageModel, load_package_model
 
 INSTALL_DOCS = Path("docs/install")
-RUNTIMES = frozenset({"claude", "codex", "cursor", "opencode", "agents", "omp"})
+RUNTIMES = frozenset({"claude", "codex", "cursor", "opencode", "agents", "omp", "pi"})
 # Match complete tokens, not a suffix of a scoped npm package or a placeholder.
 # A scoped package may have an npm version/tag; its identity is the unversioned key.
 ID_PATTERN = re.compile(

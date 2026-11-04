@@ -35,7 +35,9 @@ and that plugin-root variable references are rewritten target-appropriately (kep
 absolute path in generated Cursor and Codex bundles). For `omp`, `OM1` passes while the root
 `.omp-plugin/` is absent only if the matrix marks `INSTALL_PATH:omp` `unsupported` or `partial`
 (`partial` with no listed OMP package: installed by `install.sh --target omp` from a generated
-export); once the catalog exists, `OM2` requires a valid `.omp-plugin/marketplace.json`.
+export); once the catalog exists, `OM2` requires a valid `.omp-plugin/marketplace.json`. For
+`pi`, `PI1` fails closed both ways: while `packages/pi/` is absent every `pi` matrix cell must be
+`unsupported`, and once the tree exists `INSTALL_PATH:pi` must not be `unsupported`.
 
 **Feature-vs-matrix** — output of `audit-target-features.sh`. Cross-references
 capabilities in the source tree against `target-capability-matrix.md`. Features present

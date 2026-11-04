@@ -9,7 +9,7 @@
 - Artifact store
 - How to Update This Document
 
-As of 2026-10-19
+As of 2026-11-04
 
 This file is the authoritative source for which ycc bundle capabilities are supported on each
 deployment target. Downstream scripts parse the table below; read the Parser Grammar section
@@ -22,7 +22,7 @@ before editing the table.
 The first table below (Capability Matrix) is parsed by `ycc/skills/compatibility-audit/scripts/audit-target-features.sh`.
 Follow these rules exactly or the parser will misread cells:
 
-- **Column order**: `capability, claude, cursor, codex, opencode, omp` — do not reorder.
+- **Column order**: `capability, claude, cursor, codex, opencode, omp, pi` — do not reorder.
 - **Cell vocabulary**: exactly one of `supported`, `partial`, or `unsupported` — no other tokens,
   no trailing punctuation, no parenthetical notes inside the cell.
 - **Notes** belong in the Notes section below the table, keyed as `capability:target`.
@@ -44,19 +44,19 @@ Follow these rules exactly or the parser will misread cells:
 
 ## Capability Matrix
 
-| capability        | claude    | cursor      | codex       | opencode    | omp         |
-| ----------------- | --------- | ----------- | ----------- | ----------- | ----------- |
-| SKILLS            | supported | supported   | supported   | supported   | partial     |
-| COMMANDS          | supported | partial     | unsupported | supported   | partial     |
-| AGENTS            | supported | partial     | supported   | supported   | partial     |
-| HOOKS.PreToolUse  | supported | partial     | unsupported | partial     | unsupported |
-| HOOKS.PostToolUse | supported | partial     | unsupported | partial     | unsupported |
-| HOOKS.Stop        | supported | partial     | unsupported | partial     | unsupported |
-| MCP               | supported | supported   | partial     | supported   | partial     |
-| INSTALL_PATH      | supported | supported   | supported   | supported   | partial     |
-| DANGEROUS_MODE    | supported | unsupported | unsupported | unsupported | unsupported |
-| WORKTREE          | supported | partial     | partial     | partial     | partial     |
-| MODS              | supported | unsupported | unsupported | unsupported | unsupported |
+| capability        | claude    | cursor      | codex       | opencode    | omp         | pi          |
+| ----------------- | --------- | ----------- | ----------- | ----------- | ----------- | ----------- |
+| SKILLS            | supported | supported   | supported   | supported   | partial     | unsupported |
+| COMMANDS          | supported | partial     | unsupported | supported   | partial     | unsupported |
+| AGENTS            | supported | partial     | supported   | supported   | partial     | unsupported |
+| HOOKS.PreToolUse  | supported | partial     | unsupported | partial     | unsupported | unsupported |
+| HOOKS.PostToolUse | supported | partial     | unsupported | partial     | unsupported | unsupported |
+| HOOKS.Stop        | supported | partial     | unsupported | partial     | unsupported | unsupported |
+| MCP               | supported | supported   | partial     | supported   | partial     | unsupported |
+| INSTALL_PATH      | supported | supported   | supported   | supported   | partial     | unsupported |
+| DANGEROUS_MODE    | supported | unsupported | unsupported | unsupported | unsupported | unsupported |
+| WORKTREE          | supported | partial     | partial     | partial     | partial     | unsupported |
+| MODS              | supported | unsupported | unsupported | unsupported | unsupported | unsupported |
 
 ---
 
@@ -67,14 +67,15 @@ from installer-managed artifacts and gated work in `ycc/settings/packages.json`.
 `listed: false` packages are not published catalog entries; generated trees and successful spikes
 alone do not make them shipping user install paths. This does not revise the capability verdicts above.
 
-| target   | native, listed today                                                                                                                          | install.sh fallback today                                                                                                                                                                                                                  | unlisted or gated native packages                                           |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| Claude   | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-hooks@ycc` (2.1.300+), `ycc-all@ycc`; `status-bar@ycc-mods`                                                    | Rules, settings, statusline, MCP, standalone skills/agents; hooks via the native `ycc-hooks` plugin at project scope (global hooks link with `--global`)                                                                                   | `ycc-agents@ycc` in v7.0.0                                                  |
-| Cursor   | `ycc`, `ycc-rules`, `ycc-mcp`, `ycc-hooks` via the root `.cursor-plugin/marketplace.json` (interactive `/plugins`); hooks `sessionStart` only | Skills, agents, commands, rules, settings under `~/.cursor/`; optional hooks                                                                                                                                                               | None                                                                        |
-| Codex    | `ycc@ycc`, `ycc-mcp@ycc` via the root `.agents/plugins/marketplace.json`                                                                      | Agent TOMLs, `AGENTS.md`, `config.toml`                                                                                                                                                                                                    | `ycc-hooks` excluded (YAN-1149)                                             |
-| opencode | None                                                                                                                                          | Skills, agents, commands, shared, `opencode.json`, `AGENTS.md`                                                                                                                                                                             | `@yandy-r/ycc-opencode` npm plugin: experimental, opt-in, unpublished       |
-| `agents` | None                                                                                                                                          | Skills and `ycc-shared` copied into `~/.agents/`                                                                                                                                                                                           | None planned                                                                |
-| `omp`    | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-rules@ycc` via the root `.omp-plugin/marketplace.json` (omp `>=18.12.2`)                                       | `install.sh --target omp`: local export (`--mode local`) or the repository catalog (`--mode repo`) installed through `omp plugin` (user or project scope); opt-in `--rules` (`AGENTS.md`) and `--settings` (`config.yml`), user scope only | `ycc-hooks` and `ycc-all` excluded (herdr: `herdr integration install omp`) |
+| target   | native, listed today                                                                                                                          | install.sh fallback today                                                                                                                                                                                                                  | unlisted or gated native packages                                                                             |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Claude   | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-hooks@ycc` (2.1.300+), `ycc-all@ycc`; `status-bar@ycc-mods`                                                    | Rules, settings, statusline, MCP, standalone skills/agents; hooks via the native `ycc-hooks` plugin at project scope (global hooks link with `--global`)                                                                                   | `ycc-agents@ycc` in v7.0.0                                                                                    |
+| Cursor   | `ycc`, `ycc-rules`, `ycc-mcp`, `ycc-hooks` via the root `.cursor-plugin/marketplace.json` (interactive `/plugins`); hooks `sessionStart` only | Skills, agents, commands, rules, settings under `~/.cursor/`; optional hooks                                                                                                                                                               | None                                                                                                          |
+| Codex    | `ycc@ycc`, `ycc-mcp@ycc` via the root `.agents/plugins/marketplace.json`                                                                      | Agent TOMLs, `AGENTS.md`, `config.toml`                                                                                                                                                                                                    | `ycc-hooks` excluded (YAN-1149)                                                                               |
+| opencode | None                                                                                                                                          | Skills, agents, commands, shared, `opencode.json`, `AGENTS.md`                                                                                                                                                                             | `@yandy-r/ycc-opencode` npm plugin: experimental, opt-in, unpublished                                         |
+| `agents` | None                                                                                                                                          | Skills and `ycc-shared` copied into `~/.agents/`                                                                                                                                                                                           | None planned                                                                                                  |
+| `omp`    | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-rules@ycc` via the root `.omp-plugin/marketplace.json` (omp `>=18.12.2`)                                       | `install.sh --target omp`: local export (`--mode local`) or the repository catalog (`--mode repo`) installed through `omp plugin` (user or project scope); opt-in `--rules` (`AGENTS.md`) and `--settings` (`config.yml`), user scope only | `ycc-hooks` and `ycc-all` excluded (herdr: `herdr integration install omp`)                                   |
+| `pi`     | None                                                                                                                                          | None                                                                                                                                                                                                                                       | `ycc`, `ycc-mcp`, `ycc-rules` deferred to v6.3.0 (ADR 0003, pi `>=1.2.0`); `ycc-hooks` and `ycc-all` excluded |
 
 Native dependency resolution is a Claude platform feature, not a cross-runtime guarantee.
 The Claude `ycc-all` meta plugin's automatic dependency install was verified on Claude Code 2.1.301 and in the v6.0.0 maintainer clean-host verification; Cursor and Codex have no
@@ -106,6 +107,12 @@ The recommendation in `docs/research/ystack/recommendation.md` is qualified by
   (YAN-1172, YAN-1173, YAN-1175). Since YAN-1180 the three rows are listed and the repository
   publishes the root `.omp-plugin/marketplace.json`.
   YAN-1174: ycc ships no OMP hooks; herdr reporting is herdr's own OMP integration.
+- `pi-runtime-contract.md`: tested on Pi (`@earendil-works/pi-coding-agent`) 1.5.0 and 1.2.0;
+  supported floor `>=1.2.0`, recommended 1.5.0. Pi gets a generated `packages/pi/` tree
+  (YAN-1188) installed by absolute path with `pi install`; there is no catalog. Pi has no
+  built-in subagents, no shell hooks or `hooks.json`, no `WorktreeCreate` event, and no approval
+  modes, and a Pi package cannot depend on another, so `ycc-all` is omitted. See ADR 0003. No Pi
+  generator or installer ships yet, so every `pi` cell above is `unsupported`.
 
 ---
 
@@ -516,6 +523,69 @@ No native-parity claim. Source: ADR 0002; `worktree-strategy.md` §1.
 **MODS:omp**
 Unsupported. The Claude Code mod API differs from OMP's `ExtensionAPI`; the status-bar mod is
 not ported. Source: ADR 0002.
+
+**SKILLS:pi**
+Unsupported today: ycc ships no Pi skill tree. Planned `partial` (YAN-1184): Pi discovers package
+`skills/<name>/SKILL.md` natively as `/skill:<name>`, and `disable-model-invocation` maps natively,
+but Pi leaves `${CLAUDE_PLUGIN_ROOT}`, `/ycc:<name>` and body `$ARGUMENTS` literal, so the generator
+must rewrite them and ship `_shared` inside the package. Floor pi `>=1.2.0`. Coexistence: Pi
+discovers `~/.agents/skills` by default, so copies from the `agents` target load unadapted and
+outrank a package skill of the same name (no namespacing, spike §1.5); YAN-1193 adds owned
+`-~/.agents/skills/<n>/SKILL.md` dedupe overrides. Source: ADR 0003; spike §1.5, §3.
+
+**COMMANDS:pi**
+Unsupported today: ycc ships no Pi commands. Planned `partial` (YAN-1185): public entrypoints are
+`ycc:<name>` extension commands that call `sendUserMessage("/skill:<name> …", {expandPromptTemplates: true})`,
+because a prompt template that emits `/skill:x` is not expanded again. Source: ADR 0003 decision 2.
+
+**AGENTS:pi**
+Unsupported today: Pi has no built-in subagents and ycc ships no Pi agents. Planned `partial`
+(YAN-1186): a ycc `subagent` extension tool loads the generated agent definitions from the package,
+maps Claude tool names and models, and spawns child `pi --mode json -p --no-session` runs with depth
+and concurrency limits. A verbatim ycc agent fails on Pi. Source: ADR 0003 decision 3; spike §2.7.
+
+**HOOKS.PreToolUse:pi**
+Unsupported. Pi never runs shell hooks or `hooks/hooks.json`; the closest surface is a TypeScript
+extension `tool_call` handler, and `ycc-hooks` is excluded on Pi, so ycc ships no hook port (YAN-1191).
+The ADR 0003 planned verdict is `partial` only for TypeScript handlers, never for shell hooks.
+Source: ADR 0003 decision 5; spike §3.
+
+**HOOKS.PostToolUse:pi**
+Same constraint as HOOKS.PreToolUse:pi. The closest Pi event is `tool_result`.
+
+**HOOKS.Stop:pi**
+Same constraint as HOOKS.PreToolUse:pi. The closest Pi events are `agent_settled` and
+`agent_before_settle`.
+
+**MCP:pi**
+Unsupported today: ycc ships no Pi MCP package. Planned `partial` (YAN-1190): Pi never reads
+`mcp.json` from a package, so `ycc-mcp` becomes a registrar extension calling `pi.registerMcpServer`
+(a same-name user `mcp.json` entry wins), with an opt-in `install.sh --mcp` merge into
+`<agentDir>/mcp.json` as the fallback. Tools are named `mcp__<server>__<tool>` and SSE is rejected.
+Source: ADR 0003 decision 4; spike §2.5.
+
+**INSTALL_PATH:pi**
+Unsupported today: no generated `packages/pi/` tree and no `install.sh --target pi` exist.
+`scripts/validate_capability_matrix.py` fails if `packages/pi/` exists while this cell is
+`unsupported`, and fails if any `pi` cell claims support while the tree is absent. Planned `partial`
+(YAN-1188, YAN-1189): `pi install <abs path>` at user scope or `pi install -l --approve <dir>` at
+project scope, with no catalog. Floor pi `>=1.2.0`, recommended 1.5.0. Installed extensions are
+full-trust code with no sandbox. Source: ADR 0003 decisions 1, 7, 8.
+
+**DANGEROUS_MODE:pi**
+Unsupported by design. Pi has no approval modes ("does not ask for approval before every tool
+call"), so there is no `--dangerously-skip-permissions` analogue to emit; an extension `tool_call`
+gate is the only way to add approvals. Source: ADR 0003 decision 6; spike §2.6.
+
+**WORKTREE:pi**
+Unsupported today: no ycc skill tree ships on Pi, and Pi has no `WorktreeCreate` event or
+worktree API. Planned `partial` (YAN-1187): skills run `git worktree add` under `.pi/worktrees/`
+through `bash`, and subagent `cwd` points there. Source: ADR 0003; spike §2.4.
+
+**MODS:pi**
+Unsupported by design. The Claude Code mod API differs from Pi's `ExtensionAPI`
+(`ctx.ui.setStatus`/`setWidget`/`setFooter`); a status-bar port is new code outside the lockstep.
+Source: ADR 0003 package matrix.
 
 ---
 
