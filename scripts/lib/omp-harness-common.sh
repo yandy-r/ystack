@@ -1,9 +1,11 @@
 # shellcheck shell=bash
-# Shared helpers for the opt-in live OMP harnesses (scripts/test-omp-*.sh), sourced after
-# `set -euo pipefail`. They keep the harnesses portable to macOS (YAN-1555) without changing
-# Linux behaviour: GNU coreutils are required and checked, the sandbox root is resolved
-# (macOS /tmp is a symlink to /private/tmp), `env -C` (GNU only) is replaced by a /bin/sh
-# wrapper, and the sandbox PATH can carry explicitly named extra directories.
+# Shared helpers for the opt-in live harnesses (scripts/test-omp-*.sh and
+# scripts/test-pi-runtime-contract-spike.sh), sourced after `set -euo pipefail`. They keep the
+# harnesses portable to macOS (YAN-1555) without changing Linux behaviour: GNU coreutils are
+# required and checked, the sandbox root is resolved (macOS /tmp is a symlink to /private/tmp),
+# `env -C` (GNU only) is replaced by a /bin/sh wrapper, and the sandbox PATH can carry
+# explicitly named extra directories. They also build the one bubblewrap layout every harness
+# uses (YAN-1905).
 #
 # Provided:
 #   omp_h_die MSG...                          print "ERROR: MSG" to stderr, exit 1
@@ -13,6 +15,8 @@
 #   omp_h_safe_path ALLOW_ENV_I [LEAD_DIR]    the sandbox PATH: LEAD_DIR, extras, /usr/local/bin:/usr/bin:/bin
 #   omp_h_check_path_tools PATH TOOL...       fail unless every TOOL resolves on PATH
 #   omp_in_dir                                array: prefix, then DIR and a command (portable `env -C`)
+#   omp_h_sandbox ALLOW_ENV_I ROOT REAL_HOME [RO_PATH...]
+#                                             select the sandbox: sets `sandbox` and `wrap`
 #
 # YCC_HARNESS_EXTRA_PATH: colon-separated absolute directories placed after LEAD_DIR and before
 # /usr/local/bin in the sandbox PATH. It exists for macOS runners, where GNU coreutils and a
@@ -88,4 +92,86 @@ omp_h_check_path_tools() {
     PATH=$path command -v "$tool" >/dev/null ||
       omp_h_die "missing prerequisite on the sandbox PATH ($path): $tool"
   done
+}
+
+# Bubblewrap layout (YAN-1905). The host tree is read-only; the real home, /run (user runtime
+# dir, system bus, container-engine sockets), /tmp and /var/tmp (X11 sockets, other users'
+# files) are hidden behind tmpfs; /dev and /proc are fresh; network, PID and IPC are private
+# namespaces and the command runs in a new session, so host processes cannot be signalled,
+# the caller's terminal cannot be fed keystrokes, and nothing outlives a call. Each RO_PATH
+# (binaries, the checkout) is bound back read-only, then ROOT read-write. Every path must be
+# canonical; neither ROOT nor an RO_PATH may be / or contain the real home (that would
+# re-expose it), and no RO_PATH may sit inside ROOT (the later ROOT bind would make it
+# writable). A path below the real home is fine: only that subtree becomes visible.
+#
+# Sets `sandbox` to bwrap-netns and `wrap` to the bwrap argv ending in `--` when the layout
+# works and passes omp_h_sandbox_probe. Without a working bwrap it sets `sandbox=env-i` and an
+# empty `wrap` only when ALLOW_ENV_I is 1; otherwise it fails closed.
+omp_h_sandbox() {
+  local allow_env_i=$1 root=$2 real_home=$3 bin path binds err
+  shift 3
+  for path in "$root" "$@"; do
+    [[ "$path" == /* && "$path" != / && "$path" != "$real_home" && "$real_home" != "$path"/* ]] ||
+      omp_h_die "refusing to bind '$path' into the sandbox: it is not absolute, is /, or contains the real HOME ($real_home)"
+  done
+  for path in "$@"; do
+    [[ "$path" != "$root" && "$path" != "$root"/* ]] ||
+      omp_h_die "refusing to bind '$path' read-only: it is inside the writable sandbox root ($root)"
+  done
+  binds=(--ro-bind / / --dev /dev --proc /proc --tmpfs "$real_home" --tmpfs /run --tmpfs /tmp
+    --tmpfs /var/tmp)
+  for path in "$@"; do binds+=(--ro-bind "$path" "$path"); done
+  binds+=(--bind "$root" "$root" --unshare-net --unshare-pid --unshare-ipc --new-session
+    --die-with-parent)
+  # shellcheck disable=SC2034 # read by the sourcing harnesses
+  sandbox=env-i
+  wrap=()
+  bin=$(command -v bwrap || true)
+  if [[ -n "$bin" ]]; then
+    bin=$(realpath "$bin")
+    # The string checks above only hold for canonical paths (no //, .., or symlinks).
+    for path in "$root" "$@"; do
+      [[ "$(realpath -m -- "$path")" == "$path" ]] ||
+        omp_h_die "refusing to bind non-canonical path '$path' into the sandbox"
+    done
+    if err=$(env -i PATH=/usr/bin:/bin "$bin" "${binds[@]}" /bin/true 2>&1 >/dev/null); then
+      # shellcheck disable=SC2034 # read by the sourcing harnesses
+      sandbox=bwrap-netns
+      wrap=("$bin" "${binds[@]}" --)
+      omp_h_sandbox_probe "$root" "$real_home" "$@"
+      return 0
+    fi
+  fi
+  ((allow_env_i)) ||
+    omp_h_die "bubblewrap with --unshare-net/--unshare-pid is unavailable${err:+ ($err)}; refusing to run without network/home isolation (pass --allow-env-i to override)"
+}
+
+# omp_h_sandbox_probe ROOT REAL_HOME [RO_PATH...]: fail unless the selected bwrap sandbox
+# isolates. Inside it: no socket under /run, /tmp or /var outside ROOT, the host's runtime dirs
+# are gone, PID 1 is bwrap, the only network interface is lo, and the real home holds nothing
+# but the mount points of RO_PATHs below it.
+omp_h_sandbox_probe() {
+  local root=$1 real_home=$2 out path allowed=
+  shift 2
+  # First path component below the real home of each RO_PATH that lives there.
+  for path in "$@"; do
+    [[ "$path" != "$real_home"/* ]] || { path=${path#"$real_home"/}; allowed+=" ${path%%/*}"; }
+  done
+  # shellcheck disable=SC2016 # the script runs inside the sandbox: $1 = ROOT, $2 = REAL_HOME
+  out=$(env -i PATH=/usr/bin:/bin "${wrap[@]}" /bin/sh -c '
+    command -v find >/dev/null || { echo "find is missing"; exit 1; }
+    leaked=$(find /run /tmp /var -type s 2>/dev/null | grep -vF -- "$1/") || true
+    [ -z "$leaked" ] || { printf "socket visible: %s\n" "$leaked"; exit 1; }
+    for d in /run/user /run/dbus /tmp/.X11-unix; do
+      [ ! -e "$d" ] || { printf "host path visible: %s\n" "$d"; exit 1; }
+    done
+    [ "$(cat /proc/1/comm)" = bwrap ] || { echo "no private PID namespace"; exit 1; }
+    ifaces=$(awk "NR > 2 { print \$1 }" /proc/net/dev)
+    [ "$ifaces" = "lo:" ] || { printf "network not private: %s\n" "$ifaces"; exit 1; }
+    for e in "$2"/* "$2"/.[!.]* "$2"/..?*; do
+      [ -e "$e" ] || [ -L "$e" ] || continue
+      case " $3 " in *" ${e##*/} "*) ;; *) printf "real home not hidden: %s\n" "$e"; exit 1 ;; esac
+    done
+  ' omp-sandbox-probe "$root" "$real_home" "$allowed" 2>&1) ||
+    omp_h_die "bubblewrap sandbox probe failed: ${out:-probe exited non-zero}"
 }

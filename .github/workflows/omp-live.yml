@@ -32,16 +32,18 @@
 #     would only print SKIP and exit 2 in every leg. It stays a local / manual
 #     check; see docs/internal/omp-acceptance.md.
 #
-# Sandbox note (YAN-1555): every harness prefers bwrap with a private network
-# namespace and the real home hidden. GitHub-hosted macOS runners have no
+# Sandbox note (YAN-1555, YAN-1905): every harness prefers the shared bwrap layout
+# (omp_h_sandbox in scripts/lib/omp-harness-common.sh): read-only host tree, fresh
+# /dev and /proc, the real home, /run and /tmp hidden behind tmpfs, and private
+# network and PID namespaces. GitHub-hosted macOS runners have no
 # bubblewrap, so macOS legs pass --allow-env-i EXPLICITLY in that step only:
 # sandbox = env -i with a throwaway HOME/XDG tree and the null/loopback
 # provider, no private network namespace and the real home NOT hidden behind a
 # tmpfs. Linux legs never pass --allow-env-i.
 # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor, which
-# breaks bwrap --unshare-net; the Linux step probes bwrap functionally and, if the
-# probe fails, lifts only that restriction (a runner-level sysctl) and re-probes.
-# It never falls back to --allow-env-i on Linux.
+# breaks bwrap --unshare-net/--unshare-pid; the Linux step probes the same layout
+# functionally and, if the probe fails, lifts only that restriction (a runner-level
+# sysctl) and re-probes. It never falls back to --allow-env-i on Linux.
 # macOS also lacks GNU coreutils (timeout, realpath, sha256sum) and Bash 4, which the
 # harnesses and install.sh need. A macOS-only step installs them with Homebrew and
 # exposes only coreutils' gnubin plus a shim dir (bash, python3) through
@@ -65,6 +67,7 @@ on:
       - 'scripts/install*.sh'
       - 'scripts/validate.sh'
       - '.github/workflows/omp-live.yml'
+      - 'scripts/lib/omp-harness-common.sh'
   pull_request:
     paths:
       - 'scripts/*omp*'
@@ -78,6 +81,7 @@ on:
       - 'scripts/install*.sh'
       - 'scripts/validate.sh'
       - '.github/workflows/omp-live.yml'
+      - 'scripts/lib/omp-harness-common.sh'
   schedule:
     # Weekly, Monday 03:17 UTC. Runs the full matrix.
     - cron: '17 3 * * 1'
@@ -201,18 +205,25 @@ jobs:
             install_bwrap
           fi
           bwrap --version
-          probe() { timeout 30 bwrap --dev-bind / / --unshare-net /bin/true; }
+          # The capabilities omp_h_sandbox (scripts/lib/omp-harness-common.sh) needs: a
+          # read-only host tree, fresh /dev and /proc, tmpfs mounts, and private net, PID and
+          # IPC namespaces. The harnesses then build the full layout and probe it themselves.
+          probe() {
+            timeout 30 bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs "$HOME" --tmpfs /run \
+              --tmpfs /tmp --tmpfs /var/tmp --unshare-net --unshare-pid --unshare-ipc \
+              --new-session --die-with-parent /bin/true
+          }
           if probe; then
-            echo "bwrap --unshare-net works"
+            echo "bwrap --unshare-net --unshare-pid (read-only root, fresh /dev and /proc) works"
             exit 0
           fi
-          echo "bwrap --unshare-net failed; lifting the AppArmor unprivileged-userns restriction"
+          echo "bwrap --unshare-net --unshare-pid failed; lifting the AppArmor unprivileged-userns restriction"
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           if probe; then
-            echo "bwrap --unshare-net works after the sysctl"
+            echo "bwrap --unshare-net --unshare-pid works after the sysctl"
             exit 0
           fi
-          echo "::error::bwrap --unshare-net still fails after kernel.apparmor_restrict_unprivileged_userns=0; refusing to run the live harnesses without network/home isolation"
+          echo "::error::bwrap --unshare-net --unshare-pid still fails after kernel.apparmor_restrict_unprivileged_userns=0; refusing to run the live harnesses without network/PID/home isolation"
           exit 1
 
       # install.sh and the harnesses need Bash 4 and GNU coreutils (timeout, realpath,

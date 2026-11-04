@@ -2,6 +2,7 @@
 # Opt-in live install checks for the generated OMP native packages (YAN-1171) and the
 # ycc-mcp package's MCP servers (YAN-1173: list, start, disable/override, removal).
 # Not part of CI. No credentials, no network inside the sandbox, no model inference.
+# shellcheck disable=SC2154 # sandbox and wrap come from lib/omp-harness-common.sh
 set -euo pipefail
 umask 077
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/omp-harness-common.sh"
@@ -12,10 +13,10 @@ Usage: test-omp-native-packages.sh [--keep] [--allow-env-i]
        test-omp-native-packages.sh --public URL --ref SHA [--keep] [--allow-env-i]
 
 Requires omp >=18.12.2 (OMP_BIN overrides PATH), git, python3 with the repository's
-generator dependencies, timeout, and bubblewrap with a working --unshare-net.
-OMP_BIN must be a self-contained binary that runs without anything under $HOME or on a
-PATH beyond /usr/local/bin:/usr/bin:/bin: the sandbox hides the real home behind a tmpfs,
-so a Bun-installed `omp` (a script under ~/.bun run by `bun`) fails the preflight.
+generator dependencies, timeout, and bubblewrap with working --unshare-net/--unshare-pid.
+OMP_BIN must be a self-contained binary that runs without anything under $HOME, /run or /tmp
+or on a PATH beyond /usr/local/bin:/usr/bin:/bin: the sandbox hides those behind tmpfs, so a
+Bun-installed `omp` (a script under ~/.bun run by `bun`) fails the preflight.
 
 Default: export the packages with `generate_omp_packages.py --export` (the catalog then
 also lists unlisted included packages), commit them to a fixture repo, and serve the
@@ -27,8 +28,9 @@ same way. The fork must contain .omp-plugin/marketplace.json at SHA (a listed re
 
 omp only ever sees https://omp-native.invalid/fork.git, rewritten by git insteadOf to the
 local bare repo with GIT_ALLOW_PROTOCOL=file. Every omp call runs under env -i with
-HOME/XDG/TMPDIR inside a mktemp sandbox, and under bwrap with a private network namespace
-and the real home hidden behind a tmpfs. Without bwrap the harness refuses to run unless
+HOME/XDG/TMPDIR inside a mktemp sandbox, and under bwrap with private network and PID
+namespaces, a read-only host tree, and the real home, /run and /tmp hidden behind tmpfs.
+Without bwrap the harness refuses to run unless
 --allow-env-i accepts the weaker env -i sandbox. The only model is a null provider on
 127.0.0.1:9 and no prompt is sent.
 
@@ -124,17 +126,7 @@ fork=$root/fork.git
 case_home=$root/case
 omp_home=$case_home/home/.omp
 
-sandbox=env-i
-wrap=()
-bwrap_bin=$(command -v bwrap || true)
-[[ -z "$bwrap_bin" ]] || bwrap_bin=$(realpath "$bwrap_bin")
-if [[ -n "$bwrap_bin" ]] &&
-  "$bwrap_bin" --dev-bind / / --tmpfs "$real_home" --unshare-net /bin/true >/dev/null 2>&1; then
-  sandbox=bwrap-netns
-  wrap=("$bwrap_bin" --dev-bind / / --tmpfs "$real_home" --ro-bind "$omp" "$omp" --unshare-net --)
-elif ((!allow_env_i)); then
-  die 'bubblewrap with --unshare-net is unavailable; refusing to run without network/home isolation (pass --allow-env-i to override)'
-fi
+omp_h_sandbox "$allow_env_i" "$root" "$real_home" "$omp"
 
 # Run a command with no inherited environment, an isolated HOME/XDG tree, and file-only git.
 clean() {

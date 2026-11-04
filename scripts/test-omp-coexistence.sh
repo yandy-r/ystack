@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Opt-in live checks: ycc on OMP beside the other ycc runtimes (YAN-1176), against real omp.
 # Not part of CI. No credentials, no network inside the sandbox, no model inference.
-# shellcheck disable=SC2154 # omp_in_dir comes from lib/omp-harness-common.sh
+# shellcheck disable=SC2154 # omp_in_dir, sandbox and wrap come from lib/omp-harness-common.sh
 set -euo pipefail
 umask 077
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/omp-harness-common.sh"
@@ -12,9 +12,10 @@ Usage: test-omp-coexistence.sh [--keep] [--allow-env-i]
 
 Runs the real ./install.sh (YCC_INSTALL_SKIP_BUILD=1: the checkout is never written) and the
 real omp >=18.12.2 (OMP_BIN overrides PATH; default ~/.local/bin/omp) in a mktemp sandbox
-under /tmp: env -i, HOME/XDG/TMPDIR inside the sandbox, and bwrap with a private network
-namespace, the real home hidden behind a tmpfs and this checkout bind-mounted read-only.
-Without bwrap the harness refuses to run unless --allow-env-i accepts the weaker sandbox.
+under /tmp: env -i, HOME/XDG/TMPDIR inside the sandbox, and bwrap with private network and PID
+namespaces, a read-only host tree, the real home, /run and /tmp hidden behind tmpfs, and this
+checkout bind-mounted read-only. Without bwrap the harness refuses to run unless
+--allow-env-i accepts the weaker sandbox.
 RPC sessions use a null model at 127.0.0.1:9; no prompt is ever sent. A probe extension
 (-e) reports what omp's own loaders resolve: final skill names and collision warnings, task
 agents, slash commands, and the MCP, context-file, hook and extension winners/_shadowed.
@@ -86,18 +87,7 @@ cd "$root/work"
 safe_path=$(omp_h_safe_path "$allow_env_i" "$root/bin")
 omp_h_check_path_tools "$safe_path" bash git python3 timeout realpath
 
-sandbox=env-i
-wrap=()
-bwrap_bin=$(command -v bwrap || true)
-[[ -z "$bwrap_bin" ]] || bwrap_bin=$(realpath "$bwrap_bin")
-if [[ -n "$bwrap_bin" ]] &&
-  "$bwrap_bin" --dev-bind / / --tmpfs "$real_home" --unshare-net /bin/true >/dev/null 2>&1; then
-  sandbox=bwrap-netns
-  wrap=("$bwrap_bin" --dev-bind / / --tmpfs "$real_home" --ro-bind "$omp" "$omp"
-    --ro-bind "$repo" "$repo" --unshare-net --)
-elif ((!allow_env_i)); then
-  die 'bubblewrap with --unshare-net is unavailable; refusing to run without network/home isolation (pass --allow-env-i to override)'
-fi
+omp_h_sandbox "$allow_env_i" "$root" "$real_home" "$omp" "$repo"
 
 # The current case: its HOME/XDG tree and extra environment (OMP_PROFILE).
 case_home=$root/a
