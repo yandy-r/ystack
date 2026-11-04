@@ -458,10 +458,10 @@ Partial: `scripts/generate_omp_packages.py` builds `packages/omp/ycc-mcp/` whose
 placeholders). `install.sh install --target omp` installs it as
 `ycc-mcp@ycc` with `ycc@ycc` (see INSTALL_PATH:omp). OMP's plugin MCP loader reads it natively,
 names servers `ycc-mcp:<server>`, and expands `${VAR}` in `env`, `url` and `headers` at load
-(unset variables arrive literally). The generated `.mcp.json` differs from the source in one
-way (YAN-1291): a later http/sse server whose connection equals an earlier one gets
-`?ycc-server=<name>` on its URL, so `ycc-mcp:linear-personal` loads beside `ycc-mcp:linear`
-with its own OAuth login; the other targets keep the source URL. Listed in the root OMP catalog
+(unset variables arrive literally). The generator would add `?ycc-server=<name>` to the URL of a
+later http/sse server whose connection equals an earlier one (YAN-1291), so both could load with
+their own OAuth logins; the current source has no such duplicates, so the generated `.mcp.json`
+equals the source byte-for-byte. Listed in the root OMP catalog
 since YAN-1180, after the YAN-1178 live acceptance on the real tree. Gaps:
 `ycc-mcp:playwright` is dropped while `browser.enabled` is on; plugin timeouts below 1000 ms are
 ignored; per-server disable is the user `disabledServers` list, and `plugin-overrides.json` does
@@ -595,7 +595,7 @@ Source: ADR 0003 package matrix.
 
 Descriptive only; this is not a parsed capability row. The artifact store (`ycc/skills/_shared/references/artifact-store.md`) is skill-level and identical on claude, cursor, codex, opencode and omp: store resolution, the `.ycc/artifacts/` cache and the `.plans-config` pointer are plain files and Bash helpers, so no target needs extra support for `store: local`.
 
-- **Linear mode needs a Linear MCP in the running runtime.** ycc ships the `linear` / `linear-personal` servers from `ycc-mcp` where the MCP row is supported (claude, cursor, opencode). On codex and omp the MCP row is `partial`: the servers install, but a user's runtime may lack, shadow or not yet have authorized them (see the MCP:codex and MCP:omp notes), so linear mode can be unavailable there until a Linear MCP is configured by hand.
+- **Linear mode needs a Linear MCP in the running runtime.** ycc ships the `linear` server from `ycc-mcp` where the MCP row is supported (claude, cursor, opencode). On codex and omp the MCP row is `partial`: the server installs, but a user's runtime may lack, shadow or not yet have authorized it (see the MCP:codex and MCP:omp notes), so linear mode can be unavailable there until a Linear MCP is configured by hand.
 - Without a reachable, authorized Linear MCP, skills stop at the Linear call gate before any local write and suggest `store: local`. Local mode never calls Linear.
 - Every generator emits `.ycc/artifacts/` and `.plans-config` paths verbatim; no target rewrites them. `scripts/validate-artifact-store.sh` checks the occurrence counts of each generated skills tree against `ycc/skills` and that a committed `store: linear` pointer is tracked and not ignored.
 

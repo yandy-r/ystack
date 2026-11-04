@@ -47,11 +47,10 @@ else
     ko "omp install writes the local export" "$(find "$(omp_export "${home}")" -maxdepth 3 2>/dev/null | head -5)"
 fi
 omp_mcp_expected="$(cd "${REPO_ROOT}/scripts" && python3 -c 'import sys; from generate_omp_packages import omp_mcp_bytes; sys.stdout.buffer.write(omp_mcp_bytes(open("../mcp-configs/mcp.json", "rb").read()))')"
-if [[ "$(cat "$(omp_export "${home}")/packages/omp/ycc-mcp/.mcp.json")" == "${omp_mcp_expected}" ]] \
-    && grep -q '"url": "https://mcp.linear.app/mcp?ycc-server=linear-personal"' "$(omp_export "${home}")/packages/omp/ycc-mcp/.mcp.json"; then
-    ok "omp export ships the OMP rendering of mcp-configs/mcp.json (linear-personal ?ycc-server=)"
+if [[ "$(cat "$(omp_export "${home}")/packages/omp/ycc-mcp/.mcp.json")" == "${omp_mcp_expected}" ]]; then
+    ok "omp export ships the OMP rendering of mcp-configs/mcp.json"
 else
-    ko "omp export ships the OMP rendering of mcp-configs/mcp.json (linear-personal ?ycc-server=)"
+    ko "omp export ships the OMP rendering of mcp-configs/mcp.json"
 fi
 
 before="$(omp_log "${home}")"

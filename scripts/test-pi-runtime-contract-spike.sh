@@ -421,7 +421,7 @@ jchk mcp-errors-has "$root/logs/mcp-list-sse.stdout" 'legacy SSE transport is no
 cp "$root/ycc-mcp.json" "$agent/mcp.json"
 p mcp-list-ycc mcp list --json
 assert_rc 0 'mcp list (ycc-mcp servers, enabled:false)'
-jchk mcp-states "$root/logs/mcp-list-ycc.stdout" disabled 10
+jchk mcp-states "$root/logs/mcp-list-ycc.stdout" disabled 9
 jchk mcp-errors-none "$root/logs/mcp-list-ycc.stdout"
 p mcp-add-again mcp add spikemcp -- python3 "$root/stub.py" spikemcp
 extra_env=(PI_SPIKE_WAIT_MCP=1)
@@ -429,7 +429,7 @@ rpc rpc-mcp -e "$root/ext/hooks.ts"
 extra_env=()
 chk tools-has rpc-mcp mcp__spikemcp__spikemcp_ping mcp__extmcp__extmcp_ping
 has rpc-mcp '"method":"setStatus","statusKey":"ycc","statusText":"STATUSMARK"'
-log 'PASS mcp: pi mcp add writes <agentDir>/mcp.json; pi mcp list --json connects stdio (state connected, exposure codemode, tools [spikemcp_ping], errors []); sse entries are rejected (rc=1); the shipped ycc-mcp .mcp.json parses unchanged (10 servers, stdio+http, errors []); pi.registerMcpServer adds a session server; tools are mcp__<server>__<tool>; ctx.ui.setStatus reaches RPC clients'
+log 'PASS mcp: pi mcp add writes <agentDir>/mcp.json; pi mcp list --json connects stdio (state connected, exposure codemode, tools [spikemcp_ping], errors []); sse entries are rejected (rc=1); the shipped ycc-mcp .mcp.json parses unchanged (9 servers, stdio+http, errors []); pi.registerMcpServer adds a session server; tools are mcp__<server>__<tool>; ctx.ui.setStatus reaches RPC clients'
 
 # 8. Extensions: load failures, tool_call gate, lifecycle events (scripted in-process provider).
 use_case hooks

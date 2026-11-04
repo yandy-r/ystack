@@ -7230,10 +7230,6 @@
       "type": "remote",
       "url": "https://mcp.linear.app/mcp"
     },
-    "linear-personal": {
-      "type": "remote",
-      "url": "https://mcp.linear.app/mcp"
-    },
     "vercel": {
       "type": "remote",
       "url": "https://mcp.vercel.com"

@@ -35,10 +35,10 @@ echo
 echo "== install.sh --<kind>: parsing =="
 
 home="$(new_home)"
-install_must_succeed "${home}" sync --target claude --intent mcp --mcps ' github , github,linear-personal'
-assert_contains "${INSTALL_OUT}" "MCP servers: github, linear-personal" "selection drops spaces and duplicates, keeps order"
+install_must_succeed "${home}" sync --target claude --intent mcp --mcps ' github , github,vercel'
+assert_contains "${INSTALL_OUT}" "MCP servers: github, vercel" "selection drops spaces and duplicates, keeps order"
 merged="$(cat "${home}/project/.mcp.json")"
-assert_contains "${merged}" '"linear-personal"' "deduped selection writes every named server"
+assert_contains "${merged}" '"vercel"' "deduped selection writes every named server"
 assert_not_contains "${merged}" '"stripe"' "deduped selection writes nothing else"
 
 home="$(new_home)"
