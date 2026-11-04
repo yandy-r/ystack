@@ -290,6 +290,61 @@ test_prep_artifact_gitignore() {
   assert_exit "$PREP_RC" 1 'prep: rejects staged deletion plus cache addition'
 
   repo="$(mkrepo)"
+  commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
+  printf '%s\n' 'unrelated/' >>"${repo}/.gitignore"
+  git -C "$repo" add .gitignore
+  printf '%s\n' 'existing/' '.ycc/artifacts/' >"${repo}/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects staged unrelated rule behind cache-only working tree'
+  assert_contains "$PREP_ERR" '.gitignore' 'prep: identifies gitignore with staged unrelated rule'
+  assert_eq "$(current_branch "$repo")" 'main' 'prep: stays on trunk with staged unrelated rule'
+
+  repo="$(mkrepo)"
+  commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
+  printf '%s\n' '.ycc/artifacts/' >>"${repo}/.gitignore"
+  git -C "$repo" rm -q --cached .gitignore
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects staged gitignore removal behind cache-only working tree'
+
+  repo="$(mkrepo)"
+  commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
+  printf '%s\n' '.ycc/artifacts/' >>"${repo}/.gitignore"
+  git -C "$repo" add .gitignore
+  printf '%s\n' 'existing/' >"${repo}/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 0 'prep: accepts staged cache rule with working file reverted to HEAD'
+  assert_eq "$(current_branch "$repo")" 'feat/demo' 'prep: switches branch with staged-only cache rule'
+
+  repo="$(mkrepo)"
+  commit_file "$repo" .gitignore 'existing/' 'chore: ignore existing files'
+  printf '%s\n' '.ycc/artifacts/' >>"${repo}/.gitignore"
+  git -C "$repo" update-index --chmod=+x .gitignore
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects staged gitignore mode change behind cache-only working tree'
+  assert_eq "$(current_branch "$repo")" 'main' 'prep: stays on trunk with staged gitignore mode change'
+
+  repo="$(mkrepo)"
+  commit_file "$repo" sub/.gitignore '.ycc/artifacts/' 'chore: ignore the cache in sub'
+  git -C "$repo" mv sub/.gitignore .gitignore
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects staged gitignore rename into a cache-only file'
+  assert_contains "$PREP_ERR" 'sub/.gitignore' 'prep: reports the renamed-away gitignore'
+
+  repo="$(mkrepo)"
+  mkdir -p "${repo}/sub"
+  printf '%s\n' 'unrelated/' >"${repo}/.gitignore"
+  run_prep "${repo}/sub" demo
+  assert_exit "$PREP_RC" 1 'prep: rejects unrelated root gitignore when run from a subdirectory'
+  assert_contains "$PREP_ERR" '.gitignore' 'prep: reports root gitignore from a subdirectory'
+
+  repo="$(mkrepo)"
+  commit_file "$repo" '0:x/.gitignore' 'existing/' 'chore: ignore existing files in 0:x'
+  printf '%s\n' '.ycc/artifacts/' >>"${repo}/0:x/.gitignore"
+  run_prep "$repo" demo
+  assert_exit "$PREP_RC" 0 'prep: accepts cache rule in a gitignore under a stage-like dir name'
+  assert_eq "$(current_branch "$repo")" 'feat/demo' 'prep: switches branch with stage-like dir name'
+
+  repo="$(mkrepo)"
   printf '%s\n' '.ycc/artifacts/' 'unrelated/' >"${repo}/.gitignore"
   run_prep "$repo" demo
   assert_exit "$PREP_RC" 1 'prep: rejects unrelated untracked gitignore rule'
