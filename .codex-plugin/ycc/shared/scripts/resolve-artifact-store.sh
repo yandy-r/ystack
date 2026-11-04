@@ -373,12 +373,13 @@ _artifact_ycc_negation() {
 
 # 0 when the negated pattern PAT (without `!`) may re-include REL, the path
 # from its .gitignore directory to .ycc/artifacts. Unanchored patterns, `\` or
-# `(` (Bash and Git globs differ there), and `**` once earlier segments match
-# all count; an anchored pattern counts unless a leading segment cannot match.
+# `(` (Bash and Git globs differ there), bracket expressions spanning `/`
+# (segment splitting would cut them), and `**` once earlier segments match all
+# count; an anchored pattern counts unless a leading segment cannot match.
 _artifact_negation_relevant() {
   local LC_ALL=C pat="${1%/}" rel="$2" pseg rseg
   [[ "$pat" == */* ]] || return 0
-  [[ "$pat" != *[\\\(]* ]] || return 0
+  [[ "$pat" != *[\\\(]* && "$pat" != *'['*'/'*']'* ]] || return 0
   pat=${pat#/}
   while [[ -n "$pat" && -n "$rel" ]]; do
     pseg=${pat%%/*} rseg=${rel%%/*}
@@ -393,10 +394,11 @@ _artifact_negation_relevant() {
 
 # 0 when the negated pattern PAT (without `!`) may match the REL directory
 # itself, the only way to undo an earlier `.ycc/artifacts/` rule in the same
-# file. `\` or `(` and unanchored `**` match conservatively.
+# file. `\` or `(`, bracket expressions spanning `/`, and unanchored `**` match
+# conservatively.
 _artifact_negation_matches_dir() {
   local LC_ALL=C pat="${1%/}" rel="$2" pseg rseg
-  [[ "$pat" != *[\\\(]* ]] || return 0
+  [[ "$pat" != *[\\\(]* && "$pat" != *'['*'/'*']'* ]] || return 0
   if [[ "$pat" != */* ]]; then
     [[ "$pat" != *'**'* ]] || return 0
     # shellcheck disable=SC2053 # The gitignore pattern is a glob.

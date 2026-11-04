@@ -202,7 +202,7 @@ assert_eq 'negated exception gets repo coverage line' $'.ycc/artifacts/*\n!.ycc/
 assert_ok 'nested probe ignored after append' git -C "$negation_repo" check-ignore -q -- .ycc/artifacts/feat/cache
 # Probe coverage cannot count while a repository ! rule re-includes cache
 # paths the probes miss, in any .gitignore from the Git root (YAN-1810).
-for variant in exception reinclude escaped subdir index-only; do
+for variant in exception reinclude bracket escaped subdir index-only; do
   reinc_repo="${SCRATCH}/ignore-reinclude-${variant}"; make_linear_repo "$reinc_repo"
   reinc_root="$reinc_repo"
   case "$variant" in
@@ -213,6 +213,10 @@ for variant in exception reinclude escaped subdir index-only; do
     reinclude)
       printf '.ycc/artifacts/\n!.ycc/artifacts/\n' >"${reinc_repo}/.gitignore"
       expected=$'.ycc/artifacts/\n!.ycc/artifacts/\n.ycc/artifacts/'
+      ;;
+    bracket)
+      printf '%s\n' '.ycc/artifacts/' '!.ycc/artifact[s/]' >"${reinc_repo}/.gitignore"
+      expected=$'.ycc/artifacts/\n!.ycc/artifact[s/]\n.ycc/artifacts/'
       ;;
     escaped)
       printf '%s\n' '.ycc/artifacts/*' '!.ycc\/artifacts/my-feature/' >"${reinc_repo}/.gitignore"
@@ -247,18 +251,21 @@ cp "${unrelated_repo}/.gitignore" "${SCRATCH}/before"
 assert_ok 'unrelated anchored negation keeps coverage' run "$unrelated_repo" ensure_artifact_gitignore
 assert_ok 'unrelated anchored negation bytes unchanged' cmp -s "${SCRATCH}/before" "${unrelated_repo}/.gitignore"
 # Only a `!` that can match the .ycc/artifacts directory itself undoes an
-# earlier exact rule in the same file.
-for variant in env keep; do
+# earlier exact rule in the same file; a bracket without `/` stays precise.
+for variant in env keep bracket; do
   kept_repo="${SCRATCH}/ignore-kept-${variant}"; make_linear_repo "$kept_repo"
+  keep_dir=keep
   case "$variant" in
     env) printf '.ycc/artifacts/\n.env*\n!.env.example\n' >"${kept_repo}/.gitignore" ;;
     keep) printf '.ycc/artifacts/\n!.ycc/artifacts/keep/\n' >"${kept_repo}/.gitignore" ;;
+    bracket) printf '.ycc/artifacts/\n!.ycc/artifacts/keep[0-9]/\n' >"${kept_repo}/.gitignore"; keep_dir=keep1 ;;
   esac
   cp "${kept_repo}/.gitignore" "${SCRATCH}/before"
   assert_ok "covered ${variant} negation: ensure succeeds" run "$kept_repo" ensure_artifact_gitignore
   assert_ok "covered ${variant} negation: bytes unchanged" cmp -s "${SCRATCH}/before" "${kept_repo}/.gitignore"
-  mkdir -p "${kept_repo}/.ycc/artifacts/keep"; : >"${kept_repo}/.ycc/artifacts/keep/shared.md"
-  assert_ok "covered ${variant} negation: keep file ignored" git -C "$kept_repo" check-ignore -q -- .ycc/artifacts/keep/shared.md
+  mkdir -p "${kept_repo}/.ycc/artifacts/${keep_dir}"; : >"${kept_repo}/.ycc/artifacts/${keep_dir}/shared.md"
+  assert_ok "covered ${variant} negation: keep file ignored" git -C "$kept_repo" check-ignore -q -- ".ycc/artifacts/${keep_dir}/shared.md"
+  assert_eq "covered ${variant} negation: keep file not untracked" '' "$(git -C "$kept_repo" status --porcelain -uall -- .ycc)"
 done
 
 sub_repo="${SCRATCH}/subdir-ignore"; make_repo "$sub_repo"

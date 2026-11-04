@@ -9,8 +9,9 @@
 # Behavior:
 #   - Rejects an unrelated dirty checkout (only plan-artifact paths allowed:
 #     docs/plans/<slug>/*, docs/orchestration/<slug>*,
-#     docs/prps/{plans,specs,prds}/<slug>*, plus a .gitignore whose only
-#     change appends one .ycc/artifacts/ rule line).
+#     docs/prps/{plans,specs,prds}/<slug>*, from the repo root or the cwd,
+#     plus a .gitignore whose only change appends one .ycc/artifacts/ rule
+#     line).
 #   - On feat/<slug>: idempotent no-op.
 #   - On trunk (main/master/trunk/develop, plus the RELEASING.md trunk) and
 #     feat/<slug> exists: switch to it.
@@ -163,59 +164,119 @@ fi
 #
 # Allow plan-artifact paths; reject anything else.
 
-# Accept a .gitignore equal to its HEAD content (empty when new) plus exactly
-# one trailing cache rule line, as `--ensure` writes it, including after a
-# missing final newline. HEAD may already hold the rule: a later `!` line can
-# void it, so the resolver appends another.
-is_artifact_gitignore() {
-  local path="$1" root file head='' work rest rule='^/?\.ycc/artifacts/?$'
-  root=$(git rev-parse --show-toplevel)
-  file="$root/$path"
-  [[ -f "$file" && ! -L "$file" ]] || return 1
-  # The x sentinel keeps trailing newlines that command substitution strips.
-  work=$(cat -- "$file" && printf x) || return 1
-  work=${work%x}
-  if git -C "$root" cat-file -e "HEAD:$path" 2>/dev/null; then
-    head=$(git -C "$root" show "HEAD:$path" && printf x) || return 1
-    head=${head%x}
-  fi
+# Succeed when content $2 equals $1 or $1 plus exactly one trailing cache rule
+# line, as `--ensure` writes it, including after a missing final newline. $1
+# may already hold the rule: a later `!` line can void it, so the resolver
+# appends another.
+is_head_plus_rule() {
+  local head="$1" content="$2" rest rule='^/?\.ycc/artifacts/?$'
+  [[ "$content" == "$head" ]] && return 0
   if [[ -n "$head" && "$head" != *$'\n' ]]; then head="${head}"$'\n'; fi
-  [[ "$work" == "$head"* ]] || return 1
-  rest=${work#"$head"}
+  [[ "$content" == "$head"* ]] || return 1
+  rest=${content#"$head"}
   rest=${rest%$'\n'}
   [[ "$rest" != *$'\n'* && "$rest" =~ $rule ]]
 }
 
-is_plan_artifact() {
-  local path="$1"
-  case "$path" in
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+# cwd relative to REPO_ROOT ("" at the root, else ending in "/").
+REPO_PREFIX="$(git rev-parse --show-prefix)"
+
+# Accept a .gitignore (path relative to REPO_ROOT) whose working-tree and
+# stage-0 contents each equal its HEAD content (empty when new) or HEAD plus
+# one cache rule line, and at least one differs from HEAD. The working tree
+# must be a regular non-symlink file whose mode matches the index (or HEAD,
+# else 100644); the index mode must be 100644 or 100755 and equal HEAD's.
+# Refuse conflict stages and staged deletions; no index entry for a path new
+# to HEAD counts as equal to HEAD. Blobs are read by oid so a path like
+# `0:x/.gitignore` is never parsed as a revision.
+is_artifact_gitignore() {
+  local path="$1" file head='' index work entry mode type oid stage
+  local head_mode='' index_mode='' index_oid='' work_mode
+  file="$REPO_ROOT/$path"
+  [[ -f "$file" && ! -L "$file" ]] || return 1
+  # The x sentinel keeps trailing newlines that command substitution strips.
+  work=$(cat -- "$file" && printf x) || return 1
+  work=${work%x}
+  # ls-tree -z: "<mode> <type> <oid>\t<path>".
+  while IFS= read -r -d '' entry; do
+    [[ "${entry#*$'\t'}" == "$path" ]] || continue
+    read -r mode type oid <<<"${entry%%$'\t'*}"
+    [[ "$type" == blob ]] || return 1
+    head_mode=$mode
+    head=$(git -C "$REPO_ROOT" cat-file blob "$oid" && printf x) || return 1
+    head=${head%x}
+  done < <(git -C "$REPO_ROOT" --literal-pathspecs ls-tree -z HEAD -- "$path" 2>/dev/null)
+  # ls-files -s -z: "<mode> <oid> <stage>\t<path>", one entry per stage.
+  while IFS= read -r -d '' entry; do
+    [[ "${entry#*$'\t'}" == "$path" ]] || continue
+    read -r mode oid stage <<<"${entry%%$'\t'*}"
+    [[ "$stage" == 0 && -z "$index_oid" ]] || return 1
+    index_mode=$mode index_oid=$oid
+  done < <(git -C "$REPO_ROOT" --literal-pathspecs ls-files -s -z -- "$path")
+  index=$head
+  if [[ -n "$index_oid" ]]; then
+    [[ "$index_mode" == 100644 || "$index_mode" == 100755 ]] || return 1
+    [[ -z "$head_mode" || "$index_mode" == "$head_mode" ]] || return 1
+    index=$(git -C "$REPO_ROOT" cat-file blob "$index_oid" && printf x) || return 1
+    index=${index%x}
+  elif [[ -n "$head_mode" ]]; then
+    return 1
+  fi
+  # diff-files -z --raw: ":<srcmode> <dstmode> <srcoid> <dstoid> <status>\0".
+  if IFS= read -r -d '' entry < <(git -C "$REPO_ROOT" --literal-pathspecs diff-files -z --raw -- "$path"); then
+    read -r _ work_mode _ <<<"${entry#:}"
+    [[ "$work_mode" == "${index_mode:-${head_mode:-100644}}" ]] || return 1
+  fi
+  [[ "$work" != "$head" || "$index" != "$head" ]] || return 1
+  is_head_plus_rule "$head" "$work" && is_head_plus_rule "$head" "$index"
+}
+
+# Plan-artifact paths relative to the directory the plan was written from.
+is_plan_path() {
+  case "$1" in
     docs/plans/"${FEATURE_SLUG}"/*) return 0 ;;
     docs/orchestration/"${FEATURE_SLUG}"*) return 0 ;;
     docs/prps/plans/"${FEATURE_SLUG}"*) return 0 ;;
     docs/prps/specs/"${FEATURE_SLUG}"*) return 0 ;;
     docs/prps/prds/"${FEATURE_SLUG}"*) return 0 ;;
-    .gitignore|*/.gitignore) is_artifact_gitignore "$path"; return $? ;;
+    *) return 1 ;;
+  esac
+}
+
+# $1 is root-relative. Plan paths match from the root or, for package-local
+# (`scope: local`) plans, from the cwd; .gitignore checks stay root-relative.
+is_plan_artifact() {
+  local path="$1"
+  is_plan_path "$path" && return 0
+  if [[ -n "$REPO_PREFIX" && "$path" == "$REPO_PREFIX"* ]]; then
+    is_plan_path "${path#"$REPO_PREFIX"}" && return 0
+  fi
+  case "$path" in
+    .gitignore|*/.gitignore) is_artifact_gitignore "$path" ;;
     *) return 1 ;;
   esac
 }
 
 UNRELATED_DIRTY=()
+# NUL-separated root-relative paths; --no-renames reports both sides of a
+# rename so a staged deletion cannot hide behind an allowed new path.
 collect_dirty() {
   # Untracked files (file-level — avoids `?? dir/` collapsed entries from
   # `git status --porcelain` and `--untracked-files=all`'s memory cost).
-  git ls-files --others --exclude-standard
+  git -C "$REPO_ROOT" ls-files -z --others --exclude-standard
   # Modified-but-unstaged tracked files.
-  git diff --name-only
-  # Staged tracked files (added/modified/renamed/deleted).
-  git diff --name-only --cached
+  git -C "$REPO_ROOT" diff -z --name-only --no-renames
+  # Staged tracked files (added/modified/deleted).
+  git -C "$REPO_ROOT" diff -z --name-only --no-renames --cached
 }
 
-while IFS= read -r path; do
+while IFS= read -r -d '' path; do
   [[ -z "$path" ]] && continue
   if ! is_plan_artifact "$path"; then
     UNRELATED_DIRTY+=("$path")
   fi
-done < <(collect_dirty | sort -u)
+done < <(collect_dirty | sort -zu)
 
 if (( ${#UNRELATED_DIRTY[@]} > 0 )); then
   _error "working tree has unrelated changes; stash or commit them first:"
