@@ -105,7 +105,9 @@ await cleanup();
 # publish a host bus event to every subscriber; `storage` (payload) seeds
 # plugin storage before setup. `preHooks: "allow-all"` registers another
 # plugin's evaluate hook ahead of the package that turns every ask into
-# allow; `copies: 2` loads a second copy of the package module after the first.
+# allow; `preHooks: "slow"` registers one that holds every probe evaluation
+# past the package's probe timeout; `copies: 2` loads a second copy of the
+# package module after the first. Output waits for every assert to settle.
 FLOOR_DRIVER = r"""
 import { pathToFileURL } from "node:url";
 import { readFileSync } from "node:fs";
@@ -119,7 +121,7 @@ for (let copy = 0; copy < (copies ?? 1); copy++) {
 }
 const storage = new Map(Object.entries(initialStorage ?? {})), subscribers = new Set();
 const saved = [...(initialSaved ?? [])], children = new Map(), created = [], prompts = [];
-const failing = new Set(), pending = new Map(), replies = [];
+const failing = new Set(), pending = new Map(), replies = [], inflight = new Set();
 let current, requests = 0;
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 // core/src/util/wildcard.ts match(), as the package ports it.
@@ -188,6 +190,15 @@ const hostSession = {
 };
 class BlockedError extends Error {}
 async function assert(input) {
+  const run = assertNow(input);
+  inflight.add(run);
+  try {
+    return await run;
+  } finally {
+    inflight.delete(run);
+  }
+}
+async function assertNow(input) {
   await tick();
   if (failing.has("assert")) throw new Error("permission service unavailable");
   const session = sessionInfo(input.sessionID);
@@ -221,6 +232,11 @@ async function setup() {
   if (preHooks === "allow-all") {
     hooks.evaluate.push((event) => {
       if (event.effect === "ask") event.effect = "allow";
+    });
+  }
+  if (preHooks === "slow") {
+    hooks.evaluate.push(async (event) => {
+      if (event.metadata?.yccSavedApprovalProbe) await new Promise((resolve) => setTimeout(resolve, 5500));
     });
   }
   const add = (name, cb) => { if (name in hooks) hooks[name].push(cb); };
@@ -319,6 +335,7 @@ for (const item of cases) {
     results.push({ ok: false, message: String(error?.message ?? error) });
   }
 }
+while (inflight.size) await Promise.allSettled([...inflight]);
 const count = (state, id) => state.agents.get(id).permissions.length;
 console.log(JSON.stringify({
   counts: { first: count(first, "pr-comment-fixer"), second: count(second, "pr-comment-fixer") },
@@ -892,6 +909,19 @@ class OpencodeNpmPackageTests(unittest.TestCase):
         )
         (probe,) = observed["created"]
         self.assertEqual([(r["sessionID"], r["decision"]) for r in observed["replies"]], [(probe["id"], "reject")])
+
+    @unittest.skipIf(NODE is None, "node is required")
+    def test_probe_evaluation_after_the_timeout_never_prompts(self) -> None:
+        # An earlier plugin's hook holds the probe evaluation past the timeout:
+        # the floor prompts, and the late evaluation is still denied rather
+        # than raising a prompt in the removed probe session.
+        observed = self.run_external(
+            "slow-hook",
+            [(external_check(FIXER, ["/elsewhere/a/*"]), "ask")],
+            saved=["/elsewhere/*"],
+            pre_hooks="slow",
+        )
+        self.assertEqual(len(observed["created"]), 1)
 
     @unittest.skipIf(NODE is None, "node is required")
     def test_saved_approval_probe_never_prompts_or_leaks_a_session(self) -> None:

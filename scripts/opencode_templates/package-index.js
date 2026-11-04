@@ -82,8 +82,10 @@
 //     metadata token, records the effect, and turns it into deny so the probe
 //     never prompts; the assert's rejection is expected. An assert that does
 //     not settle within PROBE_TIMEOUT_MS (this hook gone, e.g. the plugin
-//     unloaded mid-probe) has its pending request rejected
-//     (ctx.permission.list/reply). The probe session is removed again
+//     unloaded mid-probe, or an earlier hook slow) counts as no answer and
+//     has its pending request rejected (ctx.permission.list/reply); its token
+//     stays registered until the assert settles, so a late evaluation is
+//     still denied. The probe session is removed again
 //     (ctx.session.remove) in every case. Because the host is asked each
 //     time, a removed saved approval takes effect at once and one saved
 //     before this package loaded is honoured. Each loaded copy of this module
@@ -405,22 +407,26 @@ async function rejectPending(ctx, sessionID) {
 }
 
 // One probe assert in the probe session: the effect this package's evaluate
-// hook saw for it, or undefined when it saw none or the assert timed out.
+// hook saw for it, or undefined when it saw none or the assert timed out. The
+// token stays registered until the assert settles, so an evaluation that
+// reaches the hook only after the timeout (a slow earlier hook) is still
+// denied instead of prompting in a probe session that is already gone.
 async function probeEffect(ctx, sessionID, agent, resources) {
   const token = randomUUID();
   const slot = { sessionID, effect: undefined };
   PROBES.set(token, slot);
+  const settled = Promise.resolve()
+    .then(() =>
+      ctx.permission.assert({ sessionID, agent, action: EXTERNAL, resources, metadata: { [PROBE_KEY]: token } }),
+    )
+    .then(
+      () => "settled",
+      // Expected: the evaluate hook denies every probe evaluation.
+      () => "settled",
+    )
+    .finally(() => PROBES.delete(token));
   let timer;
   try {
-    const settled = Promise.resolve()
-      .then(() =>
-        ctx.permission.assert({ sessionID, agent, action: EXTERNAL, resources, metadata: { [PROBE_KEY]: token } }),
-      )
-      .then(
-        () => "settled",
-        // Expected: the evaluate hook denies every probe evaluation.
-        () => "settled",
-      );
     const expired = new Promise((resolve) => {
       timer = setTimeout(resolve, PROBE_TIMEOUT_MS, "expired");
     });
@@ -431,7 +437,6 @@ async function probeEffect(ctx, sessionID, agent, resources) {
     return slot.effect;
   } finally {
     clearTimeout(timer);
-    PROBES.delete(token);
   }
 }
 
