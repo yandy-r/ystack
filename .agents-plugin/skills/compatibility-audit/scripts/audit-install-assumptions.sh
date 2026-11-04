@@ -363,9 +363,10 @@ run_pi_checks() {
   local pdir="${REPO_ROOT}/packages/pi"
   local matrix="${REPO_ROOT}/ycc/skills/_shared/references/target-capability-matrix.md"
 
-  # PI1: the generated tree and every matrix pi verdict must agree (ADR 0003). With no
-  # packages/pi/ every pi cell must be unsupported; once the tree exists (YAN-1188),
-  # INSTALL_PATH:pi must no longer be unsupported.
+  # PI1: the installable tree and every matrix pi verdict must agree (ADR 0003). The tree
+  # counts as present only once packages/pi/*/package.json exists (YAN-1188): skills land
+  # under packages/pi/ycc/skills earlier (YAN-1184). With no installable package every pi
+  # cell must be unsupported; with one, INSTALL_PATH:pi must no longer be unsupported.
   if [[ ! -f "$matrix" ]]; then
     record "pi" "PI1" "FAIL" "${matrix} does not exist — cannot read the pi column"; return
   fi
@@ -392,20 +393,20 @@ PY
   if [[ $parse_rc -ne 0 ]]; then
     record "pi" "PI1" "FAIL" "matrix parse failed (python rc=${parse_rc})"; return
   fi
-  local install_path
+  local install_path marker="${pdir}/*/package.json"
   install_path="$(sed -n 's/^INSTALL_PATH=//p' <<<"$verdicts")"
   if [[ -z "$install_path" ]]; then
     record "pi" "PI1" "FAIL" "INSTALL_PATH:pi not found in ${matrix}"
-  elif [[ ! -d "$pdir" ]]; then
+  elif ! compgen -G "$marker" >/dev/null; then
     local claimed
     claimed="$(grep -v '=unsupported$' <<<"$verdicts" | tr '\n' ' ' || true)"
     if [[ -z "${claimed// /}" ]]; then
-      record "pi" "PI1" "PASS" "${pdir} not generated yet (every matrix pi verdict is unsupported)"
+      record "pi" "PI1" "PASS" "${marker} not generated yet (every matrix pi verdict is unsupported)"
     else
-      record "pi" "PI1" "FAIL" "${pdir} does not exist but the matrix claims ${claimed% }"
+      record "pi" "PI1" "FAIL" "${marker} does not exist but the matrix claims ${claimed% }"
     fi
   elif [[ "$install_path" == "unsupported" ]]; then
-    record "pi" "PI1" "FAIL" "${pdir} exists but matrix INSTALL_PATH:pi=unsupported"
+    record "pi" "PI1" "FAIL" "${marker} exists but matrix INSTALL_PATH:pi=unsupported"
   else
     record "pi" "PI1" "PASS" ""
   fi

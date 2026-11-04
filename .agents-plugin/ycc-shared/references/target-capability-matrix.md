@@ -565,9 +565,11 @@ Unsupported today: ycc ships no Pi MCP package. Planned `partial` (YAN-1190): Pi
 Source: ADR 0003 decision 4; spike §2.5.
 
 **INSTALL_PATH:pi**
-Unsupported today: no generated `packages/pi/` tree and no `install.sh --target pi` exist.
-`scripts/validate_capability_matrix.py` fails if `packages/pi/` exists while this cell is
-`unsupported`, and fails if any `pi` cell claims support while the tree is absent. Planned `partial`
+Unsupported today: no installable Pi package (`packages/pi/*/package.json`, written by the
+YAN-1188 generator) and no `install.sh --target pi` exist. Skills generated earlier under
+`packages/pi/ycc/skills` (YAN-1184) do not count. `scripts/validate_capability_matrix.py` and the
+`PI1` audit fail if an installable package exists while this cell is `unsupported`, and fail if any
+`pi` cell claims support or any `pi` package row is `included` without one. Planned `partial`
 (YAN-1188, YAN-1189): `pi install <abs path>` at user scope or `pi install -l --approve <dir>` at
 project scope, with no catalog. Floor pi `>=1.2.0`, recommended 1.5.0. Installed extensions are
 full-trust code with no sandbox. Source: ADR 0003 decisions 1, 7, 8.

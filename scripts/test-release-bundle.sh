@@ -724,8 +724,15 @@ for manifest in "${OMP_MANIFESTS[@]}"; do jset_all_versions "${manifest}" "0.0.1
 commit_fix "deferred omp row"
 if run_pf "${FIX}"; then ok "model: deferred omp row ignores stale OMP manifests"; else not_ok "model: deferred omp ignored" "${OUT}"; fi
 
-# An included native pi row has no manifest layout yet (YAN-1188): fail closed.
+# A deferred pi row suppresses a stale generated packages/pi/<key>/package.json (YAN-1184/1188).
 git -C "${FIX}" checkout -q -- .
+wf "packages/pi/ycc/package.json" <<<'{"name":"@yandy-r/ycc-pi","version":"0.0.1"}'
+commit_fix "deferred pi row with stale package.json"
+if run_pf "${FIX}"; then ok "model: deferred pi row ignores a stale pi package.json"; else not_ok "model: deferred pi ignored" "${OUT}"; fi
+rm -rf "${FIX}/packages/pi"
+commit_fix "drop pi fixture tree"
+
+# An included native pi row has no manifest layout yet (YAN-1188): fail closed.
 python3 - "${FIX}/ycc/settings/packages.json" <<'PY'
 import json, sys
 path = sys.argv[1]

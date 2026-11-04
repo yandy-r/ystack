@@ -19,14 +19,16 @@ FAILED=0
 pass() { printf 'PASS: %s\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; FAILED=1; }
 
-# make_root <name> <tree:yes|no> <capability=verdict>... — print a fixture root
-# whose pi column is `unsupported` except for the listed overrides.
+# make_root <name> <tree:package|skills|no> <capability=verdict>... — print a
+# fixture root whose pi column is `unsupported` except for the listed overrides.
+# `package` writes packages/pi/ycc/package.json (installable); `skills` writes
+# only packages/pi/ycc/skills (YAN-1184 output, which PI1 must treat as absent).
 make_root() {
     local root="${SCRATCH}/$1" tree="$2"
     shift 2
     mkdir -p "${root}/.claude-plugin" "$(dirname "${root}/${MATRIX_REL}")"
     printf '{"name":"fixture","plugins":[]}\n' >"${root}/.claude-plugin/marketplace.json"
-    python3 - "${REPO_ROOT}/${MATRIX_REL}" "${root}/${MATRIX_REL}" "$@" <<'PY'
+    python3 - "${REPO_ROOT}/${MATRIX_REL}" "${root}/${MATRIX_REL}" "$@" <<'PY' || return 1
 import sys
 
 source, dest, *overrides = sys.argv[1:]
@@ -46,25 +48,45 @@ for raw in open(source, encoding="utf-8").read().split("\n"):
     out.append("| " + " | ".join(cells) + " |")
 open(dest, "w", encoding="utf-8").write("\n".join(out))
 PY
-    [[ "${tree}" == "yes" ]] && mkdir -p "${root}/packages/pi/ycc"
+    case "${tree}" in
+        package) mkdir -p "${root}/packages/pi/ycc" && printf '{}\n' >"${root}/packages/pi/ycc/package.json" ;;
+        skills) mkdir -p "${root}/packages/pi/ycc/skills" ;;
+        no) ;;
+        *) return 1 ;;
+    esac
     printf '%s\n' "${root}"
 }
 
-# expect <label> <want-rc> <want-status> <root>
+# expect <label> <want-rc> <want-status> <root> <token>... — PI1 must report
+# want-status with every stable token in its detail line.
 expect() {
-    local label="$1" want_rc="$2" want="$3" root="$4" out rc=0
+    local label="$1" want_rc="$2" want="$3" root="$4" out rc=0 line token
+    shift 4
     out="$(bash "${AUDIT}" --target=pi "${root}" 2>&1)" || rc=$?
-    if [[ "${rc}" -eq "${want_rc}" && "${out}" == *"[pi] PI1 ${want}"* ]]; then
-        pass "${label}"
-    else
+    line="$(grep -F "[pi] PI1 ${want}" <<<"${out}" || true)"
+    if [[ "${rc}" -ne "${want_rc}" || -z "${line}" ]]; then
         fail "${label} (rc=${rc}, want ${want_rc} ${want}): ${out}"
+        return
     fi
+    for token in "$@"; do
+        if [[ "${line}" != *"${token}"* ]]; then
+            fail "${label}: missing ${token@Q} in ${line}"
+            return
+        fi
+    done
+    pass "${label}"
 }
 
-expect "no tree, every pi verdict unsupported passes" 0 PASS "$(make_root absent-ok no)"
-expect "no tree, a partial pi verdict fails" 1 FAIL "$(make_root absent-claim no SKILLS=partial)"
-expect "tree present, INSTALL_PATH:pi unsupported fails" 1 FAIL "$(make_root present-unsupported yes)"
-expect "tree present, INSTALL_PATH:pi partial passes" 0 PASS "$(make_root present-ok yes INSTALL_PATH=partial)"
+root="$(make_root absent-ok no)" || exit 1
+expect "no tree, every pi verdict unsupported passes" 0 PASS "${root}" "packages/pi"
+root="$(make_root absent-claim no SKILLS=partial)" || exit 1
+expect "no tree, a partial pi verdict fails" 1 FAIL "${root}" "SKILLS" "does not exist"
+root="$(make_root skills-only skills INSTALL_PATH=partial)" || exit 1
+expect "skills-only tree (no package.json) counts as absent" 1 FAIL "${root}" "INSTALL_PATH" "does not exist"
+root="$(make_root present-unsupported package)" || exit 1
+expect "installable tree, INSTALL_PATH:pi unsupported fails" 1 FAIL "${root}" "INSTALL_PATH:pi" "exists"
+root="$(make_root present-ok package INSTALL_PATH=partial)" || exit 1
+expect "installable tree, INSTALL_PATH:pi partial passes" 0 PASS "${root}"
 
 [[ "${FAILED}" -eq 0 ]] && echo "test-pi-install-assumptions: all passed"
 exit "${FAILED}"

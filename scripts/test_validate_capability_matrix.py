@@ -16,9 +16,9 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 from validate_capability_matrix import (  # noqa: E402
     CANONICAL_CAPABILITIES,
     CANONICAL_TARGETS,
-    DEFAULT_MANIFEST_PATH,
     DEFAULT_MATRIX_PATH,
     DEFAULT_SCHEMA_PATH,
+    MANIFEST_REL,
     REPO_ROOT,
     validate,
 )
@@ -99,7 +99,7 @@ class MatrixFixture(unittest.TestCase):
 
 class CheckedInMatrixTests(MatrixFixture):
     def test_checked_in_matrix_passes(self) -> None:
-        self.assertEqual(validate(DEFAULT_MATRIX_PATH, DEFAULT_SCHEMA_PATH, REPO_ROOT, DEFAULT_MANIFEST_PATH), [])
+        self.assertEqual(validate(DEFAULT_MATRIX_PATH, DEFAULT_SCHEMA_PATH, REPO_ROOT, REPO_ROOT / MANIFEST_REL), [])
 
     def test_fixture_passes(self) -> None:
         self.assertEqual(self.errors(fixture_matrix()), [])
@@ -182,13 +182,24 @@ class NegativeTests(MatrixFixture):
 
 
 class GeneratedTreeTests(MatrixFixture):
-    """The pi column fails closed against packages/pi/ both ways (ADR 0003, YAN-1183)."""
+    """The pi column fails closed against an installable packages/pi/*/package.json (ADR 0003)."""
 
-    def tree_errors(self, rows: list[str], *, tree: bool, manifest: dict[str, object] | None = None) -> list[str]:
+    def tree_errors(
+        self,
+        rows: list[str],
+        *,
+        tree: bool,
+        manifest: dict[str, object] | None = None,
+        skills_only: bool = False,
+    ) -> list[str]:
         repo = self.root / "repo"
         repo.mkdir(exist_ok=True)
         if tree:
-            (repo / "packages/pi").mkdir(parents=True, exist_ok=True)
+            (repo / "packages/pi/ycc").mkdir(parents=True, exist_ok=True)
+            (repo / "packages/pi/ycc/package.json").write_text("{}", encoding="utf-8")
+        if skills_only:
+            # YAN-1184 generates skills before the package generator writes package.json.
+            (repo / "packages/pi/ycc/skills").mkdir(parents=True, exist_ok=True)
         manifest_path = None
         if manifest is not None:
             manifest_path = self.root / "packages.json"
@@ -202,6 +213,11 @@ class GeneratedTreeTests(MatrixFixture):
 
     def test_absent_tree_with_all_unsupported_passes(self) -> None:
         self.assertEqual(self.tree_errors(fixture_rows(), tree=False, manifest=self.manifest("deferred")), [])
+
+    def test_skills_only_tree_counts_as_absent(self) -> None:
+        self.assertEqual(self.tree_errors(fixture_rows(), tree=False, skills_only=True), [])
+        rows = [row(cap, "partial" if cap == "INSTALL_PATH" else "unsupported") for cap in CANONICAL_CAPABILITIES]
+        self.assert_tokens(self.tree_errors(rows, tree=False, skills_only=True), "packages/pi", "INSTALL_PATH:pi")
 
     def test_absent_tree_with_claimed_support_fails(self) -> None:
         rows = [row(cap, "partial" if cap == "SKILLS" else "unsupported") for cap in CANONICAL_CAPABILITIES]

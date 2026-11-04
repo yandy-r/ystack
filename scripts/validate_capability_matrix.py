@@ -11,10 +11,10 @@ ycc/skills/_shared/references/target-capability-matrix.md and check that:
 - no capability row repeats or has an empty name;
 - every ``partial``/``unsupported`` cell has a ``**CAP:target**`` note in Notes;
 - every ``**X:target**`` note names a known capability and target;
-- with a repository root, a target in ``GENERATED_TREES`` agrees with its tree: while the
-  tree is absent every cell for that target is ``unsupported`` and (with a package manifest)
-  no ``packages.*.runtimes.<target>`` row is ``included``; once it exists ``INSTALL_PATH``
-  for that target is not ``unsupported``.
+- with a repository root, a target in ``GENERATED_TREES`` agrees with its tree: until the
+  tree holds an installable package (``<tree>/*/package.json``) every cell for that target is
+  ``unsupported`` and (with a package manifest) no ``packages.*.runtimes.<target>`` row is
+  ``included``; once it does, ``INSTALL_PATH`` for that target is not ``unsupported``.
 
 Notes without a colon (for example ``**INVOCATION POLICY**``) are free-form.
 Exit 0 when valid, 1 on any error (errors go to stderr).
@@ -33,14 +33,17 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MATRIX_PATH = REPO_ROOT / "ycc/skills/_shared/references/target-capability-matrix.md"
 DEFAULT_SCHEMA_PATH = REPO_ROOT / "ycc/settings/packages.schema.json"
-DEFAULT_MANIFEST_PATH = REPO_ROOT / "ycc/settings/packages.json"
+MANIFEST_REL = Path("ycc/settings/packages.json")
 
 CANONICAL_TARGETS = ("claude", "cursor", "codex", "opencode", "omp", "pi")
-# Targets modeled before any generator ships, keyed to their generated tree. The check fails
-# closed both ways, like PI1 in audit-install-assumptions.sh: no tree means every verdict is
-# `unsupported` and no package row for the target is `included`, and a tree means INSTALL_PATH
-# can no longer be `unsupported`. Pi's tree is generated from YAN-1188 onward (ADR 0003).
+# Targets modeled before any installer ships, keyed to their generated tree. The tree counts as
+# present only once it holds an installable package (``<tree>/*/package.json``): skills land under
+# packages/pi/ycc/skills (YAN-1184) before the package generator writes package.json (YAN-1188).
+# The check fails closed both ways, like PI1 in audit-install-assumptions.sh: no installable
+# package means every verdict is `unsupported` and no package row for the target is `included`,
+# and an installable package means INSTALL_PATH can no longer be `unsupported` (ADR 0003).
 GENERATED_TREES = {"pi": Path("packages/pi")}
+INSTALLABLE_MARKER = "*/package.json"
 # Pinned row order. Adding a capability requires updating this tuple and the
 # capability detection in ycc/skills/compatibility-audit/scripts/audit-target-features.sh.
 CANONICAL_CAPABILITIES = (
@@ -167,10 +170,11 @@ def generated_tree_errors(matrix: Matrix, repo_root: Path, manifest_path: Path |
     """Fail closed when a GENERATED_TREES target's verdicts or package rows disagree with its tree."""
     errors: list[str] = []
     for target, tree in GENERATED_TREES.items():
-        present = (repo_root / tree).is_dir()
+        present = any(path.is_file() for path in (repo_root / tree).glob(INSTALLABLE_MARKER))
+        marker = f"{tree}/{INSTALLABLE_MARKER}"
         if not present and manifest_path is not None:
             errors.extend(
-                f"{label} is included but {tree}/ does not exist" for label in _included_rows(manifest_path, target)
+                f"{label} is included but {marker} does not exist" for label in _included_rows(manifest_path, target)
             )
         if target not in matrix.targets:
             continue
@@ -179,9 +183,9 @@ def generated_tree_errors(matrix: Matrix, repo_root: Path, manifest_path: Path |
         if not present:
             claimed = [f"{cap}:{target}={verdict}" for cap, verdict in verdicts.items() if verdict != "unsupported"]
             if claimed:
-                errors.append(f"{tree}/ does not exist but the matrix claims {', '.join(claimed)}")
+                errors.append(f"{marker} does not exist but the matrix claims {', '.join(claimed)}")
         elif verdicts.get("INSTALL_PATH") == "unsupported":
-            errors.append(f"{tree}/ exists but the matrix marks INSTALL_PATH:{target} unsupported")
+            errors.append(f"{marker} exists but the matrix marks INSTALL_PATH:{target} unsupported")
     return errors
 
 
@@ -250,13 +254,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
     parser.add_argument("--matrix", type=Path, default=DEFAULT_MATRIX_PATH)
     parser.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA_PATH)
-    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST_PATH)
+    parser.add_argument("--manifest", type=Path, default=None, help="Default: <repo-root>/" + str(MANIFEST_REL))
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT, help="Root holding the generated trees.")
     args = parser.parse_args(argv)
     matrix_path: Path = args.matrix
     schema_path: Path = args.schema
-    manifest_path: Path = args.manifest
     repo_root: Path = args.repo_root
+    manifest_path: Path = args.manifest if args.manifest is not None else repo_root / MANIFEST_REL
     try:
         errors = validate(matrix_path, schema_path, repo_root, manifest_path)
     except (OSError, ValueError, MatrixError) as exc:
