@@ -1,6 +1,6 @@
 {
   "name": "ycc-all",
-  "version": "6.1.1",
+  "version": "6.2.0",
   "description": "Installs ycc, ycc-mcp, and ycc-hooks together.",
   "author": {
     "name": "yandy-r"
