@@ -110,7 +110,7 @@ jobs:
     outputs:
       versions: ${{ steps.pins.outputs.versions }}
     env:
-      OMP_VERSIONS: '["18.12.2", "18.12.6"]'
+      OMP_VERSIONS: '["18.12.2", "18.12.6", "18.16.0"]'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -272,6 +272,10 @@ jobs:
             omp-linux-arm64@18.12.6) pinned=eee8e586274cef2e725c218b2b28b48ca9965d46dd58f60998cb347eca4ad0cf ;;
             omp-darwin-arm64@18.12.6) pinned=cfbb5e38cd8f8a3be55e710700be587d287deaacdc58c9b0a661c5086bccfe58 ;;
             omp-darwin-x64@18.12.6) pinned=62d6e6fd88b6fa5de2ca82842906f152bf1aa227559b1d0bb386f25f6d606123 ;;
+            omp-linux-x64@18.16.0) pinned=6498ed785bab00d2926e0387e0ec02362d6d45f1c3d0d1b57c1618b7f95c9264 ;;
+            omp-linux-arm64@18.16.0) pinned=c2be1ea85ce17c4270854b57efff2a7ea1d5a03c7557fd08721f2b9bb32698de ;;
+            omp-darwin-arm64@18.16.0) pinned=d4a10d97488d6054d2b18198bd24f461079952c7e0fb75ba66336ca0df0cb99e ;;
+            omp-darwin-x64@18.16.0) pinned=abd62d315b66314f0f635d537407037e7b0d06782513d8035669db5ef744242d ;;
             *) echo "::error::no pinned SHA-256 for ${asset}@${OMP_VERSION}; add it to this step"; exit 1 ;;
           esac
           sha256() {
