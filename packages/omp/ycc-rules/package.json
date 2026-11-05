@@ -1,6 +1,6 @@
 {
   "name": "ycc-rules",
-  "version": "6.2.1",
+  "version": "6.3.0",
   "description": "Language and common coding rules for Cursor, OMP, and Pi.",
   "private": true
 }
