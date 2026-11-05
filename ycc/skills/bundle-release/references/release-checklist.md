@@ -109,7 +109,7 @@ Run: `ycc/skills/bundle-release/scripts/draft-notes.sh <new-version>`
 - [ ] `Summary` section edited to describe the release in 1–3 sentences.
 - [ ] `Upgrade Notes` section reviewed and updated (delete if not applicable).
 - [ ] `Added`, `Changed`, `Removed`, and `Fixed` bullet sections reflect the actual changes from Phase 1.
-- [ ] `Packages` section present with the generated table (Package, Runtime, Status, Mechanism, Listed, Version or target, Notes): included packages at the release version, deferred/excluded at their target, opencode npm marked experimental/opt-in/not yet published, and the file-copy fallback noted.
+- [ ] `Packages` section present with the generated table (Package, Runtime, Status, Mechanism, Listed, Version or target, Notes): included packages at the release version, deferred/excluded at their target, experimental/opt-in markers from the package model, and the file-copy fallback noted.
 - [ ] Commit log section at the bottom preserved as-is (auto-populated by the script).
 
 ---

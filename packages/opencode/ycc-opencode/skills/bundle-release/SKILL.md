@@ -148,8 +148,8 @@ This reads `references/release-notes-template.md` and writes `docs/releases/<new
 The `{{PACKAGES_TABLE}}` placeholder is rendered from `ycc/settings/packages.json`
 with Package, Runtime, Status, Mechanism, Listed, Version or target, and Notes
 columns. Included packages show the release version; deferred/excluded entries
-show their target. The opencode npm package is experimental, opt-in, and not yet
-published; file-copy fallback is noted separately. Prompt the user to review the
+show their target. Experimental and opt-in markers come from the package model;
+file-copy fallback is noted separately. Prompt the user to review the
 Packages, Summary, and Upgrade Notes sections before committing. If the script
 exits non-zero, surface stderr and STOP.
 

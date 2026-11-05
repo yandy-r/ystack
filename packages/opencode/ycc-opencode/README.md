@@ -1,6 +1,6 @@
 # @yandy-r/ycc-opencode
 
-OpenCode V2 plugin carrying the ycc bundle (version 6.3.0). It is how ycc installs
+OpenCode V2 plugin carrying the ycc bundle (version 6.3.1). It is how ycc installs
 into [OpenCode](https://opencode.ai): `install.sh install --target opencode` writes the `plugins` entry
 below into `~/.config/opencode/opencode.json` for you.
 
@@ -15,7 +15,7 @@ Requires OpenCode `>=2.0.30` (V2 plugin API; V1 hook plugins are not supported).
 `opencode.json`, pinned to an exact release:
 
 ```json
-{ "plugins": ["@yandy-r/ycc-opencode@6.3.0"] }
+{ "plugins": ["@yandy-r/ycc-opencode@6.3.1"] }
 ```
 
 Pin the version instead of using the bare name. Right after a release, the registry can briefly serve
