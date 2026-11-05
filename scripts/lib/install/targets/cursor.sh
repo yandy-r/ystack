@@ -2,7 +2,7 @@
 # cursor.sh — the Cursor target: implements the per-target contract that install.sh
 # dispatches through (see scripts/lib/install/steps.sh):
 #   cursor_valid_steps, cursor_intent_steps <intent>, cursor_config_groups,
-#   cursor_supports_repo_mode, cursor_reads_agents_skills, sync_cursor_target, remove_cursor_target
+#   cursor_supports_repo_mode, sync_cursor_target, remove_cursor_target
 # plus the optional scope-note hooks: cursor_settings_scope_note,
 # cursor_settings_global_dest (settings is global-only: no cursor_project_groups).
 #
@@ -87,9 +87,6 @@ cursor_settings_global_dest() { echo "${HOME}/.cursor/cli-config.json"; }
 
 # Both modes register the GitHub marketplace.
 cursor_supports_repo_mode() { return 0; }
-
-# The native plugins carry the skills; nothing is written to ~/.cursor/skills.
-cursor_reads_agents_skills() { return 1; }
 
 # cursor_hint_packages — the native packages the requested intents name, plus
 # the ones replacing legacy carriers this run's cleanup retired (CURSOR_RETIRED).

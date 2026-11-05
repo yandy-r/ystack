@@ -19,8 +19,8 @@ other runtime bundles are generated from it. Keep the plugin name `ycc` stable.
 
 - Add workflow logic under `ycc/`, not generated bundles. Do not hand-edit generated
   `.codex-plugin/`, `.opencode-plugin/`, `.omp-plugin/`, `.agents-plugin/`, `packages/claude/`,
-  `packages/cursor/`, `packages/omp/`, or `packages/pi/` files; change their source/generator, then
-  regenerate.
+  `packages/cursor/`, `packages/omp/`, `packages/opencode/`, or `packages/pi/` files; change their
+  source/generator, then regenerate.
 - Do not add top-level workflow plugins. Extend `ycc` or use the sibling-repo decision
   gate in `CONTRIBUTING.md`. Claude-only mods are the documented exception in `CLAUDE.md`.
 - Skills use `kebab-case` directories under `ycc/skills/`; agents use `kebab-case.md`
@@ -39,8 +39,8 @@ this table records install ownership, not a claim of runtime feature parity:
 | ---------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | Cursor settings        | `packages/cursor/installer-fallback/config/cli-config.json`                            | `~/.cursor/cli-config.json` via `install.sh` (`--global`)                                        |
 | Codex                  | `.codex-plugin/ycc/`, `ycc-mcp/`; listed in root `.agents/plugins/marketplace.json`    | `codex plugin add ycc@ycc ycc-mcp@ycc` (via `install.sh`); custom agents in `~/.codex/agents/`   |
-| opencode               | `.opencode-plugin/skills/`, `agents/`, `commands/`                                     | Matching directories under `~/.config/opencode/`                                                 |
-| opencode settings      | `.opencode-plugin/opencode.json`, `AGENTS.md`                                          | `~/.config/opencode/` via `install.sh install --target opencode --settings --global`             |
+| opencode npm plugin    | `packages/opencode/ycc-opencode/` (`@yandy-r/ycc-opencode`, from `.opencode-plugin/`)  | `plugins` entry in `~/.config/opencode/opencode.json` via `install.sh install --target opencode` |
+| opencode settings      | `.opencode-plugin/opencode.json`, `AGENTS.md`                                          | `opencode.json` and `~/.config/opencode/AGENTS.md` via `install.sh` (`--settings`, `--rules`)    |
 | Cross-tool `agents`    | `.agents-plugin/skills/`, `ycc-shared/`                                                | `~/.agents/skills/`, `~/.agents/ycc-shared/`                                                     |
 | Claude native add-ons  | `packages/claude/` MCP, hooks, dependency bundle                                       | Listed in root `.claude-plugin/marketplace.json`; `install.sh` installs them via `claude plugin` |
 | Cursor native packages | `packages/cursor/{ycc,ycc-rules,ycc-mcp,ycc-hooks}/`                                   | Listed in root `.cursor-plugin/marketplace.json`; installed in Cursor's `/plugins`               |

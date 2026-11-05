@@ -50,7 +50,8 @@ assert_contains $'\n'"${INSTALL_OUT}"$'\n' $'\n'"${SLIM}"$'\n' "list plugins --t
 home="$(new_home)"
 install_must_succeed "${home}" sync --target opencode --intent plugins --global
 merged="$(cat "${home}/.config/opencode/opencode.json")"
-assert_contains "${merged}" "./ycc-sensitive-guard" "default --intent plugins merges the bundle plugins"
+assert_contains "${merged}" "@prevalentware/opencode-goal-plugin" "default --intent plugins merges the bundle goal plugin"
+assert_not_contains "${merged}" "ycc-sensitive-guard" "default --intent plugins merges no guard (it ships in @yandy-r/ycc-opencode)"
 assert_not_contains "${merged}" "${SLIM}" "default --intent plugins does not install a catalog plugin"
 if [[ ! -e "${home}/.config/opencode/${SLIM}.json" ]]; then ok "default run ships no catalog companion"; else ko "default run ships no catalog companion"; fi
 
@@ -98,13 +99,12 @@ install_must_succeed "${home}" sync --target opencode --intent plugins --plugins
 out="${INSTALL_OUT}"
 assert_contains "$(json_query "${cfg}" 'd["plugins"]')" "'${SLIM_PKG}'" "catalog sync adds the pinned plugins item"
 assert_contains "$(json_query "${cfg}" 'd["plugins"]')" "'@user/local-plugin'" "catalog sync keeps the user plugin"
-assert_not_contains "$(json_query "${cfg}" 'd["plugins"]')" "ycc-sensitive-guard" "a catalog-only selection leaves the bundle plugins alone"
+assert_not_contains "$(json_query "${cfg}" 'd["plugins"]')" "opencode-goal-plugin" "a catalog-only selection leaves the bundle plugins alone"
 assert_contains "$(json_query "${cfg}" '[d["agents"][a]["disabled"] for a in ("explore", "general")]')" "[True, True]" "catalog sync sets agents.{explore,general}.disabled"
 if cmp -s "${SLIM_COMPANION_SRC}" "${companion}"; then ok "catalog sync ships the companion config"; else ko "catalog sync ships the companion config"; fi
 assert_contains "${out}" "OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true" "catalog sync prints the shell-rc note"
 assert_contains "${out}" '"lsp": true' "catalog sync prints the lsp note"
 assert_not_contains "${out}" "none of the selected plugins" "a catalog-only selection does not warn about the bundle group"
-if [[ ! -e "${home}/.config/opencode/ycc-sensitive-guard" ]]; then ok "a catalog-only selection ships no guard dir"; else ko "a catalog-only selection ships no guard dir"; fi
 
 cp "${cfg}" "${home}/first.json"
 cp "${companion}" "${home}/first-companion.json"
@@ -134,17 +134,15 @@ if cmp -s "${SLIM_COMPANION_SRC}" "${companion}"; then ok "catalog sync --force 
 echo "== opencode catalog: mixed bundle + catalog selection =="
 
 home="$(new_home)"
-install_must_succeed "${home}" sync --target opencode --intent plugins --plugins "./ycc-sensitive-guard,${SLIM}" --global
+install_must_succeed "${home}" sync --target opencode --intent plugins --plugins "@prevalentware/opencode-goal-plugin,${SLIM}" --global
 merged="$(cat "${home}/.config/opencode/opencode.json")"
-assert_contains "${merged}" "./ycc-sensitive-guard" "a mixed selection merges the bundle item"
+assert_contains "${merged}" "@prevalentware/opencode-goal-plugin" "a mixed selection merges the bundle item"
 assert_contains "${merged}" "${SLIM_PKG}" "a mixed selection merges the catalog item"
-assert_not_contains "${merged}" "@prevalentware/opencode-goal-plugin" "a mixed selection skips the unselected bundle item"
-if [[ -f "${home}/.config/opencode/ycc-sensitive-guard/index.js" ]]; then ok "a mixed selection ships the guard dir"; else ko "a mixed selection ships the guard dir"; fi
+if [[ ! -e "${home}/.config/opencode/ycc-sensitive-guard" ]]; then ok "a mixed selection ships no guard dir"; else ko "a mixed selection ships no guard dir"; fi
 install_must_succeed "${home}" remove --target opencode --intent plugins --plugins "${SLIM}" --global
 merged="$(cat "${home}/.config/opencode/opencode.json")"
 assert_not_contains "${merged}" "${SLIM}" "remove --plugins <catalog> takes the catalog item"
-assert_contains "${merged}" "./ycc-sensitive-guard" "remove --plugins <catalog> keeps the bundle item"
-if [[ -d "${home}/.config/opencode/ycc-sensitive-guard" ]]; then ok "remove --plugins <catalog> keeps the guard dir"; else ko "remove --plugins <catalog> keeps the guard dir"; fi
+assert_contains "${merged}" "@prevalentware/opencode-goal-plugin" "remove --plugins <catalog> keeps the bundle item"
 
 echo "== opencode catalog: remove =="
 
@@ -312,7 +310,7 @@ if [[ ! -e "${home}/project/opencode.json" && ! -e "${home}/.config/opencode/ope
 
 home="$(new_home)"
 rc=0
-out="$(run_install "${home}" sync --target opencode --intent plugins --plugins "./ycc-sensitive-guard,${SLIM}" --project)" || rc=$?
+out="$(run_install "${home}" sync --target opencode --intent plugins --plugins "@prevalentware/opencode-goal-plugin,${SLIM}" --project)" || rc=$?
 if [[ ${rc} -ne 0 ]]; then ok "--project with a bundle plugin is rejected"; else ko "--project with a bundle plugin is rejected"; fi
 assert_contains "${out}" "supports catalog plugins only" "--project with a bundle plugin explains why"
 if [[ ! -e "${home}/project/opencode.json" ]]; then ok "a rejected --project run writes nothing"; else ko "a rejected --project run writes nothing"; fi
@@ -328,6 +326,6 @@ install_must_succeed "${home}" sync --target opencode --intent settings,plugins 
 project_cfg="$(cat "${home}/project/opencode.json")"
 assert_contains "${project_cfg}" "${SLIM_PKG}" "--project settings,plugins carries the catalog plugin"
 assert_contains "${project_cfg}" '"model"' "--project settings,plugins carries the bundle settings"
-assert_not_contains "${project_cfg}" "ycc-sensitive-guard" "--project settings,plugins carries no bundle plugin"
+assert_not_contains "${project_cfg}" "opencode-goal-plugin" "--project settings,plugins carries no bundle plugin"
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then install_tests_finish; fi

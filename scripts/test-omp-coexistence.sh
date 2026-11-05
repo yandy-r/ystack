@@ -441,12 +441,15 @@ log 'PASS C3 Claude registry ycc@ycc (enabledProviders [claude]): no duplicate; 
 rm -rf -- "$home/.claude/plugins"
 
 # --- C4. enabledProviders ["*"] with every other runtime's files ---------------------------------
-for slice in claude:skills claude:agents codex:skills codex:agents opencode:skills opencode:agents \
-  opencode:commands cursor:skills cursor:agents cursor:commands; do
+for slice in claude:skills claude:agents codex:skills codex:agents cursor:skills cursor:agents cursor:commands; do
   run "c4-slice-${slice/:/-}" "$home" "$python" "$repo/scripts/install_slices.py" install \
     --target "${slice%%:*}" --slice "${slice##*:}"
   assert_rc 0 "install_slices $slice"
 done
+# Legacy opencode file copies (the installer now ships the npm plugin): seed the
+# old ~/.config/opencode units and their ledger rows so dedupe still sees them.
+run c4-seed-opencode "$home" "$python" "$repo/scripts/tests/install/seed_opencode_legacy.py" "$repo/.opencode-plugin"
+assert_rc 0 'seed legacy opencode copies'
 "$python" - "$repo/mcp-configs/mcp.json" "$home" <<'PY'
 import json, sys
 from pathlib import Path

@@ -424,16 +424,14 @@ class SensitiveFilePolicyTestCase(unittest.TestCase):
             self.assertEqual(guard_drift(dest), [])
             self.assertFalse((dest / "old").exists())
 
-    def test_bundle_config_loads_the_guard_plugin(self) -> None:
+    def test_bundle_config_leaves_the_guard_to_the_package(self) -> None:
         from generate_opencode_plugin import build_opencode_config
-        from opencode_sensitive_policy import GUARD_DIRNAME, GUARD_PLUGIN_SPEC
 
         plugins = build_opencode_config()["plugins"]
         self.assertIsInstance(plugins, list)
-        self.assertIn(GUARD_PLUGIN_SPEC, plugins)
-        # A top-level bundle unit: skills consolidation (which drops skills/ and
-        # shared/) never removes the directory the entry points at.
-        self.assertEqual(GUARD_PLUGIN_SPEC, f"./{GUARD_DIRNAME}")
+        # @yandy-r/ycc-opencode ships and loads the guard; the merged settings
+        # carry no local plugin path that would point at nothing.
+        self.assertFalse([p for p in plugins if isinstance(p, str) and p.startswith("./")])
 
 
 if __name__ == "__main__":

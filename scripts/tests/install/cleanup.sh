@@ -3,7 +3,7 @@
 # subcommand; run_legacy_cleanup (scripts/lib/install/cleanup.sh) drives the
 # internal scripts/install_migrate.py helper, which applies by default and
 # previews with --dry-run. Target-specific cleanup fixtures live in each
-# target's suite (claude.sh, codex.sh, cursor.sh, omp.sh).
+# target's suite (claude.sh, codex.sh, cursor.sh, omp.sh, opencode.sh).
 #
 # Runs alone (bash scripts/tests/install/cleanup.sh) or from scripts/test-install-sync.sh.
 # shellcheck source=scripts/tests/install/lib.sh
@@ -67,15 +67,20 @@ else
     ok "a refused cleanup fails the caller"
 fi
 if out="$(cleanup_call COMMAND=install DRY_RUN=0 -- opencode)"; then
+    assert_contains "${out}" "ARGV --targets opencode" "cleanup accepts opencode (native npm package route)"
+else
+    ko "cleanup accepts opencode (native npm package route)" "${out}"
+fi
+if out="$(cleanup_call COMMAND=install DRY_RUN=0 -- agents)"; then
     ko "cleanup rejects targets without a native route"
 else
-    assert_contains "${out}" "not supported for target 'opencode'" "cleanup rejects targets without a native route"
+    assert_contains "${out}" "not supported for target 'agents'" "cleanup rejects targets without a native route"
 fi
 
 echo
 echo "== install_migrate.py: arguments =="
 helper="${REPO_ROOT}/scripts/install_migrate.py"
-for target in opencode agents bogus; do
+for target in agents bogus; do
     if out="$(HOME="${home}" python3 "${helper}" --targets "${target}" --dry-run 2>&1)"; then
         ko "helper rejects ${target}"
     else

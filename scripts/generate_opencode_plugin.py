@@ -25,14 +25,17 @@ opencode.json contents:
 - `agents.<id>`: emitted verbatim from targets.opencode.agents in models.json,
   which must map every ycc/agents/*.md basename plus the built-in subagents
   (general, explore) to a full `provider/model` reference.
-- `plugins`: shared OpenCode V2 plugins loaded by server/runtime
+- `plugins`: shared OpenCode V2 plugins loaded by server/runtime (the ycc
+  package itself is registered by install.sh's base step, not here)
 - `experimental.subagent_depth`: runtime subagent nesting limit
 
 The opencode model values are placeholders (models.json marks the target with
 `placeholder: true`) because the usable catalog depends on the user's provider
 subscriptions. Machines that need different models override
 ~/.config/opencode/opencode.json rather than this generated bundle file.
-- `mcp`: translated from mcp-configs/mcp.json (Claude Code shape → opencode shape)
+
+MCP servers are not emitted: @yandy-r/ycc-opencode registers them from
+mcp-configs/mcp.json (scripts/generate_opencode_package.py).
 
 AGENTS.md copies ycc/settings/rules/CLAUDE.md (the tool-neutral user-global
 ruleset) verbatim after a generated-file header. No product, path or filename
@@ -42,7 +45,6 @@ must not source this repo's project-specific contributor instructions.
 Source of truth:
 - ycc/.claude-plugin/plugin.json (name/version reference, not emitted)
 - ycc/settings/models.json
-- mcp-configs/mcp.json
 - ycc/settings/rules/CLAUDE.md
 """
 
@@ -59,11 +61,8 @@ from generate_opencode_common import (
     OPENCODE_CONFIG_PATH,
     OPENCODE_PLUGIN_ROOT,
     REPO_ROOT,
-    SOURCE_MCP_PATH,
     SRC_AGENTS_DIR,
-    translate_mcp_servers,
 )
-from opencode_sensitive_policy import GUARD_PLUGIN_SPEC
 
 # .opencode-plugin/AGENTS.md installs into ~/.config/opencode/AGENTS.md as the
 # user-global opencode rules file, so it must source from the generic
@@ -71,12 +70,12 @@ from opencode_sensitive_policy import GUARD_PLUGIN_SPEC
 SOURCE_RULES_PATH = REPO_ROOT / "ycc" / "settings" / "rules" / "CLAUDE.md"
 SOURCE_MODEL_SETTINGS_PATH = REPO_ROOT / "ycc" / "settings" / "models.json"
 
-# OpenCode V2 `plugins` entries. The goal plugin (npm) adds Codex-style goal
-# mode: /goal commands, persistent goal state, and the goal tools the
-# user-global AGENTS.md policy references. The sensitive-file guard is a local
-# directory shipped as the bundle's own ycc-sensitive-guard unit; OpenCode
-# resolves the `./` entry from the directory of the opencode.json that declares it.
-DEFAULT_PLUGINS: list[str] = ["@prevalentware/opencode-goal-plugin", GUARD_PLUGIN_SPEC]
+# OpenCode V2 `plugins` entries the settings step merges into opencode.json.
+# The goal plugin (npm) adds Codex-style goal mode: /goal commands, persistent
+# goal state, and the goal tools the user-global AGENTS.md policy references.
+# The sensitive-file guard ships inside @yandy-r/ycc-opencode (which the base
+# step registers), so no local `./ycc-sensitive-guard` entry is emitted.
+DEFAULT_PLUGINS: list[str] = ["@prevalentware/opencode-goal-plugin"]
 
 # Runtime subagent nesting depth limit.
 DEFAULT_SUBAGENT_DEPTH: int = 2
@@ -214,18 +213,6 @@ def build_agents_config(settings: dict[str, object]) -> dict[str, object]:
     return {agent_id: {"model": reference} for agent_id, reference in agent_models.items()}
 
 
-def load_mcp_block() -> dict[str, object]:
-    if not SOURCE_MCP_PATH.is_file():
-        return {}
-    with SOURCE_MCP_PATH.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    raw_servers = payload.get("mcpServers")
-    if not isinstance(raw_servers, dict):
-        return {}
-    # Native OpenCode V2 nests named servers under mcp.servers.
-    return {"servers": translate_mcp_servers(raw_servers)}
-
-
 def build_opencode_config() -> dict[str, object]:
     model_settings = load_model_settings()
     # `instructions` is deliberately absent. V2 resolves it, but the bundle's
@@ -242,9 +229,7 @@ def build_opencode_config() -> dict[str, object]:
         # OpenCode V2 uses the plural `providers` key (opencode.ai/v2/docs/config).
         "providers": build_provider_config(model_settings),
     }
-    mcp_block = load_mcp_block()
-    if mcp_block:
-        config["mcp"] = mcp_block
+    # No `mcp` block: the @yandy-r/ycc-opencode package registers the servers.
     return config
 
 

@@ -59,7 +59,20 @@ CARRIERS: dict[str, dict[str, str]] = {
         "mcp": "base",
         "rules": "base",
     },
+    # opencode installs ycc through one npm plugin (@yandy-r/ycc-opencode): the base step writes its
+    # `plugins` entry. Like OMP, the installer-fallback payloads (settings, the AGENTS.md link) stay
+    # opt-in via --settings/--rules, so no package implies them.
+    "opencode": {
+        "skills": "base",
+        "agents": "base",
+        "commands": "base",
+        "shared": "base",
+        "mcp": "base",
+        "instructions": "base",
+    },
 }
+# Package mechanisms the installer drives itself (plugin CLIs, or opencode's npm plugins entry).
+INSTALLABLE_MECHANISMS = frozenset({"native", "npm"})
 
 
 @dataclass(frozen=True)
@@ -98,8 +111,8 @@ def plan_install(
 
     Explicit unsupported pairs fail before any write. Fallback hooks and MCP
     servers are never inherited: only a package providing them owns that
-    native carrier. OMP inherits no fallback components at all (its
-    --rules/--settings are opt-in).
+    native carrier. OMP and opencode inherit no fallback components at all
+    (their --rules/--settings are opt-in).
     """
     known = {package.key: package for package in model.packages}
     for package in packages:
@@ -108,10 +121,10 @@ def plan_install(
         if package == "installer-fallback":
             raise PackageModelError("installer-fallback is an internal modeling key, not an installable package")
         if not any(
-            entry.status == "included" and entry.mechanism == "native" and not entry.opt_in
+            entry.status == "included" and entry.mechanism in INSTALLABLE_MECHANISMS and not entry.opt_in
             for entry in known[package].runtimes
         ):
-            raise PackageModelError(f"package '{package}' is deferred, excluded, opt-in, or not a native package")
+            raise PackageModelError(f"package '{package}' is deferred, excluded, opt-in, or not an installable package")
     sets, errors = package_sets(model)
     if errors:
         raise PackageModelError("; ".join(errors))
@@ -127,7 +140,7 @@ def plan_install(
             entry = model.lookup(package, target)
             if entry is None:
                 problem = f"package '{package}' is not available for target '{target}'"
-            elif entry.status != "included" or entry.opt_in or entry.mechanism != "native":
+            elif entry.status != "included" or entry.opt_in or entry.mechanism not in INSTALLABLE_MECHANISMS:
                 problem = f"package '{package}' is {entry.status} or opt-in for target '{target}'"
             else:
                 pair = sets[f"{package}@{target}"]
@@ -140,9 +153,9 @@ def plan_install(
                 else:
                     # The installer-fallback package never delivers hooks or MCP servers.
                     selected = set(pair.install_set) - ({"hooks", "mcp"} - set(pair.provides))
-                    if target == "omp":
-                        # OMP fallback payloads (instructions, settings) are opt-in via
-                        # --rules/--settings, never package-implied.
+                    if target in ("omp", "opencode"):
+                        # OMP and opencode fallback payloads (instructions, settings) are opt-in
+                        # via --rules/--settings, never package-implied.
                         selected &= set(pair.provides)
                     components.update(selected)
             if problem:

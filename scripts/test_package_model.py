@@ -133,12 +133,12 @@ class CheckedInModelTests(unittest.TestCase):
         assert entry is not None
         self.assertEqual(tuple(sorted(entry.requires)), ("ycc", "ycc-hooks", "ycc-mcp"))
 
-    def test_opencode_npm_experimental_opt_in(self) -> None:
+    def test_opencode_npm_is_the_primary_route(self) -> None:
         entry = load_package_model().lookup("@yandy-r/ycc-opencode", "opencode")
         assert entry is not None
         self.assertEqual(entry.mechanism, "npm")
-        self.assertTrue(entry.experimental)
-        self.assertTrue(entry.opt_in)
+        self.assertFalse(entry.experimental)
+        self.assertFalse(entry.opt_in)
 
     def test_installer_fallback_file_copy_unlisted(self) -> None:
         package = next(p for p in load_package_model().packages if p.key == "installer-fallback")

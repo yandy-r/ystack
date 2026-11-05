@@ -1,7 +1,7 @@
 {
   "name": "@yandy-r/ycc-opencode",
   "version": "6.3.0",
-  "description": "Experimental opt-in OpenCode V2 plugin registering the ycc bundle (skills, agents, commands, MCP servers, and session instructions) through its setup hook. The file-copy install remains the primary path.",
+  "description": "OpenCode V2 plugin registering the ycc bundle (skills, agents, ycc:<skill> commands, MCP servers, the sensitive-file guard and session instructions) through its setup hook. install.sh --target opencode installs it.",
   "type": "module",
   "main": "./index.js",
   "exports": {
@@ -20,7 +20,6 @@
   "keywords": [
     "opencode-plugin",
     "opencode",
-    "experimental",
     "ycc"
   ],
   "author": {

@@ -81,9 +81,6 @@ step_valid_for_any_target() {
 validate_only_steps() {
     local target="$1"
     local quiet="${2:-}"
-    # The agents target added by resolve_skills_home only acts on base/skills;
-    # the rest of the run's --only list belongs to the other targets.
-    [[ "${target}" == "agents" && "${AGENTS_AUTO_ADDED:-0}" == "1" ]] && return 0
     local valid_csv
     valid_csv="$(valid_steps_for_target "${target}")"
     if [[ "${EXCLUSIVE_STEPS:-0}" != "1" && ${#ONLY_STEPS[@]} -eq 0 ]]; then
@@ -135,9 +132,6 @@ configure_intents_for_target() {
     for intent in "${INTENTS[@]}"; do
         mapped="$(intent_steps_for_target "${target}" "${intent}")"
         if [[ -z "${mapped}" ]]; then
-            # The auto-added agents target only carries skills; its other
-            # intents belong to the other targets.
-            [[ "${target}" == "agents" && "${AGENTS_AUTO_ADDED:-0}" == "1" ]] && continue
             warn "intent '${intent}' is not supported by target '${target}' — skipping"
             continue
         fi
@@ -216,11 +210,10 @@ run_target() {
     skip_unscoped_settings "${target}"
     skip_dry_run_steps "${target}"
     # --with-deps extends the selection for this target only (select.sh).
-    local skills_saved="${SELECTION[skills]:-}" agents_saved="${SELECTION[agents]:-}"
+    local skills_saved="${SELECTION[skills]:-}"
     expand_with_deps "${target}"
     "${fn}"
     SELECTION[skills]="${skills_saved}"
-    SELECTION[agents]="${agents_saved}"
     ONLY_STEPS=(${only_saved[@]+"${only_saved[@]}"})
     EXCLUSIVE_STEPS="${exclusive_saved}"
 }
@@ -384,127 +377,6 @@ resolve_targets() {
     done
 }
 
-# ---------------------------------------------------------------------------
-# Skill overlap (--skills-home)
-# ---------------------------------------------------------------------------
-# opencode reads ~/.agents/skills AND its own skills dir, so installing ycc
-# skills natively for it next to the agents target lists every skill twice.
-# (claude, codex, cursor and omp load ycc skills from their native ycc
-# package only and declare <t>_reads_agents_skills false.) resolve_skills_home
-# offers to install the skills once into ~/.agents/skills instead: it records
-# the affected targets in SKILLS_CONSOLIDATED (the target scripts then drop
-# their own skill install, see skills_consolidated) and adds the agents
-# target. Reads SKILLS_HOME ('', agents or native), COMMAND, MODE, TARGETS.
-
-SKILLS_CONSOLIDATED=()
-
-# reads_agents_skills <target> — true when <target>'s tool also reads
-# ~/.agents/skills. Every target declares <t>_reads_agents_skills (contract);
-# new targets opt in there, nothing here is hardcoded.
-reads_agents_skills() {
-    [[ "$1" != "agents" ]] && is_known_target "$1" && "${1}_reads_agents_skills"
-}
-AGENTS_AUTO_ADDED=0
-
-# skills_consolidated <target> — true when <target>'s skills go to ~/.agents/skills.
-skills_consolidated() {
-    [[ " ${SKILLS_CONSOLIDATED[*]:-} " == *" $1 "* ]]
-}
-
-# skills_filter <target> "<words>" — echo <words> (bundle units or slices)
-# minus the skill-bearing ones (skills, shared) when <target>'s skills were
-# consolidated into ~/.agents/skills; unchanged otherwise.
-skills_filter() {
-    local word
-    local -a kept=()
-    for word in $2; do
-        if skills_consolidated "$1" && [[ "${word}" == "skills" || "${word}" == "shared" ]]; then
-            continue
-        fi
-        kept+=("${word}")
-    done
-    echo "${kept[*]:-}"
-}
-
-# target_has_native_skills <target> — true when the run installs ycc skills
-# into <target>'s own dir (base ships them for opencode too).
-# Subshell: intent/package mapping rewrites ONLY_STEPS.
-target_has_native_skills() {
-    (
-        if [[ -n "${PACKAGE:-}" ]]; then
-            package_configure_steps "$(package_steps_csv "$1")"
-        elif [[ ${#INTENTS[@]} -gt 0 ]]; then
-            configure_intents_for_target "$1" >/dev/null
-        fi
-        step_enabled base || step_enabled skills
-    )
-}
-
-# resolve_skills_home
-# For install/sync, detect duplicate-skill overlap and apply the user's choice
-# (flag, prompt on a TTY, else warn and proceed as requested).
-resolve_skills_home() {
-    [[ "${COMMAND}" == "remove" || "${MODE}" == "repo" || "${SKILLS_HOME:-}" == "native" ]] && return 0
-
-    local -a sharing=()
-    local t
-    for t in "${TARGETS[@]}"; do
-        reads_agents_skills "${t}" || continue
-        target_has_native_skills "${t}" && sharing+=("${t}")
-    done
-    local n=${#sharing[@]}
-    [[ ${n} -ge 1 ]] || return 0
-
-    local list="${sharing[0]}" i
-    for ((i = 1; i < n; i++)); do
-        if ((i == n - 1)); then list+=" and ${sharing[i]}"; else list+=", ${sharing[i]}"; fi
-    done
-
-    if [[ "${SKILLS_HOME:-}" != "agents" ]]; then
-        local agents_present=0
-        [[ " ${TARGETS[*]} " == *" agents "* ]] && agents_present=1
-        if [[ ${agents_present} -eq 0 ]] && agents_skills_present; then agents_present=1; fi
-        [[ ${n} -ge 2 || ${agents_present} -eq 1 ]] || return 0
-
-        if [[ ${n} -ge 2 ]]; then
-            local both="all"
-            [[ ${n} -eq 2 ]] && both="both"
-            warn "${list} will produce duplicate ycc skills (${both} read ~/.agents/skills plus their own dir)."
-        else
-            warn "${list} will duplicate the ycc skills in ~/.agents/skills (it reads that dir plus its own)."
-        fi
-        warn "Recommended: install skills once to ~/.agents/skills (agents target) and install everything else (agents, commands, tool-specific config) into each tool's own directory."
-
-        if [[ -t 0 && -t 2 ]]; then
-            {
-                printf '  [1] Recommended — skills → ~/.agents/skills; %s get only their non-skill pieces natively  (default)\n' "${list}"
-                printf '  [2] Keep as requested (native skills per tool; duplicates possible)\n'
-                printf '  [3] Abort\n'
-            } >&2
-            local reply
-            while true; do
-                printf 'Choice [1]: ' >&2
-                read -r reply || reply=3
-                case "${reply:-1}" in
-                    1) break ;;
-                    2) return 0 ;;
-                    3) err "aborted"; exit 1 ;;
-                esac
-            done
-        else
-            warn "pass --skills-home agents to consolidate (or --skills-home native to keep native skills and silence this)."
-            return 0
-        fi
-    fi
-
-    SKILLS_CONSOLIDATED=("${sharing[@]}")
-    if [[ " ${TARGETS[*]} " != *" agents "* ]]; then
-        TARGETS+=(agents)
-        AGENTS_AUTO_ADDED=1
-    fi
-    info "skills → ~/.agents/skills; ${list} keep only their non-skill pieces"
-}
-
 # order_targets
 # When both agents and omp are in TARGETS, move agents to just before omp
 # (other targets keep their relative order) so omp's dedupe step sees the
@@ -569,7 +441,7 @@ preflight_step_support() {
     for step in ${valid_csv//,/ }; do
         step_enabled "${step}" || continue
         if [[ "${SCOPE}" == "project" ]] && ! step_allows_project "${target}" "${step}"; then
-            err "--project is not supported by step '${step}' for target '${target}' (project scope currently supports: settings (claude, codex, opencode); mcp (claude, opencode); claude: hooks; omp: base, dedupe)"
+            err "--project is not supported by step '${step}' for target '${target}' (project scope currently supports: settings (claude, codex, opencode); mcp (claude); claude: hooks; omp: base, dedupe)"
             err "  use --global, or select only project-capable steps with --only / --intent."
             if [[ "${step}" == "settings" ]] && declare -F "${target}_settings_scope_note" >/dev/null; then
                 err "  $("${target}_settings_scope_note")"

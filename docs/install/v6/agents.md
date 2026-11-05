@@ -34,26 +34,12 @@ Rules of the target, unchanged in v6:
 
 ## Duplicates
 
-opencode reads `~/.agents/skills` and its own skill directory, so installing
-ycc skills natively for opencode **and** via this target lists every skill
-twice. The installer detects this and offers:
-
-```bash
-./install.sh install --target opencode,agents --only base
-# warning: opencode will duplicate the ycc skills in ~/.agents/skills ...
-#   [1] Recommended — skills → ~/.agents/skills; opencode get only their
-#       non-skill pieces natively  (default)
-#   [2] Keep as requested (native skills per tool; duplicates possible)
-#   [3] Abort
-```
-
-The prompt appears only on a terminal. Answer in advance with
-`--skills-home agents` (option 1) or `--skills-home native` (option 2). On a
-non-terminal run without the flag, the installer warns and continues as
-requested (option 2 semantics). Codex and Cursor also read
-`~/.agents/skills`, but their ycc skills come from their native `ycc`
-package; installing this target next to them lists the skills twice, so skip
-it if you use only those tools.
+opencode, Codex and Cursor also read `~/.agents/skills`, but their ycc skills
+come from their own native packages (see their install guides). Installing
+this target next to them lists the skills twice, so skip it if you use only
+those tools. Since YAN-1973 opencode no longer receives file-copied skills, so
+the installer has no duplicate prompt or consolidation choice. `--skills` and
+`--with-deps` narrow this target only.
 
 ## `npx skills` evidence (YAN-1126, 2026-10-16)
 

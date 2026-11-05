@@ -38,28 +38,24 @@ so this target ships none of them. Install those per tool (`--target opencode`,
 
 ## Duplicate skills
 
-opencode reads `~/.agents/skills` and its own skill directory, so installing ycc
-skills natively for opencode alongside `agents` lists every skill twice. The
-installer detects this:
+opencode, Codex and Cursor also read `~/.agents/skills`, but their ycc skills
+come from their native packages (`@yandy-r/ycc-opencode` on opencode, `ycc@ycc`
+on Codex and Cursor). Installing this target next to them lists each skill a
+second time; skip it if you use only those tools. The installer neither copies
+opencode skills nor deduplicates against this directory any more, so there is
+no prompt and no flag for it.
+
+`--skills <names>` narrows this target's `skills` step (`--intent skills` or
+`--only skills`) and `--with-deps` adds the selected skills' `ycc:<name>`
+dependencies. Both apply to this target only:
 
 ```bash
-./install.sh install --target opencode,agents --only base
-# warning: opencode will duplicate the ycc skills in ~/.agents/skills (it reads that dir plus its own).
-#   [1] Recommended — skills → ~/.agents/skills; opencode get only their non-skill pieces natively  (default)
-#   [2] Keep as requested (native skills per tool; duplicates possible)
-#   [3] Abort
+./install.sh sync   --target agents --intent skills --skills prp-plan
+./install.sh sync   --target agents --intent skills --skills code-review --with-deps
+./install.sh remove --target agents --intent skills --skills prp-plan
 ```
 
-The prompt appears only on a terminal. Answer it in advance with
-`--skills-home agents` (option 1) or `--skills-home native` (option 2). Without a
-terminal or the flag, the installer warns and continues as requested. With
-option 1, opencode installs `agents/` and `commands/` only (no `skills/`,
-`shared/`); its settings, rules and MCP are unchanged.
-
-Codex and Cursor also read `~/.agents/skills`, but their ycc skills come from
-the native `ycc@ycc` package, so `--skills-home` does not apply to them.
-Installing this target next to them lists each skill twice; skip it if you use
-only those tools.
+See [Selecting Skills](README.md#selecting-skills).
 
 ### OMP
 
@@ -87,8 +83,7 @@ one (ADR 0003) hides these copies inside Pi with owned
 
 ## Adding a target
 
-Each `scripts/lib/install/targets/<t>.sh` declares `<t>_reads_agents_skills`
-(return 0 if the tool reads `~/.agents/skills`). Targets that return 0 must also
-declare `<t>_native_skills_dirs` and pass their skill units through
-`skills_filter <t>` so option 1 can drop them. The install tests fail if a
-target omits the declaration.
+A new target that ships files into `~/.agents/skills` installs them through the
+slice helper (`scripts/install_slices.py`), which records ownership in
+`~/.config/ycc/installed-units.json` and never touches entries it did not
+install.

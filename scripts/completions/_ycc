@@ -18,7 +18,6 @@ _ycc() {
     local -a common kinds selectors install_selectors
     common=(
         '--target[targets to sync]:targets:_values -s , target claude cursor codex opencode agents omp all'
-        '--skills-home[resolve duplicate skills]:dir:(agents native)'
         '(--global)--project[write into the current project]'
         '(--project)--global[write into user-global config]'
         '--force[let repo values win]'
@@ -27,7 +26,7 @@ _ycc() {
     )
     local mode='--mode[marketplace source mode]:mode:(local repo)'
     local intent='--intent[what to sync]:intents:_values -s , intent base skills agents commands settings rules mcp hooks plugins mods'
-    local only='--only[run only these steps]:steps:_values -s , step base dedupe skills agents commands settings rules mcp hooks mods'
+    local only='--only[run only these steps]:steps:_values -s , step base dedupe skills agents settings rules mcp hooks mods'
     local package='--package[install package closures]:packages:_values -s , package ycc ycc-mcp ycc-hooks ycc-rules ycc-all'
     local list_target='--target[targets to list for]:targets:_values -s , target claude cursor codex opencode agents omp all'
     # --<kind> selectors: one per kind from 'ycc list', names from 'ycc list <kind>'.
@@ -46,7 +45,6 @@ _ycc() {
             'cli:link install.sh onto PATH as ycc'
             'completion:print or install shell completion'
             'list:list selectable kinds or a kind'"'"'s names'
-            'list-mcps:alias of list mcps'
         )
         _describe -t commands 'ycc command' subcommands
         return
@@ -63,9 +61,6 @@ _ycc() {
         list)
             _arguments "1:kind:(${kinds[*]})" "${list_target}" '--help[show help]'
             ;;
-        list-mcps)
-            _arguments "${list_target}" '--help[show help]'
-            ;;
         completion)
             _arguments '--shell[shell]:shell:(bash zsh fish)' '--install[install for the shell]' '--force[replace existing]' '--help[show help]'
             ;;
@@ -73,11 +68,11 @@ _ycc() {
             _arguments "${common[@]}" "${mode}" "${package}" "${only}" "${selectors[@]}" \
                 '--settings[also run the settings step]' '--rules[also run the rules step]' \
                 '--mcp[also run the mcp step]' '--hooks[also run the hooks step]' \
-                '--with-deps[also select ycc dependencies of --skills/--agents]'
+                '--with-deps[also select ycc dependencies of --skills]'
             ;;
         sync)
             _arguments "${common[@]}" "${mode}" "${intent}" "${selectors[@]}" \
-                '--with-deps[also select ycc dependencies of --skills/--agents]'
+                '--with-deps[also select ycc dependencies of --skills]'
             ;;
         remove)
             _arguments "${common[@]}" "${only}" "${intent}" "${selectors[@]}" \

@@ -156,9 +156,9 @@ Use `--only` to run exactly the listed steps:
 ./install.sh remove  --target codex --only mcp                     # codex plugin remove ycc-mcp@ycc
 ```
 
-The skills, agents and MCP selection flags (`--skills`, `--agents`, `--mcps`,
-`--with-deps`, `--skills-home`) do not apply to Codex: `ycc@ycc` and
-`ycc-mcp@ycc` install whole, and the custom agents always ship as the full set.
+The selection flags (`--skills`, `--with-deps`) narrow only the `agents`
+target and do not apply to Codex: `ycc@ycc` and `ycc-mcp@ycc` install whole,
+and the custom agents always ship as the full set.
 See [Project Vs Global Scope](README.md#project-vs-global-scope) and
 [Removing Installed Config](README.md#removing-installed-config).
 

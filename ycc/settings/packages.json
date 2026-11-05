@@ -407,7 +407,7 @@
       }
     },
     "@yandy-r/ycc-opencode": {
-      "description": "Experimental, opt-in opencode npm plugin; one V2 plugin registers components through its setup hook. The file-copy install remains the primary path.",
+      "description": "The opencode npm plugin and its only install route: one V2 plugin registers skills, agents, commands, shared helpers, MCP servers, the sensitive-file guard and instructions through its setup hook; install.sh --target opencode writes its plugins entry.",
       "version_policy": "lockstep",
       "runtimes": {
         "opencode": {
@@ -417,8 +417,8 @@
           "components": ["skills", "agents", "commands", "shared", "mcp", "instructions"],
           "requires": [],
           "target_release": "v6.0.0",
-          "experimental": true,
-          "opt_in": true,
+          "experimental": false,
+          "opt_in": false,
           "evidence": [
             "docs/internal/adr/0001-package-model-and-versioning.md",
             "docs/internal/spikes/opencode-config-hook.md"
@@ -426,7 +426,7 @@
           "gates": [
             "CI publishes with provenance through release.yml on a maintainer-pushed product tag using npm trusted publishing (OIDC, no token): GitHub-hosted runner, Node 24, pinned npm@11.21.1, release environment approval, and a package-specific trusted publisher on npmjs.com for owner yandy-r, repo ystack, workflow release.yml, environment release with npm publish allowed (settings not verified; no publish attempted)"
           ],
-          "notes": "Experimental and opt-in in v6; the @yandy-r npm scope is already owned. The V2 setup hook registers components and delivers instructions through the context hook; install.sh file copy stays the primary opencode path."
+          "notes": "Primary opencode route since YAN-1973: install.sh --target opencode (base step, or --package @yandy-r/ycc-opencode) writes the plugins entry (local mode: a file:// directory entry for this checkout; repo mode: the published lockstep version) and retires the old file copy. The V2 setup hook registers components and delivers instructions through the context hook; the @yandy-r npm scope is owned."
         }
       }
     },
@@ -483,7 +483,7 @@
           "status": "included",
           "listed": false,
           "mechanism": "file-copy",
-          "components": ["skills", "agents", "commands", "shared", "settings", "instructions"],
+          "components": ["settings", "instructions"],
           "requires": [],
           "target_release": "v6.0.0",
           "experimental": false,
@@ -493,7 +493,7 @@
             "docs/internal/spikes/opencode-config-hook.md"
           ],
           "gates": [],
-          "notes": "Primary and unchanged install.sh path: file copy of skills, agents, commands, shared, opencode.json settings, and AGENTS.md instructions."
+          "notes": "install.sh only: opencode.json settings (model, providers, agent model pins, subagent depth, the goal plugin) and the global AGENTS.md link (--rules). Skills, agents, commands, shared helpers, MCP servers and the sensitive-file guard ship only in @yandy-r/ycc-opencode."
         },
         "agents": {
           "status": "included",

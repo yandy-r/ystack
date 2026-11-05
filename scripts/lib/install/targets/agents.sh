@@ -2,7 +2,7 @@
 # agents.sh — the cross-tool agents target: implements the per-target contract
 # that install.sh dispatches through (see scripts/lib/install/steps.sh):
 #   agents_valid_steps, agents_intent_steps <intent>, agents_config_groups,
-#   agents_supports_repo_mode, agents_reads_agents_skills, sync_agents_target, remove_agents_target
+#   agents_supports_repo_mode, sync_agents_target, remove_agents_target
 #
 # Sourced by install.sh (never run directly); inherits SCRIPT_DIR and the
 # shared helpers from core.sh / steps.sh / bundle.sh.
@@ -44,39 +44,6 @@ agents_config_groups() { echo ""; }
 
 # ~/.agents/skills/ is a local directory (no marketplace behind it).
 agents_supports_repo_mode() { return 1; }
-
-# This target IS ~/.agents/skills.
-agents_reads_agents_skills() { return 1; }
-
-# agents_skills_present — true when ~/.agents/skills already holds a ycc skill.
-agents_skills_present() {
-    local skill
-    for skill in "${AGENTS_PLUGIN_DIR}"/skills/*/; do
-        [[ -d "${skill}" ]] || continue
-        [[ -d "${HOME}/.agents/skills/$(basename "${skill}")" ]] && return 0
-    done
-    return 1
-}
-
-# agents_duplicate_hint — print (to stderr) a one-line warning when ycc skills
-# also sit in the native dir of any target that reads ~/.agents/skills
-# (<t>_reads_agents_skills + <t>_native_skills_dirs). Warn only, never block.
-agents_duplicate_hint() {
-    local dup=()
-    local t dir skill
-    for t in "${ALL_TARGETS[@]}"; do
-        reads_agents_skills "${t}" || continue
-        while IFS= read -r dir; do
-            for skill in "${AGENTS_PLUGIN_DIR}"/skills/*/; do
-                [[ -d "${dir}/$(basename "${skill}")" ]] && { dup+=("${t}"); continue 3; }
-            done
-        done < <("${t}_native_skills_dirs")
-    done
-    if [[ ${#dup[@]} -gt 0 ]]; then
-        warn "ycc skills also installed via ${dup[*]} — tools reading both that dir and ~/.agents/skills may list them twice (harmless)." >&2
-    fi
-    agents_omp_hint
-}
 
 # agents_omp_hint — W5: OMP's native ycc package is recorded installed and OMP
 # would also load these ~/.agents copies; point at the omp dedupe step. Silent
@@ -134,7 +101,7 @@ sync_agents_target() {
     # shared with other tools and user-authored skills.
     agents_skills_slice
 
-    agents_duplicate_hint
+    agents_omp_hint
 
     printf '\n%sagents %s complete.%s\n' "${BOLD}" "${COMMAND}" "${NC}"
 }

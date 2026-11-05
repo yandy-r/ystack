@@ -1,34 +1,230 @@
 #!/usr/bin/env bash
-# install.sh tests — opencode: settings merge, remove, base remove, slices.
+# install.sh tests — opencode: the base step writes the one @yandy-r/ycc-opencode
+# plugins entry (local file:// / repo @<version>), replaces stale ycc entries in
+# place, retires the legacy file copy, and remove takes back only its entry;
+# settings and rules stay on the installer.
 #
 # Runs alone (bash scripts/tests/install/opencode.sh) or from scripts/test-install-sync.sh.
 # shellcheck source=scripts/tests/install/lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-echo "== install.sh sync: opencode + cursor =="
+OC_PKG="@yandy-r/ycc-opencode"
+OC_LOCAL="file://${REPO_ROOT}/packages/opencode/ycc-opencode"
+OC_VERSION="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "${REPO_ROOT}/ycc/.claude-plugin/plugin.json")"
+OC_REPO="${OC_PKG}@${OC_VERSION}"
+
+# Stub npm/opencode so the cleanup gate (opencode_package.py check) is
+# deterministic: OC_NPM_VIEW is what 'npm view' prints (empty: lookup fails),
+# OC_OPENCODE_VERSION what 'opencode --version' prints.
+cat > "${STUB_BIN}/npm" <<'SH'
+#!/usr/bin/env bash
+[[ "$1" == view && -n "${OC_NPM_VIEW:-}" ]] || exit 1
+printf '%s\n' "${OC_NPM_VIEW}"
+SH
+cat > "${STUB_BIN}/opencode" <<'SH'
+#!/usr/bin/env bash
+printf 'opencode v%s\n' "${OC_OPENCODE_VERSION:-2.2.5}"
+SH
+chmod +x "${STUB_BIN}/npm" "${STUB_BIN}/opencode"
+
+# oc_seed_legacy <home> — one byte-identical legacy skill copy under ~/.config/opencode.
+oc_seed_legacy() {
+    mkdir -p "$1/.config/opencode/skills"
+    cp -R "${REPO_ROOT}/.opencode-plugin/skills/backport" "$1/.config/opencode/skills/backport"
+}
+
+# oc_plugins <opencode.json> — the plugins list, one JSON item per line.
+oc_plugins() {
+    python3 - "$1" <<'PY'
+import json, sys
+for item in json.load(open(sys.argv[1], encoding="utf-8")).get("plugins", []):
+    print(json.dumps(item, sort_keys=True))
+PY
+}
+
+# oc_assert_no_copies <home> <label> — no file-copy unit dir under ~/.config/opencode.
+oc_assert_no_copies() {
+    local unit found=""
+    for unit in skills agents commands shared ycc-sensitive-guard; do
+        [[ -e "$1/.config/opencode/${unit}" ]] && found+="${unit} "
+    done
+    if [[ -z "${found}" ]]; then ok "$2"; else ko "$2" "${found}"; fi
+}
+
+echo "== install.sh opencode base: local entry =="
 
 home="$(new_home)"
-cat > "${home}/.config/opencode/opencode.json" <<'JSON'
-{
-  "model": "9router/Frontier",
-  "provider": { "9router": { "options": { "apiKey": "sk-local-secret" } } },
-  "plugins": ["@user/local-plugin"]
-}
-JSON
-install_must_succeed "${home}" sync --target opencode --intent settings,plugins --global
-merged="$(cat "${home}/.config/opencode/opencode.json")"
-assert_contains "${merged}" "sk-local-secret" "local provider credentials preserved"
-assert_contains "${merged}" "@user/local-plugin" "local plugin preserved"
-assert_contains "${merged}" "@prevalentware/opencode-goal-plugin" "repo plugin added"
-assert_contains "${merged}" "./ycc-sensitive-guard" "sensitive-file guard plugin entry added"
-if [[ -f "${home}/.config/opencode/ycc-sensitive-guard/index.js" && -f "${home}/.config/opencode/ycc-sensitive-guard/policy.json" ]]; then
-    ok "plugins group installs the guard directory its entry loads"
-else
-    ko "plugins group installs the guard directory its entry loads"
-fi
+install_must_succeed "${home}" install --target opencode
+cfg="${home}/.config/opencode/opencode.json"
+if [[ "$(oc_plugins "${cfg}")" == "\"${OC_LOCAL}\"" ]]; then ok "local mode writes the one file:// entry"; else ko "local mode writes the one file:// entry" "$(cat "${cfg}")"; fi
+oc_assert_no_copies "${home}" "local install copies nothing under ~/.config/opencode"
+assert_not_contains "$(cat "${cfg}")" '"mcp"' "local install merges no MCP servers"
+if [[ ! -e "${home}/project/opencode.json" ]]; then ok "base writes no project opencode.json"; else ko "base writes no project opencode.json"; fi
+cp "${cfg}" "${home}/first.json"
+install_must_succeed "${home}" install --target opencode
+if cmp -s "${home}/first.json" "${cfg}"; then ok "a rerun is byte-identical"; else ko "a rerun is byte-identical" "$(diff "${home}/first.json" "${cfg}")"; fi
 
+for intent in skills agents commands mcp; do
+    home="$(new_home)"
+    install_must_succeed "${home}" sync --target opencode --intent "${intent}"
+    assert_contains "$(cat "${home}/.config/opencode/opencode.json" 2>/dev/null)" "${OC_LOCAL}" "sync --intent ${intent} runs the base step"
+    oc_assert_no_copies "${home}" "sync --intent ${intent} copies nothing"
+done
 
-echo "== install.sh remove: opencode settings and rules =="
+for flag in --mcps --agents --commands --skills-home; do
+    home="$(new_home)"
+    out="$(run_install "${home}" install --target opencode "${flag}" x)"
+    assert_contains "${out}" "Unknown option: ${flag}" "opencode: ${flag} is gone"
+done
+home="$(new_home)"
+out="$(run_install "${home}" install --target opencode --only mcp)"
+assert_contains "${out}" "--only step 'mcp' is not valid for target 'opencode'" "opencode has no mcp step"
+
+echo "== install.sh opencode base: repo entry and stale entries =="
+
+home="$(new_home)"
+OC_NPM_VIEW="${OC_VERSION}" install_must_succeed "${home}" install --target opencode --mode repo
+cfg="${home}/.config/opencode/opencode.json"
+if [[ "$(oc_plugins "${cfg}")" == "\"${OC_REPO}\"" ]]; then ok "repo mode writes ${OC_REPO}"; else ko "repo mode writes ${OC_REPO}" "$(cat "${cfg}")"; fi
+assert_not_contains "${INSTALL_OUT}" "generate-opencode-package" "repo mode builds nothing"
+
+home="$(new_home)"
+cfg="${home}/.config/opencode/opencode.json"
+printf '{"plugins": ["@user/first", "%s@latest", "@user/last"]}\n' "${OC_PKG}" > "${cfg}"
+install_must_succeed "${home}" install --target opencode --mode repo
+expected="$(printf '"@user/first"\n"%s"\n"@user/last"' "${OC_REPO}")"
+if [[ "$(oc_plugins "${cfg}")" == "${expected}" ]]; then ok "a stale @latest entry is replaced in place"; else ko "a stale @latest entry is replaced in place" "$(cat "${cfg}")"; fi
+
+home="$(new_home)"
+cfg="${home}/.config/opencode/opencode.json"
+printf '{"plugins": ["@user/first", {"package": "%s", "options": {"mine": true}}, "@user/last"]}\n' "${OC_PKG}" > "${cfg}"
+install_must_succeed "${home}" install --target opencode
+expected="$(printf '"@user/first"\n{"options": {"mine": true}, "package": "%s"}\n"@user/last"' "${OC_LOCAL}")"
+if [[ "$(oc_plugins "${cfg}")" == "${expected}" ]]; then ok "an object-form entry is replaced in place, keeping its options"; else ko "an object-form entry is replaced in place, keeping its options" "$(cat "${cfg}")"; fi
+
+echo "== install.sh opencode base: entries ycc never wrote =="
+
+for spec in "${OC_PKG}@1.0.0" "file:///elsewhere/packages/opencode/ycc-opencode"; do
+    home="$(new_home)"
+    cfg="${home}/.config/opencode/opencode.json"
+    oc_seed_legacy "${home}"
+    printf '{"plugins": ["%s"]}\n' "${spec}" > "${cfg}"
+    cp "${cfg}" "${home}/before.json"
+    install_must_succeed "${home}" install --target opencode
+    if cmp -s "${home}/before.json" "${cfg}"; then ok "a user entry ${spec} is kept byte-identical"; else ko "a user entry ${spec} is kept byte-identical" "$(cat "${cfg}")"; fi
+    assert_contains "${INSTALL_OUT}" "kept ${spec}" "the kept ${spec} entry is reported"
+    if [[ -d "${home}/.config/opencode/skills/backport" ]]; then ok "a kept user entry keeps the legacy copy"; else ko "a kept user entry keeps the legacy copy"; fi
+    install_must_succeed "${home}" install --target opencode --force
+    if [[ "$(oc_plugins "${cfg}")" == "\"${OC_LOCAL}\"" ]]; then ok "--force replaces ${spec}"; else ko "--force replaces ${spec}" "$(cat "${cfg}")"; fi
+done
+
+home="$(new_home)"
+cfg="${home}/.config/opencode/opencode.json"
+printf '{\n  // mine\n  "plugins": ["%s@latest"],\n}\n' "${OC_PKG}" > "${cfg}"
+cp "${cfg}" "${home}/before.json"
+install_must_succeed "${home}" install --target opencode
+if cmp -s "${home}/before.json" "${cfg}.ycc-backup"; then ok "a JSONC config is backed up before the rewrite"; else ko "a JSONC config is backed up before the rewrite"; fi
+
+home="$(new_home)"
+cfg="${home}/.config/opencode/opencode.json"
+printf '{ "plugins": [ "%s" ], }\n' "${OC_LOCAL}" > "${cfg}"
+cp "${cfg}" "${home}/before.json"
+install_must_succeed "${home}" install --target opencode
+if cmp -s "${home}/before.json" "${cfg}"; then ok "an already-present entry is never rewritten"; else ko "an already-present entry is never rewritten" "$(cat "${cfg}")"; fi
+
+echo "== install.sh opencode base: symlinked config =="
+
+home="$(new_home)"
+oc_seed_legacy "${home}"
+printf '{}\n' > "${home}/dotfiles.json"
+ln -s "${home}/dotfiles.json" "${home}/.config/opencode/opencode.json"
+install_must_succeed "${home}" install --target opencode,agents
+assert_contains "${INSTALL_OUT}" "\"${OC_LOCAL}\"" "a symlinked config prints the entry to add by hand"
+assert_contains "$(cat "${home}/dotfiles.json")" "{}" "a symlinked config is never written through"
+if [[ -L "${home}/.config/opencode/opencode.json" && -d "${home}/.config/opencode/skills/backport" ]]; then ok "a symlinked config skips cleanup and keeps the link"; else ko "a symlinked config skips cleanup and keeps the link"; fi
+assert_contains "${INSTALL_OUT}" "agents install complete" "a refused opencode config does not abort later targets"
+
+echo "== install.sh opencode base: cleanup gate =="
+
+home="$(new_home)"
+oc_seed_legacy "${home}"
+OC_NPM_VIEW="" install_must_succeed "${home}" install --target opencode --mode repo
+assert_contains "${INSTALL_OUT}" "could not confirm ${OC_REPO} is published" "repo mode keeps the legacy copy when the release is unconfirmed"
+if [[ -d "${home}/.config/opencode/skills/backport" ]]; then ok "unconfirmed release keeps the legacy copy"; else ko "unconfirmed release keeps the legacy copy"; fi
+OC_NPM_VIEW="${OC_VERSION}" install_must_succeed "${home}" install --target opencode --mode repo
+if [[ ! -e "${home}/.config/opencode/skills/backport" ]]; then ok "a confirmed release retires the legacy copy"; else ko "a confirmed release retires the legacy copy"; fi
+
+home="$(new_home)"
+oc_seed_legacy "${home}"
+OC_OPENCODE_VERSION="2.0.12" install_must_succeed "${home}" install --target opencode
+assert_contains "${INSTALL_OUT}" "opencode 2.0.12 cannot load" "an old opencode keeps the legacy copy"
+if [[ -d "${home}/.config/opencode/skills/backport" ]]; then ok "an old opencode skips cleanup"; else ko "an old opencode skips cleanup"; fi
+
+echo "== install.sh opencode: legacy cleanup =="
+
+home="$(new_home)"
+oc="${home}/.config/opencode"
+mkdir -p "${oc}/skills" "${oc}/agents"
+cp -R "${REPO_ROOT}/.opencode-plugin/skills/backport" "${oc}/skills/backport"
+cp -R "${REPO_ROOT}/.opencode-plugin/skills/plan" "${oc}/skills/plan"
+printf '\nmy edit\n' >> "${oc}/skills/plan/SKILL.md"
+cp "${REPO_ROOT}/.opencode-plugin/agents/implementor.md" "${oc}/agents/implementor.md"
+# Owned MCP servers: merged by the old installer (recorded state); one foreign server.
+# The fixture is the newest committed bundle config that still shipped an mcp block.
+old_rev=""
+for rev in $(git -C "${REPO_ROOT}" log --format=%H -- .opencode-plugin/opencode.json); do
+    if git -C "${REPO_ROOT}" show "${rev}:.opencode-plugin/opencode.json" | grep -q '"mcp"'; then
+        old_rev="${rev}"
+        break
+    fi
+done
+git -C "${REPO_ROOT}" show "${old_rev}:.opencode-plugin/opencode.json" > "${home}/old-opencode.json"
+HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/.config/ycc/managed-config-state.json" \
+    python3 "${REPO_ROOT}/scripts/merge_managed_config.py" --profile opencode-config \
+    --source "${home}/old-opencode.json" --destination "${oc}/opencode.json" --groups mcp >/dev/null
+python3 - "${oc}/opencode.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path, encoding="utf-8"))
+data["mcp"]["servers"]["my-server"] = {"type": "local", "command": ["mine"]}
+json.dump(data, open(path, "w", encoding="utf-8"), indent=2)
+PY
+install_must_succeed "${home}" install --target opencode
+if [[ ! -e "${oc}/skills/backport" ]]; then ok "cleanup removes a byte-identical legacy skill copy"; else ko "cleanup removes a byte-identical legacy skill copy"; fi
+if [[ ! -e "${oc}/agents" ]]; then ok "cleanup removes a byte-identical legacy agent and its empty dir"; else ko "cleanup removes a byte-identical legacy agent and its empty dir"; fi
+assert_contains "$(cat "${oc}/skills/plan/SKILL.md" 2>/dev/null)" "my edit" "cleanup keeps an edited legacy copy"
+assert_contains "${INSTALL_OUT}" "kept ${oc}/skills/plan" "cleanup reports the kept copy"
+servers="$(python3 -c 'import json, sys; print(sorted(json.load(open(sys.argv[1])).get("mcp", {}).get("servers", {})))' "${oc}/opencode.json")"
+if [[ "${servers}" == "['my-server']" ]]; then ok "cleanup removes owned mcp.servers and keeps a foreign one"; else ko "cleanup removes owned mcp.servers and keeps a foreign one" "${servers}"; fi
+assert_contains "$(cat "${oc}/opencode.json")" "${OC_LOCAL}" "cleanup runs after the entry is written"
+
+echo "== install.sh opencode remove =="
+
+home="$(new_home)"
+cfg="${home}/.config/opencode/opencode.json"
+printf '{"plugins": ["@user/local-plugin"]}\n' > "${cfg}"
+install_must_succeed "${home}" install --target opencode
+install_must_succeed "${home}" remove --target opencode --intent skills
+assert_contains "${INSTALL_OUT}" "ship inside ${OC_PKG}; removes nothing" "remove --intent skills prints the package notice"
+assert_contains "$(cat "${cfg}")" "${OC_LOCAL}" "remove --intent skills removes nothing"
+install_must_succeed "${home}" remove --target opencode --intent base
+if [[ "$(oc_plugins "${cfg}")" == '"@user/local-plugin"' ]]; then ok "remove --intent base takes the entry back, keeps other plugins"; else ko "remove --intent base takes the entry back, keeps other plugins" "$(cat "${cfg}")"; fi
+
+home="$(new_home)"
+cfg="${home}/.config/opencode/opencode.json"
+printf '{"plugins": ["%s@0.0.1"]}\n' "${OC_PKG}" > "${cfg}"
+install_must_succeed "${home}" remove --target opencode --intent base
+assert_contains "$(cat "${cfg}")" "${OC_PKG}@0.0.1" "remove keeps an entry ycc did not write"
+
+echo "== install.sh opencode --dry-run =="
+
+home="$(new_home)"
+before="$(cd "${home}" && find . -printf '%p %y\n' | sort)"
+install_must_succeed "${home}" install --target opencode --settings --rules --global --dry-run
+assert_contains "${INSTALL_OUT}" "would add the ${OC_PKG} plugins entry" "dry-run previews the entry"
+if [[ "$(cd "${home}" && find . -printf '%p %y\n' | sort)" == "${before}" ]]; then ok "dry-run writes nothing"; else ko "dry-run writes nothing"; fi
+
+echo "== install.sh opencode settings and rules =="
 
 home="$(new_home)"
 cat > "${home}/.config/opencode/opencode.json" <<'JSON'
@@ -38,21 +234,31 @@ cat > "${home}/.config/opencode/opencode.json" <<'JSON'
 }
 JSON
 install_must_succeed "${home}" sync --target opencode --intent settings,plugins,rules --global
+merged="$(cat "${home}/.config/opencode/opencode.json")"
+assert_contains "${merged}" "sk-local-secret" "local provider credentials preserved"
+assert_contains "${merged}" "@user/local-plugin" "local plugin preserved"
+assert_contains "${merged}" '"model"' "settings merges the model"
+assert_contains "${merged}" '"agents"' "settings merges the agent pins"
+assert_contains "${merged}" '"subagent_depth"' "settings merges experimental.subagent_depth"
+assert_contains "${merged}" "@prevalentware/opencode-goal-plugin" "settings merges the goal plugin"
+assert_not_contains "${merged}" "ycc-sensitive-guard" "settings merges no guard entry"
+assert_not_contains "${merged}" '"mcp"' "settings merges no MCP block"
+oc_assert_no_copies "${home}" "settings copies nothing"
+if [[ "$(readlink "${home}/.config/opencode/AGENTS.md")" == "${REPO_ROOT}/.opencode-plugin/AGENTS.md" ]]; then ok "rules links AGENTS.md"; else ko "rules links AGENTS.md"; fi
 install_must_succeed "${home}" remove --target opencode --intent settings,plugins,rules --global
 merged="$(cat "${home}/.config/opencode/opencode.json")"
-assert_contains "${merged}" "sk-local-secret" "opencode remove keeps provider credentials"
-assert_contains "${merged}" "@user/local-plugin" "opencode remove keeps user plugin"
-assert_not_contains "${merged}" "@prevalentware/opencode-goal-plugin" "opencode remove takes back repo plugin"
-assert_not_contains "${merged}" "./ycc-sensitive-guard" "opencode remove takes back the guard plugin entry"
-if [[ ! -e "${home}/.config/opencode/ycc-sensitive-guard" ]]; then ok "opencode remove takes back the guard directory"; else ko "opencode remove takes back the guard directory"; fi
-if [[ ! -L "${home}/.config/opencode/AGENTS.md" ]]; then ok "opencode remove unlinks AGENTS.md"; else ko "opencode remove unlinks AGENTS.md"; fi
+assert_contains "${merged}" "sk-local-secret" "remove keeps provider credentials"
+assert_contains "${merged}" "@user/local-plugin" "remove keeps user plugin"
+assert_not_contains "${merged}" "@prevalentware/opencode-goal-plugin" "remove takes back the goal plugin"
+if [[ ! -L "${home}/.config/opencode/AGENTS.md" ]]; then ok "remove unlinks AGENTS.md"; else ko "remove unlinks AGENTS.md"; fi
+
+home="$(new_home)"
+install_must_succeed "${home}" list plugins --target opencode
+if [[ "${INSTALL_OUT}" == $'@prevalentware/opencode-goal-plugin\noh-my-opencode-slim' ]]; then ok "list plugins --target opencode lists package names, then catalog names"; else ko "list plugins --target opencode lists package names, then catalog names" "${INSTALL_OUT}"; fi
 
 echo "== install.sh settings: opencode project scope (default) =="
 
-# T11: the default scope merges the settings group into <project>/opencode.json
-# and never ships the bundle plugins group or the guard directory.
 home="$(new_home)"
-mkdir -p "${home}/project"
 cat > "${home}/project/opencode.json" <<'JSON'
 {
   "provider": { "mine": { "options": { "apiKey": "sk-project-secret" } } }
@@ -62,129 +268,22 @@ install_must_succeed "${home}" sync --target opencode --intent settings
 proj="$(cat "${home}/project/opencode.json")"
 assert_contains "${proj}" "sk-project-secret" "project merge preserves a foreign provider credential"
 assert_contains "${proj}" '"model"' "project merge applies the managed model"
-assert_contains "${proj}" '"agents"' "project merge applies the managed agents"
 assert_contains "${proj}" '"subagent_depth"' "project merge applies experimental.subagent_depth"
 assert_not_contains "${proj}" '"plugins"' "project merge carries no plugins group"
-if [[ ! -e "${home}/.config/opencode/opencode.json" && ! -e "${home}/.config/opencode/ycc-sensitive-guard" ]]; then
-    ok "default opencode settings leaves the global config and guard alone"
-else
-    ko "default opencode settings leaves the global config and guard alone"
-fi
-
-# T12: remove at project scope strips managed leaves only.
+if [[ ! -e "${home}/.config/opencode/opencode.json" ]]; then ok "default opencode settings leaves the global config alone"; else ko "default opencode settings leaves the global config alone"; fi
 install_must_succeed "${home}" remove --target opencode --intent settings
 proj="$(cat "${home}/project/opencode.json")"
 assert_contains "${proj}" "sk-project-secret" "project remove keeps the foreign provider credential"
 assert_not_contains "${proj}" '"subagent_depth"' "project remove takes the managed leaves back"
 
-# The legacy hint: a global file with ycc state earns the N4 notice.
 home="$(new_home)"
 install_must_succeed "${home}" sync --target opencode --intent settings --global
 install_must_succeed "${home}" sync --target opencode --intent settings
 assert_contains "${INSTALL_OUT}" "settings now default to project scope" "opencode legacy hint printed when the global file holds ycc state"
 
-# Default bundle plugins at project scope is dropped (global-only).
 home="$(new_home)"
 install_must_succeed "${home}" sync --target opencode --intent settings,plugins
 assert_contains "${INSTALL_OUT}" "the plugins group is global-only" "opencode default settings,plugins drops the bundle plugins group"
-if [[ ! -e "${home}/.config/opencode/ycc-sensitive-guard" ]]; then ok "opencode default settings,plugins ships no guard dir"; else ko "opencode default settings,plugins ships no guard dir"; fi
-
-echo "== install.sh --plugins: opencode =="
-
-home="$(new_home)"
-install_must_succeed "${home}" list plugins --target opencode
-if [[ "${INSTALL_OUT}" == $'@prevalentware/opencode-goal-plugin\n./ycc-sensitive-guard\noh-my-opencode-slim' ]]; then ok "list plugins --target opencode lists package names, then catalog names";  else ko "list plugins --target opencode lists package names, then catalog names" "${INSTALL_OUT}"; fi
-
-home="$(new_home)"
-install_must_succeed "${home}" sync --target opencode --intent plugins --plugins @prevalentware/opencode-goal-plugin --global
-merged="$(cat "${home}/.config/opencode/opencode.json")"
-assert_contains "${merged}" "@prevalentware/opencode-goal-plugin" "opencode --plugins writes the selected item"
-assert_not_contains "${merged}" "./ycc-sensitive-guard" "opencode --plugins skips the unselected guard entry"
-if [[ ! -e "${home}/.config/opencode/ycc-sensitive-guard" ]]; then ok "opencode --plugins without the guard ships no guard dir"; else ko "opencode --plugins without the guard ships no guard dir"; fi
-
-home="$(new_home)"
-cat > "${home}/.config/opencode/opencode.json" <<'JSON'
-{"plugins":["@user/local-plugin"]}
-JSON
-install_must_succeed "${home}" sync --target opencode --intent plugins --global
-install_must_succeed "${home}" remove --target opencode --intent plugins --plugins @prevalentware/opencode-goal-plugin --global
-merged="$(cat "${home}/.config/opencode/opencode.json")"
-assert_not_contains "${merged}" "@prevalentware/opencode-goal-plugin" "opencode remove --plugins takes the selected item"
-assert_contains "${merged}" "@user/local-plugin" "opencode remove --plugins keeps a user plugin"
-assert_contains "${merged}" "./ycc-sensitive-guard" "opencode remove --plugins keeps the unselected guard entry"
-if [[ -d "${home}/.config/opencode/ycc-sensitive-guard" ]]; then ok "opencode remove --plugins keeps the guard dir"; else ko "opencode remove --plugins keeps the guard dir"; fi
-install_must_succeed "${home}" remove --target opencode --intent plugins --plugins ./ycc-sensitive-guard --global
-assert_not_contains "$(cat "${home}/.config/opencode/opencode.json")" "./ycc-sensitive-guard" "opencode remove --plugins ./ycc-sensitive-guard takes the entry"
-if [[ ! -e "${home}/.config/opencode/ycc-sensitive-guard" ]]; then ok "selecting the guard entry removes its dir"; else ko "selecting the guard entry removes its dir"; fi
-
-# A guard entry the user wrote survives remove as a local conflict and still
-# loads the directory, so the directory stays with it.
-home="$(new_home)"
-cat > "${home}/.config/opencode/opencode.json" <<'JSON'
-{"plugins":[{"package":"./ycc-sensitive-guard","options":{"mine":true}}]}
-JSON
-install_must_succeed "${home}" sync --target opencode --intent plugins --plugins ./ycc-sensitive-guard --global
-install_must_succeed "${home}" remove --target opencode --intent plugins --plugins ./ycc-sensitive-guard --global
-assert_contains "$(cat "${home}/.config/opencode/opencode.json")" '"mine"' "opencode remove keeps a user-written guard entry"
-if [[ -f "${home}/.config/opencode/ycc-sensitive-guard/index.js" ]]; then ok "opencode remove keeps the guard dir a kept entry loads"; else ko "opencode remove keeps the guard dir a kept entry loads"; fi
-
-echo
-
-echo "== install.sh remove: opencode base =="
-
-home="$(new_home)"
-for unit in skills agents commands shared ycc-sensitive-guard; do
-    mkdir -p "${home}/.config/opencode/${unit}"
-    cp -R "${REPO_ROOT}/.opencode-plugin/${unit}/." "${home}/.config/opencode/${unit}/"
-done
-install_must_succeed "${home}" remove --target opencode --intent base
-leftover="$(find "${home}/.config/opencode" -mindepth 1 | head -3)"
-if [[ -z "${leftover}" ]]; then ok "opencode base remove drops the bundle"; else ko "opencode base remove drops the bundle" "${leftover}"; fi
-
-echo "== install.sh: opencode guard under --skills-home agents =="
-
-home="$(new_home)"
-install_must_succeed "${home}" install --target opencode --only base,settings --skills-home agents --global
-merged="$(cat "${home}/.config/opencode/opencode.json")"
-assert_contains "${merged}" "./ycc-sensitive-guard" "consolidated: opencode.json loads the guard"
-if [[ ! -d "${home}/.config/opencode/shared" && -f "${home}/.config/opencode/ycc-sensitive-guard/index.js" ]]; then
-    ok "consolidated: guard installed although shared/ is not"
-else
-    ko "consolidated: guard installed although shared/ is not" "$(ls "${home}/.config/opencode" 2>/dev/null | tr '\n' ' ')"
-fi
-install_must_succeed "${home}" remove --target opencode --only base --skills-home agents
-if [[ -f "${home}/.config/opencode/ycc-sensitive-guard/index.js" ]]; then
-    ok "base remove keeps the guard while opencode.json still loads it"
-else
-    ko "base remove keeps the guard while opencode.json still loads it"
-fi
-install_must_succeed "${home}" remove --target opencode --only settings --skills-home agents --global
-assert_not_contains "$(cat "${home}/.config/opencode/opencode.json" 2>/dev/null || true)" "./ycc-sensitive-guard" "consolidated: settings remove takes back the guard entry"
-if [[ ! -e "${home}/.config/opencode/ycc-sensitive-guard" ]]; then ok "consolidated: settings remove takes back the guard"; else ko "consolidated: settings remove takes back the guard"; fi
-
-
-echo "== install.sh: opencode slices =="
-
-home="$(new_home)"
-HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/.config/ycc/managed-config-state.json" \
-    python3 "${REPO_ROOT}/scripts/install_slices.py" install --target opencode --slice skills >/dev/null
-assert_contains "$(cat "${home}/.config/opencode/skills/releaser/SKILL.md")" "opencode/autoinvoke: 'false'" "opencode slice retains releaser manual invocation policy"
-assert_not_contains "$(cat "${home}/.config/opencode/skills/init/SKILL.md")" 'opencode/autoinvoke' "opencode slice keeps init model-invocable"
-
-home="$(new_home)"
-for unit in skills agents commands shared; do
-    mkdir -p "${home}/.config/opencode/${unit}"
-    cp -R "${REPO_ROOT}/.opencode-plugin/${unit}/." "${home}/.config/opencode/${unit}/"
-done
-install_must_succeed "${home}" remove --target opencode --intent agents,commands
-leftover="$(find "${home}/.config/opencode" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort | tr '\n' ' ')"
-if [[ "${leftover}" == "shared skills " ]]; then ok "opencode agents,commands remove keeps skills + shared"; else ko "opencode agents,commands remove keeps skills + shared" "${leftover}"; fi
-install_must_succeed "${home}" remove --target opencode --intent skills
-leftover="$(find "${home}/.config/opencode" -mindepth 1 | head -3)"
-if [[ -z "${leftover}" ]]; then ok "opencode skills remove takes shared/ too"; else ko "opencode skills remove takes shared/ too" "${leftover}"; fi
-
-# The slice helper directly (no generators): Codex skills land in
-# ~/.codex/skills with plugin paths re-pointed there.
 
 # A committed project opencode.json whose values equal the repo's must lose
 # nothing ycc never recorded writing.
@@ -223,8 +322,7 @@ assert_contains "$(cat "${home}/.config/opencode/opencode.json")" "oh-my-opencod
 assert_not_contains "${INSTALL_OUT}" "settings now default to project scope" "opencode physical-path fallback prints no false legacy hint"
 if [[ ! -e "${home}/.config/opencode/.opencode" ]]; then ok "opencode physical-path fallback writes no nested .opencode/"; else ko "opencode physical-path fallback writes no nested .opencode/"; fi
 
-# A missing global config directory cannot alias the project destination;
-# its physical-path probe must not abort a normal or dry-run project sync.
+# A missing global config directory cannot alias the project destination.
 home="$(new_home)"
 rmdir "${home}/.config/opencode"
 install_must_succeed "${home}" sync --target opencode --intent settings

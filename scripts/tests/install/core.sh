@@ -73,7 +73,8 @@ assert_not_contains "${out}" "Cursor sync complete" "multi-target skips unlisted
 calls="$(cat "${home}/claude-calls.log" 2>/dev/null)"
 assert_contains "${calls}" "plugin install ycc-mcp@ycc --scope project" "multi-target installs claude ycc-mcp@ycc at project scope"
 assert_contains "${calls}" "codex plugin add ycc-mcp@ycc" "multi-target installs codex ycc-mcp@ycc"
-assert_contains "$(cat "${home}/project/opencode.json")" '"mcp"' "multi-target merges opencode MCP into project scope"
+assert_contains "$(cat "${home}/.config/opencode/opencode.json")" "ycc-opencode" "multi-target mcp registers the opencode package"
+if [[ ! -e "${home}/project/opencode.json" ]]; then ok "opencode mcp writes no project opencode.json"; else ko "opencode mcp writes no project opencode.json"; fi
 for f in .mcp.json .cursor/mcp.json .codex/config.toml; do
     if [[ ! -e "${home}/project/${f}" ]]; then ok "no legacy MCP merge: ${f}"; else ko "no legacy MCP merge: ${f}"; fi
 done
@@ -98,8 +99,8 @@ out="$(run_install "${home}" sync --target all,claude --intent mcp)"
 assert_contains "${out}" "'all' cannot be combined" "all must stand alone"
 
 home="$(new_home)"
-out="$(run_install "${home}" sync --target claude,opencode --intent mcp --mode repo)"
-assert_contains "${out}" "--mode repo is not supported by the opencode target" "repo mode rejects listed opencode"
+out="$(run_install "${home}" sync --target claude,agents --intent skills --mode repo)"
+assert_contains "${out}" "--mode repo is not supported by the agents target" "repo mode rejects listed agents"
 assert_not_contains "${out}" "Claude sync complete" "repo-mode rejection happens before any target runs"
 
 home="$(new_home)"
@@ -196,8 +197,8 @@ out="$(run_install "${home}" remove --target claude --only rules --project)"
 assert_contains "${out}" "--project is not supported by step 'rules'" "remove keeps the --project guard"
 
 home="$(new_home)"
-install_must_succeed "${home}" remove --target opencode --only mcp
-assert_contains "${INSTALL_OUT}" "opencode remove complete" "remove runs the opencode mcp step"
+out="$(run_install "${home}" remove --target opencode --only mcp)"
+assert_contains "${out}" "--only step 'mcp' is not valid for target 'opencode'" "opencode has no mcp step"
 
 echo
 echo "== install.sh: project settings scope and HOME guard =="
@@ -280,7 +281,7 @@ assert_contains "${INSTALL_OUT}" "still holds ycc-managed keys from earlier sync
 home="$(new_home)"
 install_must_succeed "${home}" sync --target all --intent mcp --global
 install_must_succeed "${home}" remove --target all --intent mcp --global
-if [[ ! -e "${home}/.config/opencode/opencode.json" ]]; then ok "global remove cleans opencode MCP"; else ko "global remove cleans opencode MCP"; fi
+assert_contains "${INSTALL_OUT}" "ship inside @yandy-r/ycc-opencode; removes nothing" "global remove --intent mcp leaves the opencode package entry"
 for f in .claude.json .cursor/mcp.json .codex/config.toml; do
     if [[ ! -e "${home}/${f}" ]]; then ok "no legacy MCP merge at ${f}"; else ko "no legacy MCP merge at ${f}"; fi
 done
@@ -299,8 +300,8 @@ assert_contains "${out}" "link up-to-date" "cli rerun is a no-op"
 
 # The regression: a linked command run outside the repo must find its helpers
 # and write project MCP into the caller's directory.
-out="$(cd "${home}/project" && HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/state.json" "${bin}/ycc" sync --target opencode --intent mcp 2>&1)"
-assert_contains "$(cat "${home}/project/opencode.json" 2>/dev/null)" '"mcp"' "linked ycc merges project MCP from outside the repo"
+out="$(cd "${home}/project" && HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/state.json" "${bin}/ycc" sync --target opencode --intent settings 2>&1)"
+assert_contains "$(cat "${home}/project/opencode.json" 2>/dev/null)" '"model"' "linked ycc merges project settings from outside the repo"
 
 home="$(new_home)"
 mkdir -p "${home}/mybin" && echo "mine" > "${home}/mybin/ycc"

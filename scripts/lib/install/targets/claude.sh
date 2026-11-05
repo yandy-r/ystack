@@ -2,7 +2,7 @@
 # claude.sh — the Claude target: implements the per-target contract that install.sh
 # dispatches through (see scripts/lib/install/steps.sh):
 #   claude_valid_steps, claude_intent_steps <intent>, claude_config_groups,
-#   claude_supports_repo_mode, claude_reads_agents_skills, sync_claude_target, remove_claude_target
+#   claude_supports_repo_mode, sync_claude_target, remove_claude_target
 # plus the optional project-scope hooks: claude_project_groups (settings),
 # claude_settings_global_dest, claude_settings_file.
 #
@@ -64,9 +64,6 @@ claude_settings_file() {
 }
 
 claude_supports_repo_mode() { return 0; }
-
-# Claude Code does not read ~/.agents/skills.
-claude_reads_agents_skills() { return 1; }
 
 # claude_marketplace_source — local checkout or upstream source for ycc.
 claude_marketplace_source() {
