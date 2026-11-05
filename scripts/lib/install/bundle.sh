@@ -4,11 +4,13 @@
 # Sourced by install.sh (never run directly); relies on its helpers (info,
 # warn, err, step_enabled) and globals (SCRIPT_DIR, COMMAND, FORCE).
 #
-# 'base' ships a target's whole bundle (claude/codex: the registered plugin;
-# cursor/opencode: the mirrored bundle dirs). The 'skills', 'agents' and
-# 'commands' slices install just those entries, standalone, into the tool's
-# own user directories (~/.claude/skills/<name>, ~/.codex/agents/<name>.toml,
+# 'base' ships a target's whole bundle (opencode: the mirrored bundle dirs;
+# agents: the ~/.agents/skills slice). The 'skills', 'agents' and 'commands'
+# slices install just those entries, standalone, into the tool's own user
+# directories (~/.config/opencode/skills/<name>, ~/.codex/agents/<name>.toml,
 # ...) via scripts/install_slices.py — no plugin registration involved.
+# Native-package targets (claude, codex, cursor, omp) install no slices;
+# codex's custom-agents slice is the one exception and always ships whole.
 
 SLICE_HELPER="${SCRIPT_DIR}/scripts/install_slices.py"
 
@@ -22,25 +24,12 @@ selected_slices() {
     echo "${picked[*]}"
 }
 
-# slice_selection_kinds <target> <slice> — the --<kind> selections that
-# narrow <slice> on <target>, space-separated (empty: the whole slice). Claude
-# skills are its commands: on install/sync its skills slice takes the union of
-# --skills and --commands over whichever of those steps run; a kind without a
-# selection does not widen it. On remove only --skills narrows it: removing
-# claude commands only retires legacy wrappers, never skills.
+# slice_selection_kinds <target> <slice> — the --<kind> selection that
+# narrows <slice> on <target> (empty: the whole slice).
 slice_selection_kinds() {
-    local -a kinds=()
-    local kind
-    if [[ "$1" == claude && "$2" == skills ]]; then
-        for kind in skills commands; do
-            # shellcheck disable=SC2153  # COMMAND is install.sh's subcommand global.
-            [[ "${kind}" == commands && "${COMMAND}" == remove ]] && continue
-            step_enabled "${kind}" && has_selection "${kind}" && kinds+=("${kind}")
-        done
-    elif is_selectable_kind "$2" && has_selection "$2"; then
-        kinds=("$2")
+    if is_selectable_kind "$2" && has_selection "$2" && ! native_target "$1"; then
+        echo "$2"
     fi
-    echo "${kinds[*]:-}"
 }
 
 # run_slice <target> <slice> [select] — install (or, under 'remove', take
@@ -59,13 +48,6 @@ run_slice() {
     [[ "${DRY_RUN:-0}" == "1" ]] && command+=(--dry-run)
     local -a kinds=()
     [[ "${3:-}" == "select" ]] && read -r -a kinds <<< "$(slice_selection_kinds "${target}" "${slice}")"
-    # Claude remove: --commands names legacy wrappers to retire, not skills;
-    # without --skills the skills slice would go whole, so skip it instead.
-    if [[ "${3:-}" == "select" && "${action}" == remove && "${target}" == claude && "${slice}" == skills \
-        && ${#kinds[@]} -eq 0 ]] && has_selection commands; then
-        info "--commands only retires legacy command wrappers on claude; pass --skills to remove skills — skipping the skills slice"
-        return 0
-    fi
     if [[ ${#kinds[@]} -gt 0 ]]; then
         local kind name names="" selected="" nouns="${SELECTION_NOUNS[${kinds[0]}]}"
         for kind in "${kinds[@]}"; do
@@ -82,33 +64,19 @@ run_slice() {
         command+=(--entries "${names}")
         # What another kind's step installs on this target in the same run
         # counts as available for the dependency warnings ('*': its whole slice).
-        # On claude the 'commands' intent is an alias for the skills slice;
-        # commands only need their paired skills.
+        # Commands only need their paired skills.
         local other pending
         for other in skills agents; do
             [[ "${other}" != "${slice}" ]] || continue
             [[ "${slice}" != commands || "${other}" == skills ]] || continue
-            # 'base' ships every skill this run (mirror, plugin, or the
-            # consolidated ~/.agents/skills), so commands' skills are pending.
+            # 'base' ships every skill this run (mirror or the consolidated
+            # ~/.agents/skills), so commands' skills are pending.
             if [[ "${slice}" == commands ]] && step_enabled base; then
                 pending='*'
             else
-                step_enabled "${other}" || { [[ "${other}" == skills && "${target}" == claude ]] && step_enabled commands; } || continue
+                step_enabled "${other}" || continue
                 pending='*'
-                # Claude skills: narrowed by the same --skills/--commands union
-                # its skills slice installs with (empty union: whole slice).
-                local -a union=()
-                if [[ "${other}" == skills && "${target}" == claude ]]; then
-                    read -r -a union <<< "$(slice_selection_kinds claude skills)"
-                elif has_selection "${other}"; then
-                    union=("${other}")
-                fi
-                if [[ ${#union[@]} -gt 0 ]]; then
-                    pending=""
-                    for kind in "${union[@]}"; do
-                        pending+="${pending:+,}$(selection_for_target "${kind}" "${target}")"
-                    done
-                fi
+                has_selection "${other}" && pending="$(selection_for_target "${other}" "${target}")"
             fi
             command=(env "YCC_PENDING_${other^^}=${pending}" "${command[@]}")
         done

@@ -1,7 +1,9 @@
 # shellcheck shell=bash disable=SC2034  # Globals are read by sourcing installer/target files.
 # packages.sh — package planning ('install --package'): expands the package
-# model closure into per-target installer steps and drives the existing
-# per-target sync functions through the exclusive-steps machinery.
+# model closure into per-target installer steps (claude/codex: the native
+# base, mcp and hooks plugin installs; cursor: the marketplace step; omp: its
+# native packages) and drives the per-target sync functions through the
+# exclusive-steps machinery.
 #
 # Sourced by install.sh (never run directly); reads PACKAGE, TARGETS, MODE
 # and ALL_TARGETS at call time. Python owns package semantics and
@@ -12,7 +14,6 @@ PACKAGE=""
 PACKAGE_ALL_TARGETS_REQUESTED=0
 PACKAGE_TARGETS=()
 PACKAGE_STEPS=()
-PACKAGE_CURSOR_UNITS=""
 
 # package_steps_csv <target> — the planner's comma-separated steps for <target>.
 package_steps_csv() {
@@ -57,29 +58,11 @@ package_configure_steps() {
     EXCLUSIVE_STEPS=1
 }
 
-# codex_native_plugin_detected — true when a native ycc Codex plugin is already
-# installed; sets PACKAGE_CODEX_FOREIGN_MARKETPLACE when it came from a
-# marketplace other than this installer's 'local-ycc-plugins'.
-PACKAGE_CODEX_FOREIGN_MARKETPLACE=""
-codex_native_plugin_detected() {
-    PACKAGE_CODEX_FOREIGN_MARKETPLACE=""
-    command -v python3 >/dev/null 2>&1 || return 1
-    local marketplace own="local-ycc-plugins"
-    codex_repository_native_enabled && own="ycc"
-    marketplace="$(python3 "${SCRIPT_DIR}/scripts/package_install_plan.py" --detect-codex-native "${HOME}")" || return 1
-    [[ -n "${marketplace}" ]] || return 1
-    if [[ "${marketplace}" != "${own}" ]]; then
-        PACKAGE_CODEX_FOREIGN_MARKETPLACE="${marketplace}"
-    fi
-    return 0
-}
-
 # package_preflight_targets — expand PACKAGE over TARGETS and validate every
 # package×target pair before any target runs, mirroring preflight_targets.
 package_preflight_targets() {
     PACKAGE_TARGETS=()
     PACKAGE_STEPS=()
-    PACKAGE_CURSOR_UNITS=""
     local skip_flag=""
     [[ "${PACKAGE_ALL_TARGETS_REQUESTED:-0}" == "1" ]] && skip_flag="--skip-unsupported"
 
@@ -97,7 +80,6 @@ package_preflight_targets() {
     while IFS=$'\t' read -r kind target steps; do
         case "${kind}" in
             warning) warn "${target}${steps:+ ${steps}}" ;;
-            cursor-units) PACKAGE_CURSOR_UNITS="${target}" ;;
             target)
                 package_validate_steps "${target}" "${steps}" || exit 1
                 PACKAGE_TARGETS+=("${target}")

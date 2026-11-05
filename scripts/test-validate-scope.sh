@@ -122,7 +122,6 @@ expect_targets "Codex native policy selects codex native, config and types" "cod
 expect_targets "Codex native tests select codex native and config" "codex codex-native config" scripts/test_validate_codex_native.py
 expect_targets "Codex generator tests selects codex native and config" "codex codex-native config" scripts/test_generate_codex_plugin.py
 expect_targets "Codex catalog helper selects native, config and types" "codex-native config types" scripts/codex_marketplace.py
-expect_targets "Codex catalog tests select native and config" "codex-native config" scripts/test_codex_marketplace.py
 expect_targets "Codex catalog selects agents native and packages" "agents codex-native packages" .agents/plugins/marketplace.json
 expect_targets "Codex in-repo payload selects content, native and parity" "codex codex-native packages" .codex-plugin/ycc-mcp/.mcp.json
 expect_targets "Claude generator wrapper selects generator and native" "claude claude-native" scripts/generate-claude-packages.sh
@@ -136,8 +135,8 @@ expect_targets "Claude split live harness selects native" "claude-native" script
 expect_targets "Claude marketplace selects native, JSON and parity" "claude-native json packages" .claude-plugin/marketplace.json
 expect_targets "install.sh selects config" "config" install.sh
 expect_targets "install tests select config" "config" scripts/tests/install/codex.sh
-expect_targets "migration helper selects config and types" "config types" scripts/install_migrate.py
-expect_targets "migration fixture suite selects config" "config" scripts/tests/install/migrate.sh
+expect_targets "legacy cleanup helper selects config and types" "config types" scripts/install_migrate.py
+expect_targets "legacy cleanup suite selects config" "config" scripts/tests/install/cleanup.sh
 expect_targets "install target libs also select the coverage validators" "opencode agents config" \
     scripts/lib/install/targets/agents.sh
 expect_targets "OMP install target lib also selects the coverage validators" "opencode agents config" \

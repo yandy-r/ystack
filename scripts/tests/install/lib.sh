@@ -109,6 +109,18 @@ cat > "${STUB_BIN}/omp" <<SH
 exec python3 "${REPO_ROOT}/scripts/tests/install/fake_omp.py" "\$@"
 SH
 chmod +x "${STUB_BIN}/omp"
+# Stub Cursor 'agent' CLI: logs 'agent <args>' to CLAUDE_STUB_LOG and answers
+# 'plugin marketplace list --format json' with AGENT_STUB_MARKETPLACES
+# (default: none registered).
+cat > "${STUB_BIN}/agent" <<'SH'
+#!/usr/bin/env bash
+printf 'agent %s\n' "$*" >> "${CLAUDE_STUB_LOG}"
+if [[ "$*" == "plugin marketplace list --format json" ]]; then
+    printf '%s\n' "${AGENT_STUB_MARKETPLACES:-[]}"
+fi
+exit 0
+SH
+chmod +x "${STUB_BIN}/agent"
 
 # run_install <home> <args...> — run install.sh sandboxed; print output and return the installer status.
 # Runs from <home>/project (not a git repo) so project-scoped steps write

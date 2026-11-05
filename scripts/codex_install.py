@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Install the listed Codex pair (ycc + ycc-mcp) without touching legacy carriers.
+"""Install the native Codex packages (ycc, ycc-mcp) through the Codex plugin CLI.
 
 The shell owns build/step selection. This helper owns native marketplace
-registration, the versioned cache fallback for a missing plugin CLI, scoped
-plugin enablement, and the ownership record that makes base removal safe.
-Legacy links, caches and config are retired only by ``install.sh migrate``.
+registration (``codex plugin marketplace add``), ``codex plugin add`` of the
+requested packages, scoped plugin enablement, and the ownership record that
+makes removal safe. The Codex CLI (>= 0.160, ``codex plugin``) is required to
+install; removal still retires owned snapshots and config without it.
+Legacy links, caches and config are retired separately by install_migrate.py.
 Settings and removal accept ``--dry-run`` to report ownership-aware changes
 without updating config, native caches, backups, or ownership state.
 """
@@ -29,7 +31,7 @@ from validate_codex_native import validate
 
 ROOT = Path(__file__).resolve().parent.parent
 REPOSITORY = "https://github.com/yandy-r/ystack.git"
-SELECTORS = tuple(f"{package}@ycc" for package in MIGRATION_PACKAGES)
+# The shipped config.toml still names the retired selector; settings swap in the native pair.
 LEGACY_SELECTOR = "ycc@local-ycc-plugins"
 UNSAFE_VERSIONS = {".", ".."}
 
@@ -84,6 +86,27 @@ def load_state() -> dict[str, Any]:
 def save_state(state: dict[str, Any]) -> None:
     guarded(state_path())
     atomic_write(state_path(), json.dumps(state, indent=2) + "\n")
+
+
+def cli_available() -> bool:
+    """True when ``codex`` is on PATH and ships the ``plugin add`` subcommand (Codex >= 0.160)."""
+    if shutil.which("codex") is None:
+        return False
+    probe = subprocess.run(
+        ["codex", "plugin", "add", "--help"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
+    )
+    return probe.returncode == 0
+
+
+def selected_packages(names: str | None) -> tuple[str, ...]:
+    """Validate a comma-separated package list against the native pair; default is both."""
+    if names is None:
+        return MIGRATION_PACKAGES
+    picked = tuple(name.strip() for name in names.split(",") if name.strip())
+    unknown = [name for name in picked if name not in MIGRATION_PACKAGES]
+    if not picked or unknown:
+        raise ValueError(f"unknown native Codex packages {', '.join(unknown) or '(none given)'}")
+    return tuple(package for package in MIGRATION_PACKAGES if package in picked)
 
 
 def cli(*args: str, check: bool = True, capture: bool = False) -> str:
@@ -158,8 +181,8 @@ def merge_config(
         subprocess.run(command, check=True)
 
 
-def enablement_text() -> str:
-    return "".join(f'[plugins."{selector}"]\nenabled = true\n' for selector in SELECTORS)
+def enablement_text(packages: tuple[str, ...] = MIGRATION_PACKAGES) -> str:
+    return "".join(f'[plugins."{package}@ycc"]\nenabled = true\n' for package in packages)
 
 
 def snapshot_key(home: Path, snapshot: Path) -> str:
@@ -199,15 +222,21 @@ def write_verified_toml(destination: Path, text: str, expected_marketplace: dict
     atomic_write(destination, text)
 
 
-def install(mode: str, use_cli: bool) -> None:
+def install(mode: str, packages: tuple[str, ...] = MIGRATION_PACKAGES) -> None:
+    """Register marketplace ycc and ``codex plugin add`` each of ``packages`` through the Codex CLI."""
     if not repository_native_enabled(load_package_model().packages):
         raise ValueError("repository native Codex packages are not listed together")
+    if not cli_available():
+        raise ValueError(
+            "the Codex CLI with 'codex plugin' (Codex >= 0.160) is required to install ycc; "
+            "install or upgrade Codex (https://developers.openai.com/codex) and rerun"
+        )
     # A skipped build may leave a stale pre-listing tree: never register it.
     validate(ROOT, native=False)
     home = Path.home() / ".codex"
     destination = home / "config.toml"
     state = load_state()
-    git_source = use_cli and mode == "repo"
+    git_source = mode == "repo"
     expected = (
         {"source_type": "git", "source": REPOSITORY, "ref": "main"}
         if git_source
@@ -222,9 +251,9 @@ def install(mode: str, use_cli: bool) -> None:
 
     validate_recorded_snapshots(home, state)
 
-    sources = {package: ROOT / ".codex-plugin" / package for package in MIGRATION_PACKAGES}
     versions: dict[str, str] = {}
-    for package, source in sources.items():
+    for package in packages:
+        source = ROOT / ".codex-plugin" / package
         version = safe_version(
             json.loads((source / ".codex-plugin/plugin.json").read_text(encoding="utf-8")).get("version"), package
         )
@@ -236,78 +265,45 @@ def install(mode: str, use_cli: bool) -> None:
             if actual != inventory(source) and actual != state["caches"].get(snapshot_key(home, cache)):
                 raise ValueError(f"native cache is edited or foreign; retained: {cache}")
 
-    fallback_text: str | None = None
-    if not use_cli and registered is None:
-        current_text = destination.read_text(encoding="utf-8") if destination.exists() else ""
-        fallback_text = (
-            current_text + f'\n[marketplaces.ycc]\nsource_type = "local"\nsource = {json.dumps(str(ROOT))}\n'
-        )
-        # Verify the resulting TOML before saving ownership state or mutating disk.
-        try:
-            parsed = tomllib.loads(fallback_text)
-        except tomllib.TOMLDecodeError as error:
-            raise ValueError(
-                f"cannot append [marketplaces.ycc] to {destination} (for example, 'marketplaces' is a closed "
-                f"inline table); convert it to '[marketplaces.<name>]' and retry ({error})"
-            ) from error
-        if parsed.get("marketplaces", {}).get("ycc") != expected:
-            raise ValueError(f"failed to register [marketplaces.ycc] in {destination}")
-
     # Record registration ownership before a CLI that can partially succeed
     # runs; a registration the user already had is never claimed.
     if registered is None:
         state["marketplace"] = expected
         save_state(state)
 
-    if use_cli:
-        target = REPOSITORY if git_source else str(ROOT)
-        cli("plugin", "marketplace", "add", target, *(["--ref", "main"] if git_source else []))
-    else:
-        if mode == "repo":
-            print("[!!] Codex plugin CLI unavailable; using this checkout's native snapshot instead of fetching main.")
-        if fallback_text is not None:
-            write_verified_toml(destination, fallback_text, expected)
+    target = REPOSITORY if git_source else str(ROOT)
+    cli("plugin", "marketplace", "add", target, *(["--ref", "main"] if git_source else []))
 
-    for package, source in sources.items():
+    for package in packages:
         package_root = home / "plugins/cache/ycc" / package
         cache = package_root / versions[package]
-        key = snapshot_key(home, cache)
-        owned = not cache.exists() or key in state["caches"] or package in state["packages"]
+        owned = not cache.exists() or snapshot_key(home, cache) in state["caches"] or package in state["packages"]
         before = set(package_root.iterdir()) if package_root.is_dir() else set()
-        if use_cli:
-            output = cli("plugin", "add", f"{package}@ycc", "--json", capture=True)
-            # Re-fingerprint only the snapshot the CLI reports writing, and only if
-            # it is ours (new, or already recorded); other versions — including a
-            # recorded one the user edited while the CLI ran — keep their fingerprints.
-            try:
-                written = cli_written_snapshot(package_root, package, output)
-            except ValueError as error:
-                print(f"[!!] {package}: cannot prove the snapshot 'codex plugin add' wrote ({error}); not recording it")
-            else:
-                written_key = snapshot_key(home, written)
-                if written not in before or written_key in state["caches"]:
-                    state["caches"][written_key] = inventory(written)
+        output = cli("plugin", "add", f"{package}@ycc", "--json", capture=True)
+        # Re-fingerprint only the snapshot the CLI reports writing, and only if
+        # it is ours (new, or already recorded); other versions — including a
+        # recorded one the user edited while the CLI ran — keep their fingerprints.
+        try:
+            written = cli_written_snapshot(package_root, package, output)
+        except ValueError as error:
+            print(f"[!!] {package}: cannot prove the snapshot 'codex plugin add' wrote ({error}); not recording it")
         else:
-            if not cache.exists() or inventory(cache) != inventory(source):
-                if cache.exists():
-                    shutil.rmtree(cache)
-                cache.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copytree(source, cache)
-                print(f"[ok] Synced Codex native cache → {cache}")
-            if owned:
-                state["caches"][key] = inventory(cache)
+            written_key = snapshot_key(home, written)
+            if written not in before or written_key in state["caches"]:
+                state["caches"][written_key] = inventory(written)
         if owned and package not in state["packages"]:
             state["packages"].append(package)
         save_state(state)
-    merge_config("plugins", enablement_text(), list(SELECTORS), remove=False, force=True)
-    print(
-        "[!!] Legacy ycc@local-ycc-plugins links, cache and config are untouched; "
-        "run ./install.sh migrate --target codex (then --apply) to retire them."
+    merge_config(
+        "plugins", enablement_text(packages), [f"{package}@ycc" for package in packages], remove=False, force=True
     )
 
 
-def remove(use_cli: bool, *, dry_run: bool = False) -> None:
-    """Remove owned native packages, or preview the same ownership decisions without writes."""
+def remove(use_cli: bool, packages: tuple[str, ...] = MIGRATION_PACKAGES, *, dry_run: bool = False) -> None:
+    """Remove owned ``packages``, or preview the same ownership decisions without writes.
+
+    The marketplace registration goes only once no owned package or snapshot is left.
+    """
     if not state_path().exists():
         return
     state = load_state()
@@ -319,6 +315,9 @@ def remove(use_cli: bool, *, dry_run: bool = False) -> None:
     removed_paths: set[Path] = set()
     for relative, expected in state["caches"].items():
         rel = validate_cache_path(relative)
+        if rel.parts[3] not in packages:
+            kept[relative] = expected
+            continue
         cache = home / rel
         if not cache.exists() and not cache.is_symlink():
             continue
@@ -350,6 +349,9 @@ def remove(use_cli: bool, *, dry_run: bool = False) -> None:
                     break
     plugins = config(destination).get("plugins", {})
     for package in state["packages"]:
+        if package not in packages:
+            kept_packages.add(package)
+            continue
         selector = f"{package}@ycc"
         package_root = home / "plugins/cache/ycc" / package
         if package_root.exists() and package_root not in removed_paths:
@@ -359,7 +361,7 @@ def remove(use_cli: bool, *, dry_run: bool = False) -> None:
                 print(f"[dry-run] would run: codex plugin remove {selector}")
             else:
                 cli("plugin", "remove", selector, check=False)
-    removable = [f"{package}@ycc" for package in MIGRATION_PACKAGES if package not in kept_packages]
+    removable = [f"{package}@ycc" for package in packages if package not in kept_packages]
     if removable:
         merge_config("plugins", enablement_text(), removable, remove=True, force=False, dry_run=dry_run)
     registered = config(destination).get("marketplaces", {}).get("ycc")
@@ -388,7 +390,7 @@ def remove(use_cli: bool, *, dry_run: bool = False) -> None:
         state.pop("marketplace", None)
     elif registered is None and not retained_caches:
         state.pop("marketplace", None)
-    elif owned_marketplace is not None:
+    elif owned_marketplace is not None and not kept_packages - set(packages):
         print("[!!] kept marketplace ycc: edited registration or retained native snapshots")
     state["caches"] = kept
     state["packages"] = [package for package in state["packages"] if package in kept_packages]
@@ -446,7 +448,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("enabled", "install", "remove", "settings"))
     parser.add_argument("--mode", choices=("local", "repo"), default="local")
-    parser.add_argument("--cli", action="store_true")
+    parser.add_argument("--packages", help="Comma-separated native packages to install/remove (default: ycc,ycc-mcp)")
     parser.add_argument("--groups", default="settings,plugins")
     parser.add_argument("--remove", action="store_true")
     parser.add_argument("--force", action="store_true")
@@ -460,10 +462,10 @@ def main() -> int:
             return 0 if repository_native_enabled(load_package_model().packages) else 1
         if args.command == "install":
             if args.dry_run:
-                raise ValueError("native base installation does not support --dry-run")
-            install(args.mode, args.cli)
+                raise ValueError("native Codex installation does not support --dry-run")
+            install(args.mode, selected_packages(args.packages))
         elif args.command == "remove":
-            remove(args.cli, dry_run=args.dry_run)
+            remove(cli_available(), selected_packages(args.packages), dry_run=args.dry_run)
         else:
             settings(
                 args.groups,

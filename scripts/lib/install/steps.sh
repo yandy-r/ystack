@@ -178,34 +178,20 @@ config_groups_for_target() {
     defaults="$("${target}_config_groups")"
     if [[ -n "${PACKAGE:-}" ]]; then
         # Registration owns enablement; settings-only must not enable an
-        # unregistered or foreign plugin. The Codex legacy-cache path writes
-        # exactly the local ycc enablement leaf itself (see codex.sh).
-        if [[ "${target}" == "claude" ]] && step_enabled hooks; then
-            echo "settings,hooks"
-        else
-            echo "settings"
-        fi
+        # unregistered or foreign plugin.
+        echo "settings"
         return 0
     fi
-    local groups_csv="${defaults}"
-    # The native project plugin carries its own hook activation; never write
-    # the global hooks group alongside it. Settings-only removal still owns
-    # that legacy group because its hooks step is not enabled.
-    if [[ "${target}" == "claude" ]] && step_enabled hooks \
-        && [[ "$(step_scope claude hooks)" == "project" ]]; then
-        groups_csv="${defaults//,hooks/}"
-    fi
-    defaults="${groups_csv}"
     if [[ ${#INTENTS[@]} -eq 0 ]]; then
         echo "${defaults}"
         return 0
     fi
 
-    # Filtered order is always settings,plugins,hooks (kept from the original
-    # table); only groups the target manages by default are eligible.
+    # Filtered order is always settings,plugins; only groups the target
+    # manages by default are eligible.
     local -a groups=()
     local group
-    for group in settings plugins hooks; do
+    for group in settings plugins; do
         intent_requested "${group}" || continue
         [[ ",${defaults}," == *",${group},"* ]] && groups+=("${group}")
     done
@@ -214,8 +200,8 @@ config_groups_for_target() {
 }
 
 # run_target <target> <function>
-# Configure intent mapping (sync mode only), drop steps a --<kind> selection
-# cannot narrow on <target> (select.sh), then run the target.
+# Configure intent mapping (sync mode only), drop steps the scope or dry-run
+# cannot carry, then run the target.
 run_target() {
     local target="$1"
     local fn="$2"
@@ -227,16 +213,14 @@ run_target() {
     # --only steps are shared by every target: the skip must not leak.
     local -a only_saved=(${ONLY_STEPS[@]+"${ONLY_STEPS[@]}"})
     local exclusive_saved="${EXCLUSIVE_STEPS:-0}"
-    skip_unselectable_steps "${target}"
     skip_unscoped_settings "${target}"
     skip_dry_run_steps "${target}"
     # --with-deps extends the selection for this target only (select.sh).
-    local skills_saved="${SELECTION[skills]:-}" agents_saved="${SELECTION[agents]:-}" commands_saved="${SELECTION[commands]:-}"
+    local skills_saved="${SELECTION[skills]:-}" agents_saved="${SELECTION[agents]:-}"
     expand_with_deps "${target}"
     "${fn}"
     SELECTION[skills]="${skills_saved}"
     SELECTION[agents]="${agents_saved}"
-    SELECTION[commands]="${commands_saved}"
     ONLY_STEPS=(${only_saved[@]+"${only_saved[@]}"})
     EXCLUSIVE_STEPS="${exclusive_saved}"
 }
@@ -245,8 +229,7 @@ run_target() {
 # <t>_project_groups (cursor, omp) then have no project settings file to
 # write, so the step is dropped with a notice naming the --global command
 # that restores the old behavior; the same skip applies when the project
-# root is $HOME. Rewrites ONLY_STEPS (exclusive mode), like
-# skip_unselectable_steps.
+# root is $HOME. Rewrites ONLY_STEPS (exclusive mode).
 skip_unscoped_settings() {
     local target="$1" step
     [[ -z "${SCOPE}" && -z "${PACKAGE:-}" ]] || return 0
@@ -289,7 +272,7 @@ skip_unscoped_settings() {
 # skip_dry_run_steps <target> — with --dry-run, keep only the steps <target>
 # can preview (<target>_dry_run_steps, which may depend on COMMAND; none when
 # undefined) and say so for every other selected step. Rewrites ONLY_STEPS
-# (exclusive mode), like skip_unselectable_steps.
+# (exclusive mode).
 skip_dry_run_steps() {
     local target="$1" step previewable=""
     [[ "${DRY_RUN:-0}" == "1" ]] || return 0
@@ -404,13 +387,14 @@ resolve_targets() {
 # ---------------------------------------------------------------------------
 # Skill overlap (--skills-home)
 # ---------------------------------------------------------------------------
-# codex, opencode and cursor read ~/.agents/skills AND their own skills dir, so
-# installing ycc skills natively for several of them (or for one of them next
-# to the agents target) lists every skill twice. resolve_skills_home offers to
-# install the skills once into ~/.agents/skills instead: it records the
-# affected targets in SKILLS_CONSOLIDATED (the target scripts then drop their
-# own skill install, see skills_consolidated) and adds the agents target.
-# Reads SKILLS_HOME ('', agents or native), COMMAND, MODE, TARGETS.
+# opencode reads ~/.agents/skills AND its own skills dir, so installing ycc
+# skills natively for it next to the agents target lists every skill twice.
+# (claude, codex, cursor and omp load ycc skills from their native ycc
+# package only and declare <t>_reads_agents_skills false.) resolve_skills_home
+# offers to install the skills once into ~/.agents/skills instead: it records
+# the affected targets in SKILLS_CONSOLIDATED (the target scripts then drop
+# their own skill install, see skills_consolidated) and adds the agents
+# target. Reads SKILLS_HOME ('', agents or native), COMMAND, MODE, TARGETS.
 
 SKILLS_CONSOLIDATED=()
 
@@ -443,22 +427,9 @@ skills_filter() {
 }
 
 # target_has_native_skills <target> — true when the run installs ycc skills
-# into <target>'s own dir (base ships them for codex/opencode/cursor too).
-# Subshell: intent/package mapping rewrites ONLY_STEPS. Package mode must stay
-# closure-aware: a package whose cursor units exclude skills (ycc-rules,
-# ycc-mcp) never installs native skills, so it cannot trigger the
-# skills-consolidation flow or auto-add the agents target.
+# into <target>'s own dir (base ships them for opencode too).
+# Subshell: intent/package mapping rewrites ONLY_STEPS.
 target_has_native_skills() {
-    if [[ -n "${PACKAGE:-}" && "$1" == "cursor" ]]; then
-        [[ " ${PACKAGE_CURSOR_UNITS:-} " == *" skills "* ]]
-        return $?
-    fi
-    if [[ -n "${PACKAGE:-}" && "$1" == "codex" ]]; then
-        # A positively detected enabled foreign native ycc already supplies the
-        # skills, and base will not register; consolidation would only duplicate.
-        codex_native_plugin_detected || true
-        [[ -z "${PACKAGE_CODEX_FOREIGN_MARKETPLACE:-}" ]] || return 1
-    fi
     (
         if [[ -n "${PACKAGE:-}" ]]; then
             package_configure_steps "$(package_steps_csv "$1")"
@@ -598,7 +569,7 @@ preflight_step_support() {
     for step in ${valid_csv//,/ }; do
         step_enabled "${step}" || continue
         if [[ "${SCOPE}" == "project" ]] && ! step_allows_project "${target}" "${step}"; then
-            err "--project is not supported by step '${step}' for target '${target}' (project scope currently supports: mcp; settings (claude, codex, opencode); claude: hooks; omp: base, dedupe)"
+            err "--project is not supported by step '${step}' for target '${target}' (project scope currently supports: settings (claude, codex, opencode); mcp (claude, opencode); claude: hooks; omp: base, dedupe)"
             err "  use --global, or select only project-capable steps with --only / --intent."
             if [[ "${step}" == "settings" ]] && declare -F "${target}_settings_scope_note" >/dev/null; then
                 err "  $("${target}_settings_scope_note")"
@@ -615,9 +586,9 @@ preflight_step_support() {
         err "${home_conflict}"
         exit 1
     fi
-    # An explicitly requested global-only group (--intent plugins/hooks,
-    # --plugins/--hooks) cannot ride --project; the default (implicit) groups
-    # are dropped with a notice by config_group_selection instead.
+    # An explicitly requested global-only group (--intent plugins, --plugins)
+    # cannot ride --project; the default (implicit) groups are dropped with a
+    # notice by config_group_selection instead.
     local allowed group
     allowed="$(target_project_groups "${target}")"
     for group in $(config_groups_for_target "${target}" | tr ',' ' '); do
@@ -638,8 +609,6 @@ preflight_step_support() {
                 done
                 [[ ${only_catalog} -eq 1 ]] && group_asked=0
             fi
-        elif [[ "${group}" == hooks ]] && has_selection hooks; then
-            group_asked=1
         fi
         if [[ ${group_asked} -eq 1 ]]; then
             err "--project cannot carry the ${group} group for target '${target}' (global-only)"

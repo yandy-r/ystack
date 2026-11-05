@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# install.sh tests — codex: config merge, remove, base remove + plugin CLI, slices.
+# install.sh tests — codex: config merge, native base/mcp through a stub Codex CLI,
+# automatic legacy cleanup, custom agents, rules and --plugins.
 #
 # Runs alone (bash scripts/tests/install/codex.sh) or from scripts/test-install-sync.sh.
 # shellcheck source=scripts/tests/install/lib.sh
@@ -18,12 +19,13 @@ trust_level = "trusted"
 [mcp_servers.internal]
 url = "https://internal.example"
 TOML
-install_must_succeed "${home}" sync --target codex --intent settings,mcp --force --global
+install_must_succeed "${home}" sync --target codex --intent settings --force --global
 out="${INSTALL_OUT}"
 merged="$(cat "${home}/.codex/config.toml")"
 assert_contains "${merged}" "# local machine notes" "TOML comment preserved"
 assert_contains "${merged}" '[projects."/home/me/secret-project"]' "trusted project preserved"
 assert_contains "${merged}" "[mcp_servers.internal]" "local MCP server preserved"
+assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "codex plugin" "codex settings runs no plugin CLI"
 assert_contains "${merged}" 'model = "gpt-6-astra"' "managed model applied"
 assert_contains "${merged}" 'default_subagent_model = "gpt-5.6-sol"' "subagent model applied"
 
@@ -61,15 +63,9 @@ done
 assert_contains "${out}" "only when the project is trusted" "codex project merge prints the trust warning"
 if [[ ! -s "${home}/.codex/config.toml" ]]; then ok "default codex settings leaves ~/.codex/config.toml untouched"; else ko "default codex settings leaves ~/.codex/config.toml untouched"; fi
 
-# T9: mcp + settings share one project file, warn once, and remove strips
-# only the managed leaves.
+# T9: remove strips only the managed project leaves.
 home="$(new_home)"
-install_must_succeed "${home}" sync --target codex --intent settings,mcp
-proj="$(cat "${home}/project/.codex/config.toml")"
-assert_contains "${proj}" "[mcp_servers." "codex project file carries the MCP servers"
-assert_contains "${proj}" 'model = "gpt-6-astra"' "codex project file carries the settings beside the MCP servers"
-count="$(grep -c 'only when the project is trusted' <<< "${INSTALL_OUT}")"
-if [[ "${count}" == "1" ]]; then ok "codex settings+mcp warns about trust once"; else ko "codex settings+mcp warns about trust once" "${count}"; fi
+install_must_succeed "${home}" sync --target codex --intent settings
 cat >> "${home}/project/.codex/config.toml" <<'TOML'
 
 [mine]
@@ -78,7 +74,6 @@ TOML
 install_must_succeed "${home}" remove --target codex --intent settings
 proj="$(cat "${home}/project/.codex/config.toml")"
 assert_contains "${proj}" "[mine]" "codex project remove keeps an unmanaged table"
-assert_contains "${proj}" "[mcp_servers." "codex settings-only remove leaves the MCP servers"
 assert_not_contains "${proj}" 'model = "gpt-6-astra"' "codex project remove strips the managed model"
 
 # The plugins group is global-only: dropped with a notice by default,
@@ -117,164 +112,302 @@ for f in .codex/rules/default.rules .codex/CLAUDE.md .codex/AGENTS.md; do
     if [[ ! -L "${home}/${f}" ]]; then ok "codex remove unlinks ${f}"; else ko "codex remove unlinks ${f}"; fi
 done
 
+echo
+echo "== install.sh: codex native base (stub Codex CLI) =="
 
-echo "== install.sh install: codex base mirrors custom agents =="
+# A stateful Codex CLI stub: 'plugin marketplace add' registers [marketplaces.ycc]
+# in config.toml and 'plugin add <pkg>@ycc --json' snapshots this checkout's
+# .codex-plugin/<pkg> into the versioned cache, like codex-cli >= 0.160.
+codex_native_saved_stub="${STUB_BIN}"
+codex_native_bin="${SANDBOX_ROOT}/codex-native-bin"
+codex_missing_bin="${SANDBOX_ROOT}/codex-missing-bin"
+mkdir -p "${codex_native_bin}" "${codex_missing_bin}"
+cp -p "${STUB_BIN}"/* "${codex_native_bin}/"
+cp -p "${STUB_BIN}"/* "${codex_missing_bin}/"
+# An old Codex (no 'codex plugin') stands in for a missing CLI, so a real
+# codex later on PATH can never answer for it.
+printf '#!/usr/bin/env bash\nexit 1\n' > "${codex_missing_bin}/codex"
+cat > "${codex_native_bin}/codex" <<PY
+#!/usr/bin/env python3
+import json, os, shutil, sys, tomllib
+from pathlib import Path
+args = sys.argv[1:]
+if "--help" in args:
+    sys.exit(0)
+with open(os.environ["CLAUDE_STUB_LOG"], "a") as log:
+    log.write("codex " + " ".join(args) + "\n")
+home = Path.home()
+config = home / ".codex/config.toml"
+if args[:3] == ["plugin", "marketplace", "add"]:
+    text = config.read_text() if config.exists() else ""
+    if "ycc" not in tomllib.loads(text).get("marketplaces", {}):
+        git = args[3].startswith("https:")
+        text += "\n[marketplaces.ycc]\nsource_type = " + json.dumps("git" if git else "local")
+        text += "\nsource = " + json.dumps(args[3]) + "\n" + ('ref = "main"\n' if git else "")
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text(text)
+elif args[:2] == ["plugin", "add"]:
+    package = args[2].split("@")[0]
+    source = Path("${REPO_ROOT}") / ".codex-plugin" / package
+    version = json.loads((source / ".codex-plugin/plugin.json").read_text())["version"]
+    cache = home / ".codex/plugins/cache/ycc" / package / version
+    if cache.exists():
+        shutil.rmtree(cache)
+    shutil.copytree(source, cache)
+    print(json.dumps({"pluginId": args[2], "name": package, "marketplaceName": "ycc", "version": version, "installedPath": str(cache)}))
+PY
+chmod +x "${codex_native_bin}/codex" "${codex_missing_bin}/codex"
+STUB_BIN="${codex_native_bin}"
 
+# codex_legacy_carriers <home> — print every retired-installer carrier still present.
+codex_legacy_carriers() {
+    local h="$1" f
+    for f in .codex/plugins/ycc .agents/plugins/ycc .agents/plugins/marketplace.json .codex/plugins/cache/local-ycc-plugins .codex/skills; do
+        [[ -e "${h}/${f}" || -L "${h}/${f}" ]] && echo "${f}"
+    done
+    grep -q 'local-ycc-plugins' "${h}/.codex/config.toml" 2>/dev/null && echo "config.toml:ycc@local-ycc-plugins"
+    grep -q '^\[mcp_servers\.' "${h}/.codex/config.toml" 2>/dev/null && echo "config.toml:mcp_servers"
+    return 0
+}
+
+for mode in local repo; do
+    home="$(new_home)"
+    mkdir -p "${home}/.codex/agents"
+    echo 'name = "mine"' > "${home}/.codex/agents/mine.toml"
+    install_must_succeed "${home}" install --target codex --only base --mode "${mode}"
+    out="${INSTALL_OUT}"
+    calls="$(cat "${home}/claude-calls.log" 2>/dev/null)"
+    if [[ "${mode}" == local ]]; then
+        assert_contains "${calls}" "codex plugin marketplace add ${REPO_ROOT}" "codex local base registers this checkout as marketplace ycc"
+    else
+        assert_contains "${calls}" "codex plugin marketplace add https://github.com/yandy-r/ystack.git --ref main" "codex repo base registers the GitHub marketplace"
+    fi
+    assert_contains "${calls}" "codex plugin add ycc@ycc --json" "codex ${mode} base adds ycc@ycc"
+    assert_contains "${calls}" "codex plugin add ycc-mcp@ycc --json" "codex ${mode} base adds ycc-mcp@ycc"
+    assert_not_contains "${calls}" "local-ycc-plugins" "codex ${mode} base never touches local-ycc-plugins"
+    legacy="$(codex_legacy_carriers "${home}")"
+    if [[ -z "${legacy}" ]]; then ok "codex ${mode} base writes no legacy carrier"; else ko "codex ${mode} base writes no legacy carrier" "${legacy}"; fi
+    if python3 - "${home}" <<'PY'
+import sys, tomllib
+from pathlib import Path
+config = tomllib.loads((Path(sys.argv[1]) / ".codex/config.toml").read_text())
+assert config["plugins"]["ycc@ycc"]["enabled"] is True
+assert config["plugins"]["ycc-mcp@ycc"]["enabled"] is True
+assert "ycc" in config["marketplaces"]
+PY
+    then ok "codex ${mode} base enables ycc@ycc + ycc-mcp@ycc"; else ko "codex ${mode} base enables ycc@ycc + ycc-mcp@ycc"; fi
+    if [[ -f "${home}/.codex/agents/mine.toml" ]]; then ok "codex ${mode} base keeps user agents"; else ko "codex ${mode} base keeps user agents"; fi
+    shipped_agents="$(find "${REPO_ROOT}/.codex-plugin/agents" -maxdepth 1 -name '*.toml' | wc -l)"
+    installed_agents="$(find "${home}/.codex/agents" -maxdepth 1 -name '*.toml' ! -name mine.toml | wc -l)"
+    if [[ "${mode}" == local ]]; then
+        if [[ "${installed_agents}" -eq "${shipped_agents}" ]]; then ok "codex local base mirrors every custom agent"; else ko "codex local base mirrors every custom agent" "${installed_agents}/${shipped_agents}"; fi
+        last_step="$(grep -oE '\[[0-9]+/[0-9]+\]' <<< "${out}" | tail -n 1)"
+        if [[ "${last_step}" == "[5/5]" ]]; then ok "codex local base numbers its steps to the total"; else ko "codex local base numbers its steps to the total" "last step: ${last_step}"; fi
+    elif [[ "${installed_agents}" -eq 0 ]]; then
+        ok "codex repo base installs no custom agents"
+    else
+        ko "codex repo base installs no custom agents"
+    fi
+
+    : > "${home}/claude-calls.log"
+    install_must_succeed "${home}" remove --target codex --intent base
+    calls="$(cat "${home}/claude-calls.log")"
+    assert_contains "${calls}" "codex plugin remove ycc@ycc" "codex ${mode} base remove uninstalls ycc@ycc"
+    assert_contains "${calls}" "codex plugin remove ycc-mcp@ycc" "codex ${mode} base remove uninstalls ycc-mcp@ycc"
+    assert_contains "${calls}" "codex plugin marketplace remove ycc" "codex ${mode} base remove drops its marketplace"
+    if [[ ! -e "${home}/.codex/plugins/cache/ycc" ]]; then ok "codex ${mode} base remove retracts both owned snapshots"; else ko "codex ${mode} base remove retracts both owned snapshots"; fi
+    config="$(cat "${home}/.codex/config.toml" 2>/dev/null)"
+    assert_not_contains "${config}" 'ycc@ycc' "codex ${mode} base remove retracts the plugin enablement"
+    assert_not_contains "${config}" '[marketplaces.ycc]' "codex ${mode} base remove retracts its registration"
+    if [[ "$(find "${home}/.codex/agents" -mindepth 1 -maxdepth 1 -printf '%f\n')" == "mine.toml" ]]; then ok "codex ${mode} base remove keeps only user agents"; else ko "codex ${mode} base remove keeps only user agents"; fi
+done
+
+# Skills ship only inside ycc@ycc: the skills intent is the base install.
 home="$(new_home)"
-mkdir -p "${home}/.codex/agents"
-echo 'name = "mine"' > "${home}/.codex/agents/mine.toml"
-install_must_succeed "${home}" install --target codex --only base --skills-home native
-out="${INSTALL_OUT}"
-if [[ -f "${home}/.codex/agents/mine.toml" ]]; then ok "codex native base install keeps user agents"; else ko "codex native base install keeps user agents"; fi
-first_agent="$(find "${REPO_ROOT}/.codex-plugin/agents" -maxdepth 1 -name '*.toml' -printf '%f\n' | sort | head -n 1)"
-if [[ -n "${first_agent}" && -f "${home}/.codex/agents/${first_agent}" ]]; then ok "codex native base install populates ~/.codex/agents"; else ko "codex native base install populates ~/.codex/agents" "${out}"; fi
-if [[ "$(find "${home}/.codex/agents" -maxdepth 1 -name '*.toml' ! -name mine.toml 2>/dev/null | wc -l)" -eq "$(find "${REPO_ROOT}/.codex-plugin/agents" -maxdepth 1 -name '*.toml' | wc -l)" ]]; then ok "codex native base install mirrors every custom agent"; else ko "codex native base install mirrors every custom agent"; fi
-assert_contains "${out}" "Sync custom agents" "codex native base install runs the agents sync step"
-assert_contains "${out}" "(skills agents plugin)" "codex native base install runs the agents generator pass"
-expected_last_step="[6/6]"
-repo_codex_native && expected_last_step="[5/5]"
-last_step="$(grep -oE '\[[0-9]+/[0-9]+\]' <<< "${out}" | tail -n 1)"
-if [[ "${last_step}" == "${expected_last_step}" ]]; then ok "codex native base install numbers its steps to the total"; else ko "codex native base install numbers its steps to the total" "last step: ${last_step}"; fi
+install_must_succeed "${home}" sync --target codex --intent skills
+assert_contains "$(cat "${home}/claude-calls.log")" "codex plugin add ycc@ycc --json" "codex skills intent installs ycc@ycc"
+if [[ ! -e "${home}/.codex/skills" ]]; then ok "codex skills intent copies no standalone skills"; else ko "codex skills intent copies no standalone skills"; fi
+install_must_succeed "$(new_home)" install --target codex --only skills
+assert_contains "${INSTALL_OUT}" "step 'skills' is not supported by target 'codex'" "codex no longer has a standalone skills step"
 
-install_must_succeed "${home}" remove --target codex --intent base
-if [[ "$(find "${home}/.codex/agents" -mindepth 1 -maxdepth 1 -printf '%f\n')" == "mine.toml" ]]; then ok "codex base remove after install keeps only user agents"; else ko "codex base remove after install keeps only user agents"; fi
-assert_not_contains "$(cat "${home}/.config/ycc/installed-units.json" 2>/dev/null)" ".codex/agents" "codex base remove forgets the tracked agents"
-
-# Upgrade over an older untracked mirror (the pre-tracking rsync flow).
+# The agents step mirrors only the custom agents; nothing native runs.
 home="$(new_home)"
-mkdir -p "${home}/.codex/agents"
-cp -R "${REPO_ROOT}/.codex-plugin/agents/." "${home}/.codex/agents/"
-install_must_succeed "${home}" install --target codex --only base --skills-home native
-out="${INSTALL_OUT}"
-assert_not_contains "${out}" "refusing to replace" "codex native base install adopts an older untracked mirror"
+install_must_succeed "${home}" sync --target codex --intent agents
+if [[ ! -e "${home}/claude-calls.log" ]]; then ok "codex agents intent runs no codex CLI"; else ko "codex agents intent runs no codex CLI"; fi
+if [[ -n "$(find "${home}/.codex/agents" -maxdepth 1 -name '*.toml')" ]]; then ok "codex agents intent installs the custom agents"; else ko "codex agents intent installs the custom agents"; fi
+install_must_succeed "${home}" remove --target codex --intent agents
+if [[ -z "$(find "${home}/.codex/agents" -mindepth 1 2>/dev/null)" ]]; then ok "codex agents remove retracts the tracked agents"; else ko "codex agents remove retracts the tracked agents"; fi
 
 echo
+echo "== install.sh: codex native mcp (stub Codex CLI) =="
 
-echo "== install.sh remove: codex base =="
+home="$(new_home)"
+install_must_succeed "${home}" sync --target codex --intent mcp
+calls="$(cat "${home}/claude-calls.log")"
+assert_contains "${calls}" "codex plugin add ycc-mcp@ycc --json" "codex mcp intent adds ycc-mcp@ycc"
+assert_not_contains "${calls}" "codex plugin add ycc@ycc" "codex mcp intent does not add ycc@ycc"
+config="$(cat "${home}/.codex/config.toml")"
+assert_contains "${config}" '[plugins."ycc-mcp@ycc"]' "codex mcp intent enables ycc-mcp@ycc"
+assert_not_contains "${config}" '[mcp_servers.' "codex mcp intent merges no [mcp_servers] tables"
+if [[ ! -e "${home}/project/.codex" ]]; then ok "codex mcp intent writes nothing at project scope"; else ko "codex mcp intent writes nothing at project scope"; fi
+: > "${home}/claude-calls.log"
+install_must_succeed "${home}" remove --target codex --intent mcp
+calls="$(cat "${home}/claude-calls.log")"
+assert_contains "${calls}" "codex plugin remove ycc-mcp@ycc" "codex mcp remove uninstalls ycc-mcp@ycc"
+assert_not_contains "${calls}" "codex plugin remove ycc@ycc" "codex mcp remove leaves ycc@ycc alone"
+assert_not_contains "$(cat "${home}/.codex/config.toml" 2>/dev/null)" 'ycc-mcp@ycc' "codex mcp remove retracts the enablement"
 
-if ! repo_codex_native; then
+# The mcp intent beside base is the base install (both packages, once).
+home="$(new_home)"
+install_must_succeed "${home}" sync --target codex --intent base,mcp
+count="$(grep -c 'codex plugin add ycc-mcp@ycc' "${home}/claude-calls.log")"
+if [[ "${count}" == "1" ]]; then ok "codex base+mcp adds ycc-mcp@ycc once"; else ko "codex base+mcp adds ycc-mcp@ycc once" "${count}"; fi
+
+out="$(run_install "$(new_home)" sync --target codex --intent mcp --project)"
+assert_contains "${out}" "--project is not supported by step 'mcp' for target 'codex'" "codex rejects project-scope mcp"
+if run_install "$(new_home)" install --target codex --mcps github >/dev/null; then ko "codex rejects --mcps"; else ok "codex rejects --mcps"; fi
+
+echo
+echo "== install.sh: codex without the plugin CLI fails clearly =="
+
+STUB_BIN="${codex_missing_bin}"
+for intent in base mcp; do
     home="$(new_home)"
-    mkdir -p "${home}/.codex/plugins/cache/local-ycc-plugins/ycc/skills" "${home}/.agents/plugins" "${home}/.codex/agents"
-    ln -s "${REPO_REAL}/.codex-plugin/ycc" "${home}/.codex/plugins/ycc"
-    ln -s "${REPO_REAL}/.codex-plugin/ycc" "${home}/.agents/plugins/ycc"
-    cp -R "${REPO_ROOT}/.codex-plugin/agents/." "${home}/.codex/agents/"
-    echo 'name = "mine"' > "${home}/.codex/agents/mine.toml"
-    cat > "${home}/.agents/plugins/marketplace.json" <<'JSON'
+    before="$(find "${home}" | sort)"
+    if out="$(run_install "${home}" sync --target codex --intent "${intent}")"; then
+        ko "codex ${intent} without the plugin CLI fails"
+    else
+        ok "codex ${intent} without the plugin CLI fails"
+    fi
+    assert_contains "${out}" "needs the Codex CLI with 'codex plugin' (Codex >= 0.160)" "codex ${intent} names the missing Codex CLI"
+    if [[ "$(find "${home}" | sort)" == "${before}" ]]; then ok "codex ${intent} without the CLI writes nothing"; else ko "codex ${intent} without the CLI writes nothing"; fi
+done
+STUB_BIN="${codex_native_bin}"
+
+echo
+echo "== install.sh: codex base retires the legacy install =="
+
+# codex_legacy_fixture <home> — what the retired local-ycc-plugins installer
+# left: links, flat cache, catalog entry, enablement leaf, the managed
+# [mcp_servers] group and standalone skills; plus user state that must survive.
+codex_legacy_fixture() {
+    local h="$1"
+    mkdir -p "${h}/.codex/plugins/cache/local-ycc-plugins" "${h}/.agents/plugins" "${h}/.codex/agents"
+    ln -s "${REPO_ROOT}/.codex-plugin/ycc" "${h}/.codex/plugins/ycc"
+    ln -s "${REPO_ROOT}/.codex-plugin/ycc" "${h}/.agents/plugins/ycc"
+    cp -R "${REPO_ROOT}/.codex-plugin/ycc" "${h}/.codex/plugins/cache/local-ycc-plugins/ycc"
+    printf 'name = "mine"\n' > "${h}/.codex/agents/mine.toml"
+    cat > "${h}/.codex/config.toml" <<'TOML'
+# my settings
+[plugins."ycc@local-ycc-plugins"]
+enabled = true
+[plugins."mine@other"]
+enabled = true
+TOML
+    cat > "${h}/.agents/plugins/marketplace.json" <<'JSON'
 {
   "name": "local-ycc-plugins",
   "interface": { "displayName": "Local YCC Plugins" },
-  "plugins": [{ "name": "ycc", "source": { "source": "local", "path": "./plugins/ycc" } }, { "name": "other" }]
+  "plugins": [
+    {
+      "name": "ycc",
+      "source": { "source": "local", "path": "./.agents/plugins/ycc" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
 }
 JSON
-    install_must_succeed "${home}" remove --target codex --intent base
-    assert_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "codex plugin remove ycc@local-ycc-plugins" "codex base remove uninstalls through the codex CLI"
-    for f in .codex/plugins/ycc .agents/plugins/ycc .codex/plugins/cache/local-ycc-plugins; do
-        if [[ ! -e "${home}/${f}" && ! -L "${home}/${f}" ]]; then ok "codex base remove cleans ${f}"; else ko "codex base remove cleans ${f}"; fi
-    done
-    if [[ "$(find "${home}/.codex/agents" -mindepth 1 -maxdepth 1 -printf '%f\n')" == "mine.toml" ]]; then ok "codex base remove keeps only user agents"; else ko "codex base remove keeps only user agents"; fi
-    merged="$(cat "${home}/.agents/plugins/marketplace.json")"
-    assert_contains "${merged}" '"other"' "codex base remove keeps other marketplace plugins"
-    assert_not_contains "${merged}" '"ycc"' "codex base remove drops the ycc marketplace entry"
-
-    home="$(new_home)"
-    mkdir -p "${home}/.agents/plugins"
-    cat > "${home}/.agents/plugins/marketplace.json" <<'JSON'
-{ "name": "local-ycc-plugins", "interface": { "displayName": "Local YCC Plugins" }, "plugins": [{ "name": "ycc" }] }
-JSON
-    install_must_succeed "${home}" remove --target codex --intent base
-    if [[ ! -e "${home}/.agents/plugins/marketplace.json" ]]; then ok "codex base remove deletes a marketplace left empty"; else ko "codex base remove deletes a marketplace left empty"; fi
-
-    home="$(new_home)"
-    mkdir -p "${home}/.codex/plugins"
-    ln -s /elsewhere "${home}/.codex/plugins/ycc"
-    install_must_succeed "${home}" remove --target codex --intent base
-    out="${INSTALL_OUT}"
-    if [[ -L "${home}/.codex/plugins/ycc" ]]; then ok "codex base remove keeps a foreign link"; else ko "codex base remove keeps a foreign link"; fi
-else
-    skip_listed "codex legacy base remove cleanup"
-fi
-
-# Codex plugin install through the CLI (lib level; the full base step runs
-# the generators). The legacy flat cache must go so Codex's versioned
-# snapshot is the only copy.
-home="$(new_home)"
-mkdir -p "${home}/.codex/plugins/cache/local-ycc-plugins/ycc/.codex-plugin" "${home}/.agents/plugins"
-echo '{ "name": "local-ycc-plugins", "plugins": [] }' > "${home}/.agents/plugins/marketplace.json"
-out="$(cd "${home}" && HOME="${home}" PATH="${STUB_BIN}:${PATH}" CLAUDE_STUB_LOG="${home}/claude-calls.log" bash -c '
-    info() { echo "[ok] $1"; }; warn() { echo "[!!] $1"; }; err() { echo "[err] $1"; }
-    SCRIPT_DIR="$1"; source "$1/scripts/lib/install/targets/codex.sh"; install_codex_plugin' _ "${REPO_ROOT}" 2>&1)"
-assert_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "codex plugin add ycc@local-ycc-plugins" "codex base installs ycc through the codex CLI"
-if [[ ! -e "${home}/.codex/plugins/cache/local-ycc-plugins/ycc" ]]; then ok "codex base drops the legacy flat cache"; else ko "codex base drops the legacy flat cache" "${out}"; fi
-assert_contains "$(cat "${REPO_ROOT}/scripts/lib/install/targets/codex.sh")" 'merge_codex_marketplace_json "local" "./.agents/plugins/ycc"' "codex marketplace path resolves from the marketplace root"
-
-echo
-
-echo "== install.sh: codex slices =="
+    HOME="${h}" YCC_MANAGED_CONFIG_STATE="${h}/.config/ycc/managed-config-state.json" \
+        python3 "${REPO_ROOT}/scripts/merge_managed_config.py" --profile codex-config \
+        --source "${REPO_ROOT}/.codex-plugin/config/mcp-servers.json" --destination "${h}/.codex/config.toml" --groups mcp >/dev/null \
+        || { ko "codex legacy fixture: mcp merge"; exit 1; }
+    HOME="${h}" YCC_MANAGED_CONFIG_STATE="${h}/.config/ycc/managed-config-state.json" \
+        python3 "${REPO_ROOT}/scripts/install_slices.py" install --target codex --slice skills >/dev/null \
+        || { ko "codex legacy fixture: skills slice"; exit 1; }
+}
 
 home="$(new_home)"
-HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/.config/ycc/managed-config-state.json" \
-    python3 "${REPO_ROOT}/scripts/install_slices.py" install --target codex --slice skills >/dev/null
-if [[ -f "${home}/.codex/skills/git-workflow/SKILL.md" && -d "${home}/.codex/skills/_shared/scripts" ]]; then ok "codex skills slice installs into ~/.codex/skills"; else ko "codex skills slice installs into ~/.codex/skills"; fi
-if [[ ! -e "${home}/.codex/plugins" ]]; then ok "codex skills slice links no plugin"; else ko "codex skills slice links no plugin"; fi
-assert_contains "$(cat "${home}/.codex/skills/releaser/agents/openai.yaml")" 'allow_implicit_invocation: false' "codex slice copies nested releaser invocation policy"
-if [[ ! -e "${home}/.codex/skills/init/agents/openai.yaml" ]]; then ok "codex slice keeps init model-invocable"; else ko "codex slice keeps init model-invocable"; fi
-if ! grep -rq '[~]/.codex/plugins/ycc/s' "${home}/.codex/skills"; then ok "codex skills slice re-points plugin paths"; else ko "codex skills slice re-points plugin paths"; fi
-if ! grep -rq '\.\./\.\./\.\./shared/' "${home}/.codex/skills"; then ok "codex skills slice re-points relative shared paths"; else ko "codex skills slice re-points relative shared paths"; fi
+codex_legacy_fixture "${home}"
+legacy="$(codex_legacy_carriers "${home}")"
+assert_contains "${legacy}" "config.toml:ycc@local-ycc-plugins" "codex legacy fixture seeds the ycc@local-ycc-plugins leaf"
+assert_contains "${legacy}" "config.toml:mcp_servers" "codex legacy fixture seeds the [mcp_servers] group"
+printf '\nedited\n' >> "${home}/.codex/skills/git-workflow/SKILL.md"
+install_must_succeed "${home}" install --target codex --only base
+config="$(cat "${home}/.codex/config.toml")"
+assert_not_contains "${config}" 'ycc@local-ycc-plugins' "codex base cleanup retires the legacy ycc@local-ycc-plugins leaf"
+assert_not_contains "${config}" '[mcp_servers.' "codex base cleanup retires the legacy [mcp_servers] group"
+assert_contains "${config}" "# my settings" "codex base cleanup keeps TOML comments"
+assert_contains "${config}" 'mine@other' "codex base cleanup keeps foreign plugin tables"
+assert_contains "${config}" '[plugins."ycc@ycc"]' "codex base cleanup keeps the native enablement"
+for f in .codex/plugins/ycc .agents/plugins/ycc .codex/plugins/cache/local-ycc-plugins .agents/plugins/marketplace.json .codex/skills/init; do
+    if [[ ! -e "${home}/${f}" && ! -L "${home}/${f}" ]]; then ok "codex base cleanup retires ${f}"; else ko "codex base cleanup retires ${f}"; fi
+done
+assert_contains "$(cat "${home}/.codex/skills/git-workflow/SKILL.md")" "edited" "codex base cleanup keeps an edited standalone skill"
+assert_contains "$(cat "${home}/.codex/agents/mine.toml" 2>/dev/null)" 'name = "mine"' "codex base cleanup keeps user agents"
+config_before="$(cat "${home}/.codex/config.toml")"
+install_must_succeed "${home}" install --target codex --only base
+if [[ "$(cat "${home}/.codex/config.toml")" == "${config_before}" ]]; then ok "codex repeated base is config-stable"; else ko "codex repeated base is config-stable"; fi
 
-# Real generated Codex slice resolves top-level, nested, and prompt-template shared references.
-if python3 - "${REPO_ROOT}" <<'PY'
-import sys, tempfile
+# An edited catalog entry is user-owned: it stays, with the link it references.
+home="$(new_home)"
+codex_legacy_fixture "${home}"
+python3 - "${home}/.agents/plugins/marketplace.json" <<'PY'
+import json, sys
 from pathlib import Path
-
-repo = Path(sys.argv[1])
-sys.path.insert(0, str(repo / "scripts"))
-import generate_codex_skills, install_slices
-
-with tempfile.TemporaryDirectory() as tmp:
-    tmp_path = Path(tmp)
-    plugin = tmp_path / "plugin"
-    home = tmp_path / "home with space"
-    generate_codex_skills.write_tree(plugin, dry_run=False)
-    entries = {p.name: p for p in sorted((plugin / "skills").iterdir())}
-    entries["_shared"] = plugin / "shared"
-    rewrites = install_slices.rewrites_for("codex", home)
-    pattern = install_slices.namespace_pattern("codex")
-    skills = home / ".codex/skills"
-    skills.mkdir(parents=True)
-    for name, src in entries.items():
-        install_slices.stage(name, src, skills, rewrites, pattern)
-    prompt = (skills / "plan-workflow/references/planning-agents.md").read_text()
-    assert "<installed ycc plugin root>" not in prompt, prompt
-    assert "Native prompt substitution" not in prompt, prompt
-    expected_ref = skills / "_shared/references/worktree-strategy.md"
-    assert str(expected_ref) in prompt and expected_ref.is_file()
-    for rel in ("prp-plan/SKILL.md", "orchestrate/references/dispatch-playbook.md"):
-        doc = skills / rel
-        text = doc.read_text()
-        assert "shared/references/" not in text.replace("_shared/references/", ""), rel
-        prefix = "../_shared/references/" if rel.endswith("SKILL.md") else "../../_shared/references/"
-        assert prefix in text and (doc.parent / prefix / "worktree-strategy.md").resolve().is_file(), rel
-    # A legacy render's quoted fallbacks use ${HOME} (SC2088) and must be re-pointed too.
-    create_pr = (skills / "git-workflow/scripts/create-pr.sh").read_text()
-    assert '"${HOME}/.codex/skills/_shared/scripts/lib/forge.sh"' in create_pr, create_pr
-    assert "${HOME}/.codex/plugins/ycc/" not in create_pr, create_pr
+p = Path(sys.argv[1]); data = json.loads(p.read_text())
+data["plugins"][0]["policy"]["installation"] = "ENABLED"
+p.write_text(json.dumps(data, indent=2) + "\n")
 PY
-then ok "codex slice resolves top-level, nested, and prompt-template shared references"; else ko "codex slice resolves top-level, nested, and prompt-template shared references"; fi
+install_must_succeed "${home}" install --target codex --only base
+assert_contains "$(cat "${home}/.agents/plugins/marketplace.json")" '"ENABLED"' "codex cleanup keeps an edited catalog entry"
+if [[ -L "${home}/.agents/plugins/ycc" ]]; then ok "codex cleanup keeps the link a retained entry references"; else ko "codex cleanup keeps the link a retained entry references"; fi
 
-# Codex slices are standalone: removing them never touches the plugin.
+# An exact pre-rename repo-mode entry is still the installer's own.
 home="$(new_home)"
-mkdir -p "${home}/.agents/plugins" "${home}/.codex/agents" "${home}/.codex/plugins"
-ln -s "${REPO_REAL}/.codex-plugin/ycc" "${home}/.codex/plugins/ycc"
-cp -R "${REPO_ROOT}/.codex-plugin/agents/." "${home}/.codex/agents/"
-echo 'name = "mine"' > "${home}/.codex/agents/mine.toml"
-echo '{ "name": "local-ycc-plugins", "plugins": [{ "name": "ycc" }] }' > "${home}/.agents/plugins/marketplace.json"
-install_must_succeed "${home}" remove --target codex --intent agents,skills
-if [[ "$(find "${home}/.codex/agents" -mindepth 1 -printf '%f\n')" == "mine.toml" ]]; then ok "codex agents remove keeps only user agents"; else ko "codex agents remove keeps only user agents"; fi
-if [[ -L "${home}/.codex/plugins/ycc" ]]; then ok "codex slice remove keeps the plugin link"; else ko "codex slice remove keeps the plugin link"; fi
-assert_contains "$(cat "${home}/.agents/plugins/marketplace.json")" '"ycc"' "codex slice remove keeps the marketplace entry"
+codex_legacy_fixture "${home}"
+python3 - "${home}/.agents/plugins/marketplace.json" <<'PY'
+import json, sys
+from pathlib import Path
+p = Path(sys.argv[1]); data = json.loads(p.read_text())
+data["plugins"][0]["source"] = {"source": "git-subdir", "url": "https://github.com/yandy-r/claude-plugins.git", "path": "./.codex-plugin/ycc", "ref": "main"}
+data["plugins"].append({"name": "other"})
+p.write_text(json.dumps(data, indent=2) + "\n")
+PY
+install_must_succeed "${home}" install --target codex --only base
+catalog="$(cat "${home}/.agents/plugins/marketplace.json")"
+assert_not_contains "${catalog}" 'yandy-r/claude-plugins' "codex cleanup retires an exact pre-rename repo entry"
+assert_contains "${catalog}" '"other"' "codex cleanup keeps other catalog plugins"
+
+# The mcp step alone retires only the legacy [mcp_servers] group.
+home="$(new_home)"
+codex_legacy_fixture "${home}"
+install_must_succeed "${home}" sync --target codex --intent mcp
+config="$(cat "${home}/.codex/config.toml")"
+assert_not_contains "${config}" '[mcp_servers.' "codex mcp cleanup retires the legacy [mcp_servers] group"
+assert_contains "${config}" 'ycc@local-ycc-plugins' "codex mcp cleanup keeps legacy ycc until ycc@ycc is installed"
+if [[ -L "${home}/.codex/plugins/ycc" ]]; then ok "codex mcp cleanup keeps the legacy plugin link"; else ko "codex mcp cleanup keeps the legacy plugin link"; fi
+
+# remove --intent base retires the legacy leftovers too (no native proof needed).
+home="$(new_home)"
+codex_legacy_fixture "${home}"
+install_must_succeed "${home}" remove --target codex --intent base
+legacy="$(codex_legacy_carriers "${home}")"
+if [[ "${legacy}" == ".codex/skills" || -z "${legacy}" ]]; then ok "codex base remove retires the legacy install"; else ko "codex base remove retires the legacy install" "${legacy}"; fi
+assert_contains "$(cat "${home}/.codex/config.toml")" 'mine@other' "codex base remove keeps foreign plugin tables"
+if [[ -f "${home}/.codex/agents/mine.toml" ]]; then ok "codex base remove keeps user agents beside the legacy cleanup"; else ko "codex base remove keeps user agents beside the legacy cleanup"; fi
+
+# A dry-run base remove previews the cleanup without touching anything.
+home="$(new_home)"
+codex_legacy_fixture "${home}"
+before="$(find "${home}" -printf '%p %s %l\n' | sort)"
+install_must_succeed "${home}" remove --target codex --intent base --dry-run
+if [[ "$(find "${home}" -printf '%p %s %l\n' | sort)" == "${before}" ]]; then ok "codex dry-run base remove changes nothing"; else ko "codex dry-run base remove changes nothing"; fi
+assert_contains "${INSTALL_OUT}" "would remove" "codex dry-run base remove previews the legacy cleanup"
+
+STUB_BIN="${codex_native_saved_stub}"
 
 echo
-
 echo "== install.sh rules: codex links only AGENTS.md, legacy CLAUDE.md link removable =="
 
 home="$(new_home)"
@@ -296,208 +429,6 @@ assert_contains "${out}" "refusing to replace user-authored rules file" "codex r
 assert_contains "$(cat "${home}/.codex/AGENTS.md")" "# mine" "codex rules keeps the real AGENTS.md"
 
 echo
-echo "== install.sh: listed Codex base installs both native packages =="
-
-# Flip only a throwaway checkout; production manifest and generated bytes stay
-# unlisted. The same full installer harness exercises local/repo and --package.
-listed_repo="${SANDBOX_ROOT}/codex-listed-repo"
-rsync -a --exclude .git --exclude .omp --exclude node_modules "${REPO_ROOT}/" "${listed_repo}/" || exit 1
-python3 - "${listed_repo}/ycc/settings/packages.json" <<'PY' || exit 1
-import json
-import sys
-from pathlib import Path
-path = Path(sys.argv[1])
-model = json.loads(path.read_text())
-for package in ("ycc", "ycc-mcp"):
-    model["packages"][package]["runtimes"]["codex"]["listed"] = True
-path.write_text(json.dumps(model, indent=2) + "\n")
-PY
-python3 "${listed_repo}/scripts/generate_codex_plugin.py" >/dev/null || exit 1
-python3 "${listed_repo}/scripts/validate_codex_native.py" >/dev/null || exit 1
-listed_install_saved="${INSTALL}"
-listed_stub_saved="${STUB_BIN}"
-INSTALL="${listed_repo}/install.sh"
-export CODEX_LISTED_FIXTURE="${listed_repo}"
-listed_cli_bin="${SANDBOX_ROOT}/listed-cli-bin"
-listed_fallback_bin="${SANDBOX_ROOT}/listed-fallback-bin"
-mkdir -p "${listed_cli_bin}" "${listed_fallback_bin}"
-printf '#!/usr/bin/env bash\nexit 1\n' > "${listed_fallback_bin}/codex"
-cat > "${listed_cli_bin}/codex" <<'PY'
-#!/usr/bin/env python3
-import json
-import os
-import shutil
-import sys
-import tomllib
-from pathlib import Path
-args = sys.argv[1:]
-if "--help" in args:
-    sys.exit(0)
-home = Path.home()
-root = Path(os.environ["CODEX_LISTED_FIXTURE"])
-with (home / "claude-calls.log").open("a") as log:
-    log.write("codex " + " ".join(args) + "\n")
-config = home / ".codex/config.toml"
-if args[:3] == ["plugin", "marketplace", "add"]:
-    text = config.read_text() if config.exists() else ""
-    if "ycc" not in tomllib.loads(text).get("marketplaces", {}):
-        source = args[3]
-        kind = "git" if source.startswith("https:") else "local"
-        text += '\n[marketplaces.ycc]\nsource_type = ' + json.dumps(kind) + '\nsource = ' + json.dumps(source) + '\n'
-        if kind == "git":
-            text += 'ref = "main"\n'
-        config.write_text(text)
-elif args[:2] == ["plugin", "add"]:
-    package = args[2].split("@")[0]
-    source = root / ".codex-plugin" / package
-    version = json.loads((source / ".codex-plugin/plugin.json").read_text())["version"]
-    cache = home / ".codex/plugins/cache/ycc" / package / version
-    if cache.exists():
-        shutil.rmtree(cache)
-    shutil.copytree(source, cache)
-    print(json.dumps({"pluginId": args[2], "name": package, "marketplaceName": "ycc", "version": version, "installedPath": str(cache), "authPolicy": "ON_INSTALL"}))
-PY
-chmod +x "${listed_cli_bin}/codex" "${listed_fallback_bin}/codex"
-
-for delivery in cli fallback; do
-    if [[ "${delivery}" == cli ]]; then STUB_BIN="${listed_cli_bin}"; else STUB_BIN="${listed_fallback_bin}"; fi
-    for mode in local repo; do
-        for selection in base package; do
-            home="$(new_home)"
-            cat > "${home}/.codex/config.toml" <<'TOML'
-# keep my config
-[plugins."mine@foreign"]
-enabled = false
-[marketplaces.foreign]
-source_type = "local"
-source = "/foreign/source"
-TOML
-            mkdir -p "${home}/.agents/plugins" "${home}/.codex/plugins/cache/foreign/mine/1"
-            printf '{"name":"foreign","plugins":[{"name":"mine","custom":true}]}\n' > "${home}/.agents/plugins/marketplace.json"
-            personal_before="$(cat "${home}/.agents/plugins/marketplace.json")"
-            printf 'foreign\n' > "${home}/.codex/plugins/cache/foreign/mine/1/sentinel"
-            listed_args=(--only "base,settings")
-            [[ "${selection}" == package ]] && listed_args=(--package ycc)
-            install_must_succeed "${home}" install --target codex "${listed_args[@]}" --mode "${mode}" --skills-home native
-            assert_contains "${INSTALL_OUT}" "migrate --target codex" "listed ${delivery}/${mode}/${selection} explains explicit legacy retirement"
-            [[ "$(cat "${home}/.agents/plugins/marketplace.json")" == "${personal_before}" ]] && ok "listed ${delivery}/${mode}/${selection} preserves personal catalog" || ko "listed ${delivery}/${mode}/${selection} preserves personal catalog"
-            if python3 - "${home}" "${listed_repo}" <<'PY'
-import json
-import sys
-import tomllib
-from pathlib import Path
-home, root = map(Path, sys.argv[1:])
-sys.path.insert(0, str(root / "scripts"))
-from codex_install import inventory
-config = tomllib.loads((home / ".codex/config.toml").read_text())
-assert config["plugins"]["mine@foreign"]["enabled"] is False
-assert config["marketplaces"]["foreign"]["source"] == "/foreign/source"
-assert "ycc@local-ycc-plugins" not in config["plugins"]
-for package in ("ycc", "ycc-mcp"):
-    assert config["plugins"][f"{package}@ycc"]["enabled"] is True
-    source = root / ".codex-plugin" / package
-    manifest = json.loads((source / ".codex-plugin/plugin.json").read_text())
-    cache = home / ".codex/plugins/cache/ycc" / package / manifest["version"]
-    assert inventory(cache) == inventory(source)
-    if package == "ycc-mcp":
-        assert manifest["mcpServers"] == "./.mcp.json"
-        assert json.loads((cache / ".mcp.json").read_text())["mcpServers"]
-assert not (home / ".codex/plugins/ycc").exists()
-assert not (home / ".agents/plugins/ycc").exists()
-PY
-            then ok "listed ${delivery}/${mode}/${selection} enables complete skills + MCP snapshots and keeps foreign config"; else ko "listed ${delivery}/${mode}/${selection} enables complete skills + MCP snapshots and keeps foreign config"; fi
-            calls="$(cat "${home}/claude-calls.log" 2>/dev/null)"
-            if [[ "${delivery}" == cli ]]; then
-                assert_contains "${calls}" "codex plugin add ycc@ycc" "listed CLI ${mode}/${selection} adds ycc"
-                assert_contains "${calls}" "codex plugin add ycc-mcp@ycc" "listed CLI ${mode}/${selection} adds ycc-mcp"
-                if [[ "${mode}" == repo ]]; then
-                    assert_contains "${calls}" "marketplace add https://github.com/yandy-r/ystack.git --ref main" "listed CLI repo registers native git marketplace"
-                else
-                    assert_contains "${calls}" "marketplace add ${listed_repo}" "listed CLI local registers checkout marketplace"
-                fi
-            else
-                assert_not_contains "${calls}" "codex plugin add" "listed fallback never calls plugin CLI"
-            fi
-            # Already enabled ycc@ycc must not be mistaken for a foreign native
-            # install and skip its MCP companion on --package reruns.
-            install_must_succeed "${home}" install --target codex "${listed_args[@]}" --mode "${mode}" --skills-home native
-            assert_contains "${INSTALL_OUT}" "Install native Codex packages" "listed ${delivery}/${mode}/${selection} refreshes own native pair"
-            install_must_succeed "${home}" remove --target codex --only base
-            if [[ ! -e "${home}/.codex/plugins/cache/ycc" ]]; then ok "listed ${delivery}/${mode}/${selection} remove retracts both owned caches"; else ko "listed ${delivery}/${mode}/${selection} remove retracts both owned caches"; fi
-            assert_not_contains "$(cat "${home}/.codex/config.toml")" 'plugins."ycc@ycc"' "listed ${delivery}/${mode}/${selection} remove retracts ycc enablement"
-            assert_not_contains "$(cat "${home}/.codex/config.toml")" 'plugins."ycc-mcp@ycc"' "listed ${delivery}/${mode}/${selection} remove retracts MCP enablement"
-            assert_not_contains "$(cat "${home}/.codex/config.toml")" '[marketplaces.ycc]' "listed ${delivery}/${mode}/${selection} remove retracts owned registration"
-            assert_contains "$(cat "${home}/.codex/plugins/cache/foreign/mine/1/sentinel")" foreign "listed ${delivery}/${mode}/${selection} remove keeps foreign cache"
-            [[ "$(cat "${home}/.agents/plugins/marketplace.json")" == "${personal_before}" ]] && ok "listed remove keeps foreign personal catalog" || ko "listed remove keeps foreign personal catalog"
-        done
-    done
-done
-
-# Native removal retains edits/unknown versions and the registration they need.
-STUB_BIN="${listed_fallback_bin}"
-home="$(new_home)"
-install_must_succeed "${home}" install --target codex --only base --skills-home native
-listed_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "${listed_repo}/.codex-plugin/ycc/.codex-plugin/plugin.json")"
-printf '\nuser edit\n' >> "${home}/.codex/plugins/cache/ycc/ycc/${listed_version}/skills/git-workflow/SKILL.md"
-mkdir -p "${home}/.codex/plugins/cache/ycc/ycc-mcp/foreign-version"
-printf 'foreign\n' > "${home}/.codex/plugins/cache/ycc/ycc-mcp/foreign-version/sentinel"
-install_must_succeed "${home}" remove --target codex --only base
-assert_contains "$(cat "${home}/.codex/plugins/cache/ycc/ycc/${listed_version}/skills/git-workflow/SKILL.md")" 'user edit' "listed remove preserves edited native snapshot"
-assert_contains "$(cat "${home}/.codex/plugins/cache/ycc/ycc-mcp/foreign-version/sentinel")" foreign "listed remove preserves unknown native version"
-assert_contains "$(cat "${home}/.codex/config.toml")" '[marketplaces.ycc]' "listed remove keeps registration needed by retained native snapshots"
-
-# A closed inline marketplaces table is valid TOML; the no-CLI fallback must
-# refuse rather than append text that breaks the whole config file.
-STUB_BIN="${listed_fallback_bin}"
-home="$(new_home)"
-mkdir -p "${home}/.codex"
-printf 'marketplaces = { foreign = { source_type = "local", source = "/foreign" } }\n' > "${home}/.codex/config.toml"
-inline_before="$(cat "${home}/.codex/config.toml")"
-out="$(run_install "${home}" install --target codex --only base --skills-home native)"
-if [[ "${out}" == *"closed inline table"* ]]; then ok "listed fallback refuses inline marketplaces table"; else ko "listed fallback refuses inline marketplaces table" "${out}"; fi
-[[ "$(cat "${home}/.codex/config.toml")" == "${inline_before}" ]] && ok "listed fallback leaves inline config unchanged" || ko "listed fallback leaves inline config unchanged"
-if ! [[ -e "${home}/.config/ycc/codex-native-install.json" ]]; then ok "listed fallback claims no ownership on refusal"; else ko "listed fallback claims no ownership on refusal"; fi
-
-# Native settings removal must forward --force to remove an edited managed leaf.
-home="$(new_home)"
-install_must_succeed "${home}" sync --target codex --intent settings --global
-python3 - "${home}/.codex/config.toml" <<'PY'
-import sys
-from pathlib import Path
-path = Path(sys.argv[1])
-text = path.read_text()
-text = "\n".join('model = "user-edited"' if line.startswith("model =") else line for line in text.splitlines()) + "\n"
-path.write_text(text)
-PY
-install_must_succeed "${home}" remove --target codex --intent settings --force --global
-assert_not_contains "$(cat "${home}/.codex/config.toml" 2>/dev/null)" 'user-edited' "listed settings removal forwards --force for edited leaf"
-
-# T10: project settings bypass codex_install.py's home-only settings route
-# regardless of whether native packages are listed in this checkout.
-for native_mode in native legacy; do
-    if [[ "${native_mode}" == legacy ]]; then
-        python3 - "${listed_repo}/ycc/settings/packages.json" <<'PY'
-import json
-import sys
-from pathlib import Path
-path = Path(sys.argv[1])
-model = json.loads(path.read_text())
-for package in ("ycc", "ycc-mcp"):
-    model["packages"][package]["runtimes"]["codex"]["listed"] = False
-path.write_text(json.dumps(model, indent=2) + "\n")
-PY
-    fi
-    home="$(new_home)"
-    install_must_succeed "${home}" sync --target codex --intent settings
-    assert_contains "$(cat "${home}/project/.codex/config.toml")" 'model = "gpt-6-astra"' "${native_mode} codex project settings use the project destination"
-    if [[ ! -e "${home}/.codex/config.toml" ]]; then ok "${native_mode} codex project settings bypass the global settings route"; else ko "${native_mode} codex project settings bypass the global settings route"; fi
-done
-
-INSTALL="${listed_install_saved}"
-STUB_BIN="${listed_stub_saved}"
-unset CODEX_LISTED_FIXTURE
-
-echo
 echo "== install.sh --plugins: codex =="
 
 # codex_plugin_tables <config.toml> — the [plugins.*] table names, sorted, comma-joined.
@@ -509,10 +440,8 @@ home="$(new_home)"
 install_must_succeed "${home}" list plugins --target codex
 codex_names="${INSTALL_OUT}"
 assert_contains $'\n'"${codex_names}"$'\n' $'\ncloudflare@openai-curated\n' "list plugins --target codex lists the plugin tables"
-if repo_codex_native; then
-    assert_not_contains "${codex_names}" "ycc@local-ycc-plugins" "native list plugins drops the legacy selector"
-    assert_contains $'\n'"${codex_names}"$'\n' $'\nycc@ycc\n' "native list plugins names ycc@ycc"
-fi
+assert_not_contains "${codex_names}" "ycc@local-ycc-plugins" "list plugins drops the legacy selector"
+assert_contains $'\n'"${codex_names}"$'\n' $'\nycc@ycc\n' "list plugins names ycc@ycc"
 
 home="$(new_home)"
 install_must_succeed "${home}" sync --target codex --intent plugins --plugins github@openai-curated --global
@@ -548,11 +477,5 @@ if cmp -s "${home}/before.toml" "${home}/project/.codex/config.toml"; then
 else
     ko "codex project remove keeps repo-equal keys ycc never wrote byte-identical"
 fi
-
-# The legacy hint counts settings state only: global mcp state must not trigger it.
-home="$(new_home)"
-install_must_succeed "${home}" sync --target codex --intent mcp --global
-install_must_succeed "${home}" sync --target codex --intent settings
-assert_not_contains "${INSTALL_OUT}" "settings now default to project scope" "codex: no legacy hint from global mcp-only state"
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then install_tests_finish; fi

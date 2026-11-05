@@ -38,30 +38,28 @@ so this target ships none of them. Install those per tool (`--target opencode`,
 
 ## Duplicate skills
 
-Every supported tool that reads `~/.agents/skills` (today: Codex, opencode,
-Cursor) also reads its own skill directory. Installing ycc skills natively for
-two or more of them, or for one of them alongside `agents`, lists every skill
-twice. The installer detects this for any such target:
+opencode reads `~/.agents/skills` and its own skill directory, so installing ycc
+skills natively for opencode alongside `agents` lists every skill twice. The
+installer detects this:
 
 ```bash
-./install.sh install --target claude,codex,opencode --only base
-# warning: codex and opencode will produce duplicate ycc skills ...
-#   [1] Recommended — skills → ~/.agents/skills; codex and opencode get only their non-skill pieces natively  (default)
+./install.sh install --target opencode,agents --only base
+# warning: opencode will duplicate the ycc skills in ~/.agents/skills (it reads that dir plus its own).
+#   [1] Recommended — skills → ~/.agents/skills; opencode get only their non-skill pieces natively  (default)
 #   [2] Keep as requested (native skills per tool; duplicates possible)
 #   [3] Abort
 ```
 
 The prompt appears only on a terminal. Answer it in advance with
 `--skills-home agents` (option 1) or `--skills-home native` (option 2). Without a
-terminal or the flag, the installer warns and continues as requested.
+terminal or the flag, the installer warns and continues as requested. With
+option 1, opencode installs `agents/` and `commands/` only (no `skills/`,
+`shared/`); its settings, rules and MCP are unchanged.
 
-Option 1 per target:
-
-- opencode: installs `agents/` and `commands/` only (no `skills/`, `shared/`).
-- cursor: installs `agents/` only.
-- codex: installs standalone agents in `~/.codex/agents/` instead of registering
-  the plugin (the plugin carries the skills).
-- settings, rules, MCP, and hooks are unchanged.
+Codex and Cursor also read `~/.agents/skills`, but their ycc skills come from
+the native `ycc@ycc` package, so `--skills-home` does not apply to them.
+Installing this target next to them lists each skill twice; skip it if you use
+only those tools.
 
 ### OMP
 

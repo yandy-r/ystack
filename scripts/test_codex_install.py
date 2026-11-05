@@ -39,6 +39,7 @@ class NativeInstallSafetyTests(unittest.TestCase):
             ("load_package_model", lambda: type("Model", (), {"packages": ()})()),
             ("validate", lambda *args, **kwargs: None),
             ("merge_config", lambda *args, **kwargs: None),
+            ("cli_available", lambda: True),
         ):
             patcher = patch.object(installer, name, value)
             patcher.start()
@@ -56,6 +57,20 @@ class NativeInstallSafetyTests(unittest.TestCase):
             (root / "payload").write_text(version)
 
     def cli(self, *args: str, **kwargs: object) -> str:
+        if args[:3] == ("plugin", "marketplace", "add"):
+            # Like the real CLI: register [marketplaces.ycc] in config.toml.
+            config = self.home / ".codex/config.toml"
+            config.parent.mkdir(parents=True, exist_ok=True)
+            git = args[3].startswith("https:")
+            entry = (
+                f'source_type = "git"\nsource = "{args[3]}"\nref = "main"\n'
+                if git
+                else f'source_type = "local"\nsource = "{args[3]}"\n'
+            )
+            text = config.read_text() if config.exists() else ""
+            if "ycc" not in tomllib.loads(text).get("marketplaces", {}):
+                config.write_text(text + f"\n[marketplaces.ycc]\n{entry}")
+            return ""
         if args[:2] != ("plugin", "add"):
             return ""
         package = args[2].split("@")[0]
@@ -86,14 +101,14 @@ class NativeInstallSafetyTests(unittest.TestCase):
 
     def test_cli_upgrade_rejects_edited_old_version_before_any_mutation(self) -> None:
         with patch.object(installer, "cli", side_effect=self.cli):
-            installer.install("local", True)
+            installer.install("local")
         old = self.home / ".codex/plugins/cache/ycc/ycc/1.0.0/payload"
         old.write_text("my edit")
         self.version("2.0.0")
         before = self.snapshot()
         with patch.object(installer, "cli") as cli:
             with self.assertRaisesRegex(ValueError, "edited or foreign"):
-                installer.install("local", True)
+                installer.install("local")
             cli.assert_not_called()
         self.assertEqual(self.snapshot(), before)
         installer.remove(False)
@@ -101,10 +116,10 @@ class NativeInstallSafetyTests(unittest.TestCase):
 
     def test_cli_upgrade_keeps_original_fingerprint_for_untouched_versions(self) -> None:
         with patch.object(installer, "cli", side_effect=self.cli):
-            installer.install("local", True)
+            installer.install("local")
             original = installer.load_state()["caches"]
             self.version("2.0.0")
-            installer.install("local", True)
+            installer.install("local")
         current = installer.load_state()["caches"]
         for key, fingerprint in original.items():
             self.assertEqual(current[key], fingerprint)
@@ -121,11 +136,11 @@ class NativeInstallSafetyTests(unittest.TestCase):
             return output
 
         with patch.object(installer, "cli", side_effect=self.cli):
-            installer.install("local", True)
+            installer.install("local")
         original = installer.load_state()["caches"]["plugins/cache/ycc/ycc/1.0.0"]
         self.version("2.0.0")
         with patch.object(installer, "cli", side_effect=editing_cli):
-            installer.install("local", True)
+            installer.install("local")
         self.assertEqual(installer.load_state()["caches"]["plugins/cache/ycc/ycc/1.0.0"], original)
         with patch.object(installer, "cli", return_value=""):
             installer.remove(True)
@@ -137,7 +152,7 @@ class NativeInstallSafetyTests(unittest.TestCase):
             return "not json"
 
         with patch.object(installer, "cli", side_effect=silent_cli):
-            installer.install("local", True)
+            installer.install("local")
         self.assertEqual(installer.load_state()["caches"], {})
 
     def test_cli_version_differing_from_checkout_refreshes_and_removes_cleanly(self) -> None:
@@ -157,7 +172,7 @@ class NativeInstallSafetyTests(unittest.TestCase):
 
         with patch.object(installer, "cli", side_effect=fetching_cli):
             for self.fetched in ("first", "second", "third"):
-                installer.install("repo", True)
+                installer.install("repo")
             for package in installer.MIGRATION_PACKAGES:
                 key = f"plugins/cache/ycc/{package}/1.0.1"
                 self.assertEqual(
@@ -168,16 +183,48 @@ class NativeInstallSafetyTests(unittest.TestCase):
         self.assertFalse((self.home / ".codex/plugins/cache/ycc").exists())
         self.assertFalse(installer.state_path().exists())
 
-    def test_fallback_refuses_closed_inline_marketplaces_without_mutation(self) -> None:
-        config = self.home / ".codex/config.toml"
-        config.parent.mkdir()
-        text = 'marketplaces = { foreign = { source_type = "local", source = "/foreign" } }\n'
-        config.write_text(text)
+    def test_missing_cli_fails_clearly_before_any_mutation(self) -> None:
         before = self.snapshot()
-        with self.assertRaisesRegex(ValueError, "closed inline table"):
-            installer.install("local", False)
+        with (
+            patch.object(installer, "cli_available", return_value=False),
+            patch.object(installer, "cli") as cli,
+            self.assertRaisesRegex(ValueError, r"Codex CLI with 'codex plugin' \(Codex >= 0.160\) is required"),
+        ):
+            installer.install("local")
+        cli.assert_not_called()
         self.assertEqual(self.snapshot(), before)
-        self.assertEqual(tomllib.loads(config.read_text())["marketplaces"]["foreign"]["source"], "/foreign")
+        self.assertFalse(installer.state_path().exists())
+
+    def test_mcp_only_install_adds_only_ycc_mcp_and_removal_keeps_ycc(self) -> None:
+        calls: list[tuple[str, ...]] = []
+
+        def recording_cli(*args: str, **kwargs: object) -> str:
+            calls.append(args)
+            return self.cli(*args, **kwargs)
+
+        with patch.object(installer, "cli", side_effect=recording_cli):
+            installer.install("local")
+            calls.clear()
+            installer.install("local", ("ycc-mcp",))
+            self.assertIn(("plugin", "add", "ycc-mcp@ycc", "--json"), calls)
+            self.assertNotIn(("plugin", "add", "ycc@ycc", "--json"), calls)
+            calls.clear()
+            installer.remove(True, ("ycc-mcp",))
+        self.assertIn(("plugin", "remove", "ycc-mcp@ycc"), calls)
+        self.assertNotIn(("plugin", "marketplace", "remove", "ycc"), calls)
+        state = installer.load_state()
+        self.assertEqual(state["packages"], ["ycc"])
+        self.assertEqual(list(state["caches"]), ["plugins/cache/ycc/ycc/1.0.0"])
+        self.assertIn("marketplace", state)
+        self.assertTrue((self.home / ".codex/plugins/cache/ycc/ycc/1.0.0").is_dir())
+        self.assertFalse((self.home / ".codex/plugins/cache/ycc/ycc-mcp").exists())
+
+    def test_selected_packages_rejects_unknown_names(self) -> None:
+        self.assertEqual(installer.selected_packages(None), installer.MIGRATION_PACKAGES)
+        self.assertEqual(installer.selected_packages("ycc-mcp,ycc"), ("ycc", "ycc-mcp"))
+        for names in ("ycc-hooks", ",", ""):
+            with self.subTest(names=names), self.assertRaisesRegex(ValueError, "unknown native Codex packages"):
+                installer.selected_packages(names)
 
     def test_verified_toml_rejects_invalid_text_without_writing(self) -> None:
         config = self.home / "config.toml"
@@ -187,7 +234,8 @@ class NativeInstallSafetyTests(unittest.TestCase):
         self.assertEqual(config.read_text(), "model = 'mine'\n")
 
     def test_remove_dry_run_previews_owned_caches_and_marketplace_without_writes(self) -> None:
-        installer.install("local", False)
+        with patch.object(installer, "cli", side_effect=self.cli):
+            installer.install("local")
         before = self.snapshot()
         paths = set(self.home.rglob("*"))
         out = io.StringIO()
@@ -208,7 +256,8 @@ class NativeInstallSafetyTests(unittest.TestCase):
         self.assertTrue(merge.call_args.kwargs["dry_run"])
 
     def test_remove_dry_run_retains_edited_and_foreign_snapshots(self) -> None:
-        installer.install("local", False)
+        with patch.object(installer, "cli", side_effect=self.cli):
+            installer.install("local")
         cache_root = self.home / ".codex/plugins/cache/ycc"
         (cache_root / "ycc/1.0.0/payload").write_text("my edit")
         foreign = cache_root / "ycc-mcp/9.9.9"
@@ -325,11 +374,11 @@ class NativeSettingsSelectionTests(unittest.TestCase):
         self.assertIn("does not support --dry-run", err)
         install.assert_not_called()
 
-    def test_remove_dry_run_is_forwarded(self) -> None:
-        with patch.object(installer, "remove") as remove:
-            code, _, err = self.run_main("remove", "--dry-run")
+    def test_remove_dry_run_and_packages_are_forwarded(self) -> None:
+        with patch.object(installer, "remove") as remove, patch.object(installer, "cli_available", return_value=False):
+            code, _, err = self.run_main("remove", "--packages", "ycc-mcp", "--dry-run")
         self.assertEqual(code, 0, err)
-        remove.assert_called_once_with(False, dry_run=True)
+        remove.assert_called_once_with(False, ("ycc-mcp",), dry_run=True)
 
     def test_without_entries_all_native_keys_are_selected(self) -> None:
         with patch.object(installer, "merge_config") as merge:

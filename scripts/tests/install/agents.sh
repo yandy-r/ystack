@@ -61,7 +61,7 @@ echo
 echo "== install.sh: --skills-home agents consolidates shared skills =="
 
 home="$(new_home)"
-install_must_succeed "${home}" install --target codex,opencode --only base --skills-home agents
+install_must_succeed "${home}" install --target opencode --only base --skills-home agents
 if [[ -f "${home}/.agents/skills/backport/SKILL.md" ]]; then ok "consolidated: skills land in ~/.agents/skills"; else ko "consolidated: skills land in ~/.agents/skills"; fi
 if [[ ! -d "${home}/.config/opencode/skills" ]]; then ok "consolidated: no skills under ~/.config/opencode"; else ko "consolidated: no skills under ~/.config/opencode"; fi
 if [[ ! -d "${home}/.config/opencode/shared" ]]; then ok "consolidated: no shared/ under ~/.config/opencode"; else ko "consolidated: no shared/ under ~/.config/opencode"; fi
@@ -70,20 +70,12 @@ if [[ -d "${home}/.config/opencode/agents" && -d "${home}/.config/opencode/comma
 else
     ko "consolidated: opencode keeps its agents + commands" "$(ls "${home}/.config/opencode" 2>/dev/null)"
 fi
-if [[ -n "$(find "${home}/.codex/agents" -mindepth 1 -print -quit 2>/dev/null)" ]]; then ok "consolidated: codex agents land in ~/.codex/agents"; else ko "consolidated: codex agents land in ~/.codex/agents"; fi
-stub_log="$(cat "${home}/claude-calls.log" 2>/dev/null || true)"
-assert_not_contains "${stub_log}" "plugin add" "consolidated: codex plugin is not registered"
-if [[ ! -L "${home}/.codex/plugins/ycc" && ! -e "${home}/.agents/plugins/marketplace.json" ]]; then
-    ok "consolidated: codex plugin link + marketplace entry skipped"
-else
-    ko "consolidated: codex plugin link + marketplace entry skipped"
-fi
 
 echo
 echo "== install.sh: --skills-home native keeps per-tool skills =="
 
 home="$(new_home)"
-install_must_succeed "${home}" install --target codex,opencode --only base --skills-home native
+install_must_succeed "${home}" install --target opencode --only base --skills-home native
 out="${INSTALL_OUT}"
 if [[ -d "${home}/.config/opencode/skills" ]]; then ok "native: opencode skills land in ~/.config/opencode/skills"; else ko "native: opencode skills land in ~/.config/opencode/skills"; fi
 if [[ ! -e "${home}/.agents/skills" ]]; then ok "native: nothing under ~/.agents/skills"; else ko "native: nothing under ~/.agents/skills"; fi
@@ -93,25 +85,17 @@ echo
 echo "== install.sh: non-TTY overlap warning =="
 
 home="$(new_home)"
-install_must_succeed "${home}" install --target codex,opencode --only base
+install_must_succeed "${home}" install --target agents,opencode --only base
 out="${INSTALL_OUT}"
-assert_contains "${out}" "codex and opencode" "non-TTY overlap warning names the duplicate pair"
+assert_contains "${out}" "opencode will duplicate the ycc skills in ~/.agents/skills" "non-TTY overlap warning names opencode"
 assert_contains "${out}" "pass --skills-home agents to consolidate" "non-TTY overlap warning suggests --skills-home agents"
 
 echo
-echo "== install.sh: cursor joins the overlap check =="
+echo "== install.sh: native-package targets stay out of the overlap check =="
 
 home="$(new_home)"
-install_must_succeed "${home}" install --target cursor,opencode --only base
-out="${INSTALL_OUT}"
-assert_contains "${out}" "cursor and opencode" "non-TTY overlap warning names cursor"
-home="$(new_home)"
-install_must_succeed "${home}" install --target cursor,codex,opencode --only base --skills-home agents
-if [[ -f "${home}/.agents/skills/backport/SKILL.md" && ! -d "${home}/.cursor/skills/backport" ]]; then
-    ok "consolidated: cursor skills go to ~/.agents/skills only"
-else
-    ko "consolidated: cursor skills go to ~/.agents/skills only"
-fi
+install_must_succeed "${home}" install --target agents,cursor,codex --only base
+assert_not_contains "${INSTALL_OUT}" "duplicate" "native-package targets ship no skill copies to overlap"
 
 echo
 echo "== contract: every target declares ~/.agents/skills readership =="

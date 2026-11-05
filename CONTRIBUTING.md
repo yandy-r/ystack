@@ -45,21 +45,25 @@ pre-commit uninstall
 ./scripts/install-lefthook.sh
 ```
 
-### Claude hooks symlink
+### Claude WorktreeCreate hook
 
-`~/.claude/settings.json` is already symlinked to `ycc/settings/settings.json` in this
-repo. The `WorktreeCreate` hook registered in that file points to
-`~/.claude/hooks/worktree-create.sh`, so you must also expose the hooks directory:
+The `WorktreeCreate` hook (`ycc/settings/hooks/worktree-create.sh`) ships in the
+native `ycc-hooks@ycc` plugin, generated into `packages/claude/ycc-hooks/` and
+registered there as `${CLAUDE_PLUGIN_ROOT}/hooks/worktree-create.sh`. Install it
+from the repo root:
 
 ```bash
-ln -s "$(pwd)/ycc/settings/hooks" ~/.claude/hooks
+./install.sh sync --target claude --intent hooks --global   # every project (user scope)
+./install.sh sync --target claude --intent hooks            # this project only
 ```
 
-Run this once from the repo root. After that, Claude Code will invoke
-`ycc/settings/hooks/worktree-create.sh` whenever it would otherwise create a worktree
-under `<repo>/.claude/worktrees/`, keeping it in that harness-managed root.
-Worktree creation requires the symlink above; without it, worktree creation
-fails with no fallback to default creation.
+It needs Claude Code 2.1.300 or later. Claude Code then invokes the hook whenever it
+would otherwise create a worktree, placing it under `<repo>/.claude/worktrees/`, the
+harness-managed root. A failing hook fails worktree creation, with no fallback to
+default creation. After editing the script, run `./scripts/sync.sh --only claude` and
+`/reload-plugins`. The install also retires the `~/.claude/hooks` link and
+settings hook older installers wrote (see
+[Automatic Legacy Cleanup](docs/install/README.md#automatic-legacy-cleanup)).
 See the Worktrees section of `ycc/settings/rules/CLAUDE.md` for placement policy.
 
 ## Repository Model
@@ -141,9 +145,9 @@ filesystem paths, worktrees, or plugin identities — and it does not rename the
 hosting repos, update remotes, or run sync. Regenerate bundles with
 `./scripts/sync.sh` after applying a reference flip.
 
-Codex migration recognizes the exact pre-rename repo-mode catalog entry as
-installer-owned alongside the current entry. Its historical URL in
-`scripts/install_migrate.py` is intentionally outside the rename allowlist;
+The automatic Codex legacy cleanup recognizes the exact pre-rename repo-mode
+catalog entry as installer-owned alongside the current entry. Its historical URL
+in `scripts/install_migrate.py` is intentionally outside the rename allowlist;
 edited and foreign catalog entries remain preserved.
 
 ## Structure Requirements
@@ -153,7 +157,7 @@ edited and foreign catalog entries remain preserved.
 - Codex generated plugin root: `.codex-plugin/ycc/`
 - Codex generated custom agents: `.codex-plugin/agents/`
 - Cursor generated packages: `packages/cursor/{ycc,ycc-rules,ycc-mcp,ycc-hooks}/` (all listed in the root `.cursor-plugin/marketplace.json`)
-- Cursor file-copy settings input: `packages/cursor/installer-fallback/config/cli-config.json`, generated from `ycc/settings/cursor/cli-config.json`
+- Cursor settings input: `packages/cursor/installer-fallback/config/cli-config.json`, generated from `ycc/settings/cursor/cli-config.json`
 - opencode generated bundle: `.opencode-plugin/` (skills, agents, commands, AGENTS.md, opencode.json)
 - OMP generated packages: `packages/omp/ycc/` with `{skills,agents,commands}/`, `packages/omp/ycc-mcp/` with `.mcp.json` (a byte copy of `mcp-configs/mcp.json`) and `packages/omp/ycc-rules/` with flat `rules/ycc-<family>-<stem>.md` (from `ycc/rules/` via `scripts/generate_omp_rules.py`), each with `.omp-plugin/plugin.json`, `.claude-plugin/plugin.json` and `package.json`; the root `.omp-plugin/marketplace.json` lists `ycc`, `ycc-mcp`, and `ycc-rules`. `install.sh install --target omp` (`scripts/omp_install.py`) exports the packages to a local `ycc` marketplace (`--mode local`, the default) or registers the repository catalog (`--mode repo`) and installs them through `omp plugin`; opt-in `--settings --global` and `--rules` merge `ycc/settings/omp/config.yml` and link `AGENTS.md` at user scope (`--settings` without `--global` is skipped; [`docs/install/omp.md`](docs/install/omp.md))
 - ycc ships no OMP hooks (`ycc-hooks` is excluded on OMP; herdr ships its own OMP integration); the only OMP code is the ycc agent scope guard (`scripts/omp_templates/scope-guard.ts`, tested by `scripts/test_omp_scope_guard.py`). `validate_omp_native.py` rejects any other OMP code surface and checks the hook verdict table.
@@ -200,9 +204,8 @@ the user may invoke them. Policy mapping: Cursor keeps `disable-model-invocation
 Codex writes `agents/openai.yaml` with `policy.allow_implicit_invocation: false`;
 opencode writes skill metadata `opencode/autoinvoke: 'false'`; the portable
 `agents` bundle omits it (no standard key). Cursor's native `ycc` package derives
-command files from user-invocable skills; the file-copy installer's `commands` intent
-installs owned wrappers into `~/.cursor/commands/`, and its optional `hooks` intent
-installs the `sessionStart` hook only. Native Cursor install is interactive (`/plugins`).
+command files from user-invocable skills, and `ycc-hooks` registers the
+`sessionStart` hook only. Native Cursor install is interactive (`/plugins`).
 Codex has no command layer. See
 `ycc/skills/_shared/references/target-capability-matrix.md` for the full matrix.
 

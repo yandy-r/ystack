@@ -16,8 +16,8 @@ codex plugin add ycc-mcp@ycc
 
 Pin a commit with `--ref <sha>` on the `marketplace add` command. Codex plugins
 cannot carry custom agents, `AGENTS.md`, or `config.toml` settings; those stay
-with `install.sh`. The per-package guide is
-[Codex native packages](v6/codex.md).
+with `install.sh`. Package IDs, the catalog shape and tested versions are in
+the [Codex package reference](v6/codex.md).
 
 From a checkout, one command installs both plugins and the custom agents:
 
@@ -28,14 +28,16 @@ From a checkout, one command installs both plugins and the custom agents:
 The default `base` step generates and validates the Codex bundle, syncs custom
 agents into `~/.codex/agents/`, registers this checkout as the Codex marketplace
 `ycc` (`codex plugin marketplace add`), and installs + enables `ycc@ycc` and
-`ycc-mcp@ycc` with `codex plugin add` (Codex 0.160+). Codex snapshots each
-plugin into `~/.codex/plugins/cache/ycc/<package>/<version>/`, so rerun the base
-step after regenerating the bundle.
+`ycc-mcp@ycc` with `codex plugin add`. It then runs the
+[legacy cleanup](README.md#automatic-legacy-cleanup), which retires what older
+installers wrote (the `ycc@local-ycc-plugins` install, its links, cache and
+catalog entry, `~/.codex/skills` copies, and merged `[mcp_servers.*]` tables)
+and always keeps `~/.codex/agents/`.
 
-An older install that used the `local-ycc-plugins` marketplace
-(`ycc@local-ycc-plugins`) is left untouched. Preview and then apply
-[`./install.sh migrate --target codex`](README.md#migrating-to-native-packages)
-to retire it; `~/.codex/agents/` is always kept.
+The Codex CLI 0.160 or later is required. A missing or older `codex` CLI is an
+error; the installer never copies plugin snapshots itself. Codex snapshots each
+plugin into `~/.codex/plugins/cache/ycc/<package>/<version>/`, so rerun the
+base step after regenerating the bundle.
 
 Restart Codex after the install.
 
@@ -44,7 +46,7 @@ Restart Codex after the install.
 For the full local Codex setup:
 
 ```bash
-./install.sh sync --target codex --intent base,settings,mcp,rules       # project settings
+./install.sh sync --target codex --intent base,settings,rules           # project settings
 ./install.sh sync --target codex --intent settings,plugins --global      # user config.toml + plugins
 ```
 
@@ -57,14 +59,13 @@ The step-flag `install` form is equivalent:
 
 Step behavior:
 
-| Step       | Effect                                                                                                                                                                                                                                                                                                                                                             |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `base`     | Generates and validates the Codex bundle, syncs custom agents from `.codex-plugin/agents/` into `~/.codex/agents/` (local mode; your own agents stay), registers the Codex marketplace `ycc`, and installs + enables `ycc@ycc` and `ycc-mcp@ycc`. Repo mode registers the Git marketplace and skips the agent sync. See [Local Vs Repo Mode](#local-vs-repo-mode). |
-| `skills`   | Generates the skills and installs each into `~/.codex/skills/<name>` (helpers in `~/.codex/skills/_shared`), with plugin paths re-pointed. No plugin link, cache or marketplace entry.                                                                                                                                                                             |
-| `agents`   | Generates the custom agents and installs each into `~/.codex/agents/<name>.toml`, leaving your own agents alone.                                                                                                                                                                                                                                                   |
-| `settings` | Default (project): merges the preference keys from `.codex-plugin/config/config.toml` into `<project>/.codex/config.toml`. With `--global`: merges every managed key into `~/.codex/config.toml`. Plugin enablement lives in the same file, so the `plugins` intent also maps here (`--global` only).                                                              |
-| `mcp`      | Merges `[mcp_servers.*]` from `.codex-plugin/config/config.toml` into `<project>/.codex/config.toml` (or `~/.codex/config.toml` with `--global`).                                                                                                                                                                                                                  |
-| `rules`    | Symlinks `.codex-plugin/config/default.rules` and `AGENTS.md` into `~/.codex/`; Codex reads `AGENTS.md`, not `CLAUDE.md`.                                                                                                                                                                                                                                          |
+| Step       | Effect                                                                                                                                                                                                                                                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base`     | Generates and validates the Codex bundle, syncs custom agents from `.codex-plugin/agents/` into `~/.codex/agents/` (local mode; your own agents stay), registers the Codex marketplace `ycc`, installs + enables `ycc@ycc` and `ycc-mcp@ycc`, then runs the legacy cleanup. The `skills` intent maps here. |
+| `agents`   | Generates the custom agents and installs each into `~/.codex/agents/<name>.toml`, leaving your own agents alone. Always the full set.                                                                                                                                                                      |
+| `mcp`      | `codex plugin add ycc-mcp@ycc` (user scope only; `--project` is an error).                                                                                                                                                                                                                                 |
+| `settings` | Default (project): merges the preference keys from `.codex-plugin/config/config.toml` into `<project>/.codex/config.toml`. With `--global`: merges every managed key into `~/.codex/config.toml`. Plugin enablement lives in the same file, so the `plugins` intent also maps here (`--global` only).      |
+| `rules`    | Symlinks `.codex-plugin/config/default.rules` and `AGENTS.md` into `~/.codex/`; Codex reads `AGENTS.md`, not `CLAUDE.md`.                                                                                                                                                                                  |
 
 Settings merge without rewriting the rest of TOML: comments, local trusted
 projects, account-specific connectors, tokens, and unknown tables stay intact.
@@ -93,12 +94,9 @@ written there.
 `.codex/config.toml` is usually committed and applies to everyone who trusts
 the project. Review the diff before committing, or keep these preferences
 global with `--global`. From `$HOME` (where the project file would be the user
-file) a default run skips the step with a notice. See
+file) a default run skips the step with a notice. A defaulted run warns while
+`~/.codex/config.toml` still holds ycc-managed keys. See
 [Project Vs Global Scope](README.md#project-vs-global-scope).
-
-> **Behavior change:** `settings` used to write only `~/.codex/config.toml`.
-> Pass `--global` to keep that; a defaulted run warns while
-> `~/.codex/config.toml` still holds ycc-managed keys.
 
 ## Global Rules
 
@@ -108,7 +106,7 @@ Codex loads global instructions from `~/.codex/AGENTS.md` (or an
 The installer uses the default home path, links the complete tool-neutral body
 as `AGENTS.md`, and does not alter overrides. `default.rules` is separate command
 approval policy. `CLAUDE.md` is not a native global filename: no new link is made.
-Existing legacy links stay in place until `remove --intent rules`, which removes
+Existing older links stay in place until `remove --intent rules`, which removes
 only links owned by this checkout, never real files or foreign links.
 
 ## Local Vs Repo Mode
@@ -122,10 +120,6 @@ Local mode is the default and is best for contributors:
 Local mode runs `codex plugin marketplace add <this checkout>`, installs
 `ycc@ycc` and `ycc-mcp@ycc` from the checkout's `.codex-plugin/ycc` and
 `.codex-plugin/ycc-mcp`, and syncs the custom agents into `~/.codex/agents/`.
-Codex snapshots each plugin into
-`~/.codex/plugins/cache/ycc/<package>/<version>/`. When the Codex CLI predates
-the plugin commands (before 0.160), the installer copies the same snapshots and
-writes `[marketplaces.ycc]` to `~/.codex/config.toml` itself.
 
 After editing source files under `ycc/`, regenerate the Codex bundle and rerun
 the base step to refresh the snapshots:
@@ -145,9 +139,8 @@ and installs the same two packages from it:
 ```
 
 Use repo mode for non-developer installs that should track the published
-repository. Repo mode does not sync custom agents on its own; add
-`--only agents` (or run local mode) for those. Without the Codex plugin CLI,
-repo mode falls back to this checkout's snapshot rather than fetching `main`.
+repository. Repo mode skips local generation and does not sync custom agents;
+add `--only agents` (or run local mode) for those.
 
 ## Selective Steps
 
@@ -155,19 +148,18 @@ Use `--only` to run exactly the listed steps:
 
 ```bash
 ./install.sh install --target codex --only base
+./install.sh install --target codex --only agents                  # just ~/.codex/agents
 ./install.sh install --target codex --only settings                # <project>/.codex/config.toml
 ./install.sh install --target codex --only settings --global       # ~/.codex/config.toml
 ./install.sh install --target codex --only rules
-./install.sh install --target codex --only settings,rules --global
-./install.sh install --target codex --only mcp                   # <project>/.codex/config.toml
-./install.sh install --target codex --only mcp --global          # ~/.codex/config.toml
-./install.sh remove --target codex --only mcp --global   # remove managed servers
+./install.sh install --target codex --only mcp                     # ycc-mcp@ycc
+./install.sh remove  --target codex --only mcp                     # codex plugin remove ycc-mcp@ycc
 ```
 
-Codex loads a project `.codex/config.toml` only when the project is trusted in
-`~/.codex/config.toml`. MCP servers moved from the `settings` step to the `mcp`
-step; pass `--global` to keep writing the user config. See
-[Project Vs Global Scope](README.md#project-vs-global-scope) and
+The skills, agents and MCP selection flags (`--skills`, `--agents`, `--mcps`,
+`--with-deps`, `--skills-home`) do not apply to Codex: `ycc@ycc` and
+`ycc-mcp@ycc` install whole, and the custom agents always ship as the full set.
+See [Project Vs Global Scope](README.md#project-vs-global-scope) and
 [Removing Installed Config](README.md#removing-installed-config).
 
 If you clear `~/.codex/plugins/cache/`, rerun the base step so
@@ -177,12 +169,9 @@ If you clear `~/.codex/plugins/cache/`, rerun the base step so
 ./install.sh install --target codex --only base
 ```
 
-Leftovers from a pre-v6 install (`ycc@local-ycc-plugins`, the
-`~/.codex/plugins/ycc/` link, the cache under
-`~/.codex/plugins/cache/local-ycc-plugins/ycc`, and
-`~/.agents/plugins/marketplace.json` entries) are not touched by `install`.
-Retire them with
-[`migrate --target codex`](README.md#migrating-to-native-packages).
+`remove --target codex --only base` removes `ycc@ycc`, `ycc-mcp@ycc`, the `ycc`
+marketplace, and only the custom agents ycc recorded in
+`~/.config/ycc/installed-units.json`. Your own agents and edited copies stay.
 
 ## Codex Desktop
 
@@ -225,9 +214,7 @@ directory as the Codex CLI/TUI.
 - Codex does not install this repository's custom slash-command layer. Use the
   bundled skills directly and Codex built-ins such as `/plan` and `/review`.
 - Native `ycc@ycc` skill bodies resolve bundled paths relative to each
-  `SKILL.md`. The `~/.codex/plugins/ycc/` symlink and the `local-ycc-plugins`
-  marketplace belong to pre-v6 installs; `./install.sh migrate --target codex`
-  retires them.
+  `SKILL.md`.
 - Agent shell scope is not enforced on Codex. A custom agent cannot narrow the
   shell to a command list: it inherits the parent session's sandbox, approval
   policy and command rules, and can only turn the shell off entirely. The fixer

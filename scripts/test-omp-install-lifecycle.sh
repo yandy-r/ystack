@@ -30,7 +30,7 @@ install shadows the user install; a project-scope disable survives a re-run; a n
 checkout upgrades the user install, then a --project re-run repairs the GC'd project
 cache (omp <18.13.0) or upgrades the intact project install (omp >=18.13.0) with disabled
 kept; remove --project then remove leave no plugin, registry, lock, link, cache, marketplace,
-state or export; migrate retires an `omp plugin link` of this checkout (dry-run keeps it);
+state or export; install retires an `omp plugin link` of this checkout automatically (dry-run keeps it);
 the core matrix again with OMP_PROFILE=work and with an XDG data root ($XDG_DATA_HOME/omp).
 --keep    Retain the sandbox and transcript (always retained when a check fails).
 EOF
@@ -389,33 +389,35 @@ listing list-absent-project "$proj"
 check absent-project "$checks" count "$root/logs/list-absent-project.stdout" ycc@ycc 0
 log 'PASS remove: --project keeps the marketplace for the user install; remove leaves no plugin, registry, lock, link, cache, ycc marketplace, state or export'
 
-# --- 7. Migrate an `omp plugin link` of this checkout ------------------------------------------
-# The link points into the sandbox checkout copy, so omp can never write the real repo.
+# --- 7. Install over an `omp plugin link` of this checkout ---------------------------------------
+# The link points into the sandbox checkout copy, so omp can never write the real repo. That
+# copy's install.sh owns the link (it resolves into its packages/omp/ycc), so it runs install.
 o link "$home" plugin link "$checkout/packages/omp/ycc"
 assert_rc 0 'plugin link'
 has link "Linked ycc from $checkout/packages/omp/ycc"
-ycc install-linked "$home" "$checkout" install --target omp
-[[ "$rc" != 0 ]] || die 'install over an omp plugin link must refuse'
-has install-linked 'runtime package ycc is linked (omp plugin link); run ./install.sh migrate --target omp'
-[[ ! -e "$(state_file)" ]] || die 'refused install wrote state'
-ycc migrate-dry "$home" "$checkout" migrate --target omp
-assert_rc 0 'migrate (dry-run)'
-has migrate-dry '[dry-run] would run: omp plugin uninstall ycc' '[dry-run] Would uninstall ycc'
+ycc linked-dry "$home" "$checkout" install --target omp --dry-run
+assert_rc 0 'install --dry-run over an omp plugin link'
+has linked-dry '[dry-run] would run: omp plugin uninstall ycc' '[dry-run] Would uninstall ycc' \
+  '[ok] would retire the ycc link; the native install follows'
+lacks linked-dry 'install\.sh migrate'
+[[ ! -e "$(state_file)" ]] || die 'install --dry-run over a link wrote state'
 listing list-linked "$home"
 check linked-proof "$checks" npm "$root/logs/list-linked.stdout" ycc present
-ycc migrate-apply "$home" "$checkout" migrate --target omp --apply
-assert_rc 0 'migrate --apply'
-has migrate-apply '[ok] omp plugin uninstall ycc' 'Uninstalled ycc' \
-  '[ok] run ./install.sh install --target omp to reinstall natively'
-listing list-unlinked "$home"
-check unlinked-proof "$checks" npm "$root/logs/list-unlinked.stdout" ycc absent
-ycc install-migrated "$home" "$repo" install --target omp
-assert_rc 0 'install after migrate'
-has install-migrated "[ok] ycc@ycc $version installed (user)"
-listing list-migrated "$home"
-check migrated-one "$checks" count "$root/logs/list-migrated.stdout" ycc@ycc 1
-check migrated-npm "$checks" npm "$root/logs/list-migrated.stdout" ycc absent
-log 'PASS migrate: install refuses over a checkout link; dry-run keeps the link; --apply unlinks it; install leaves exactly one ycc@ycc and no npm ycc'
+ycc install-linked "$home" "$checkout" install --target omp
+assert_rc 0 'install over an omp plugin link'
+has install-linked '[ok] omp plugin uninstall ycc' 'Uninstalled ycc' \
+  '[ok] retired the ycc link; the native install follows' "[ok] ycc@ycc $next installed (user)"
+lacks install-linked 'install\.sh migrate'
+listing list-relinked "$home"
+check relinked-one "$checks" count "$root/logs/list-relinked.stdout" ycc@ycc 1
+check relinked-npm "$checks" npm "$root/logs/list-relinked.stdout" ycc absent
+# Back to this checkout's version for the profile cases below.
+ycc relinked-remove "$home" "$checkout" remove --target omp --only base
+assert_rc 0 'remove after install over a link'
+ycc relinked-reinstall "$home" "$repo" install --target omp
+assert_rc 0 'reinstall from this checkout'
+has relinked-reinstall "[ok] ycc@ycc $version installed (user)"
+log 'PASS link: install --dry-run previews the link retirement and keeps it; install retires the link and leaves exactly one ycc@ycc and no npm ycc'
 
 # --- 8a. OMP_PROFILE=work: separate state, default profile untouched ---------------------------
 default_key=$home/.omp/agent

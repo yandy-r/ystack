@@ -210,6 +210,16 @@ The gates and feature switches are listed in
   Plugin-delivered instructions can use the verified context hook. Discovered global and
   ancestor `AGENTS.md` files remain supported.
 
+> **Update (2026-11-04, YAN-1962, v6.3.0):** the installer is native-only for Claude, Codex,
+> Cursor and OMP. `install`/`sync` install the native packages through each runtime's plugin
+> CLI (Claude `ycc@ycc`, `ycc-mcp@ycc`, `ycc-hooks@ycc`; Codex `ycc@ycc`, `ycc-mcp@ycc`;
+> Cursor marketplace registration plus the interactive `/plugins` step), and the file-copy
+> and managed-config routes those packages replace are removed. The `install.sh migrate`
+> command is gone: the same proof-based dedupe now runs automatically after a successful
+> native install and on `remove`, and never deletes user data. Installer-only artifacts
+> (settings, rules, statusline, Codex custom agents) and the opencode and `agents` file
+> copies are unchanged. The bullets above and the sections below record earlier states.
+
 ## Still absent
 
 > **Update (2026-10-18):** this section records the pre-flip state. `install.sh migrate` now

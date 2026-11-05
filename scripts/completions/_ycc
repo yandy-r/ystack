@@ -22,21 +22,19 @@ _ycc() {
         '(--global)--project[write into the current project]'
         '(--project)--global[write into user-global config]'
         '--force[let repo values win]'
-        '--dry-run[preview without writing (settings, rules, mcp; hooks on claude/cursor; base removal; all omp steps)]'
+        '--dry-run[preview without writing]'
         '--help[show help]'
     )
     local mode='--mode[marketplace source mode]:mode:(local repo)'
     local intent='--intent[what to sync]:intents:_values -s , intent base skills agents commands settings rules mcp hooks plugins mods'
     local only='--only[run only these steps]:steps:_values -s , step base dedupe skills agents commands settings rules mcp hooks mods'
-    local package='--package[install package closures]:packages:_values -s , package ycc ycc-mcp ycc-hooks ycc-rules'
+    local package='--package[install package closures]:packages:_values -s , package ycc ycc-mcp ycc-hooks ycc-rules ycc-all'
     local list_target='--target[targets to list for]:targets:_values -s , target claude cursor codex opencode agents omp all'
     # --<kind> selectors: one per kind from 'ycc list', names from 'ycc list <kind>'.
     local kind
     kinds=(${(f)"$(${_ycc_cmd} list 2>/dev/null)"})
     for kind in "${kinds[@]}"; do
         selectors+=("--${kind}[only these ${kind}]:${kind}:_ycc_list_names ${kind}")
-        # install keeps --hooks as its boolean "also link hooks" step flag.
-        [[ "${kind}" == hooks ]] || install_selectors+=("${selectors[-1]}")
     done
 
     if (( CURRENT == 2 )); then
@@ -45,7 +43,6 @@ _ycc() {
             'install:initial setup (base + opt-in steps)'
             'sync:sync intents to targets'
             'remove:remove installer-managed config'
-            'migrate:preview or apply native package migration'
             'cli:link install.sh onto PATH as ycc'
             'completion:print or install shell completion'
             'list:list selectable kinds or a kind'"'"'s names'
@@ -60,11 +57,6 @@ _ycc() {
     shift words
     (( CURRENT-- ))
     case "${sub}" in
-        migrate)
-            _arguments '--target[migration targets]:targets:_values -s , target claude codex cursor omp all' \
-                '--apply[apply the migration (default: dry-run)]' \
-                '--marketplace-source[eligible native Codex marketplace]:directory:_directories' '--help[show help]'
-            ;;
         cli)
             _arguments '--dir[install directory]:directory:_directories' '--force[replace existing]' '--help[show help]'
             ;;
@@ -78,9 +70,9 @@ _ycc() {
             _arguments '--shell[shell]:shell:(bash zsh fish)' '--install[install for the shell]' '--force[replace existing]' '--help[show help]'
             ;;
         install)
-            _arguments "${common[@]}" "${mode}" "${package}" "${only}" "${install_selectors[@]}" \
-                '--settings[also merge settings]' '--rules[also link rules]' \
-                '--mcp[also merge MCP servers]' '--hooks[also link hooks]' \
+            _arguments "${common[@]}" "${mode}" "${package}" "${only}" "${selectors[@]}" \
+                '--settings[also run the settings step]' '--rules[also run the rules step]' \
+                '--mcp[also run the mcp step]' '--hooks[also run the hooks step]' \
                 '--with-deps[also select ycc dependencies of --skills/--agents]'
             ;;
         sync)

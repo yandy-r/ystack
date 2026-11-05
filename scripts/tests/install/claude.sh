@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh tests — claude: settings merge, mods, local edits, remove, slices.
+# install.sh tests — claude: settings merge, mods, native plugins, remove, legacy cleanup.
 #
 # Runs alone (bash scripts/tests/install/claude.sh) or from scripts/test-install-sync.sh.
 # shellcheck source=scripts/tests/install/lib.sh
@@ -472,15 +472,6 @@ assert_contains "${calls}" "plugin uninstall ycc-hooks@ycc --scope project" "pro
 assert_not_contains "${calls}" "plugin marketplace remove ycc --scope project" "project hooks keeps a marketplace another plugin uses"
 assert_contains "${INSTALL_OUT}" "other ycc plugins are still enabled" "project hooks explains marketplace retention"
 
-home="$(new_home)"
-out="$(run_install "${home}" sync --target claude --intent hooks --hooks WorktreeCreate)"
-assert_contains "${out}" "--hooks <events> narrows settings.json hook events" "project hooks rejects event selection"
-assert_contains "${out}" "use --global, or drop --hooks" "project hooks selection error suggests global scope"
-if [[ ! -e "${home}/.claude/settings.json" && ! -e "${home}/.claude/hooks" && ! -e "${home}/project/.claude" && ! -e "${home}/claude-calls.log" ]]; then
-    ok "project hooks selection rejection writes nothing and calls no CLI"
-else
-    ko "project hooks selection rejection writes nothing and calls no CLI"
-fi
 
 home="$(new_home)"
 out="$(CLAUDE_STUB_VERSION='2.1.200 (Claude Code)' run_install "${home}" sync --target claude --intent hooks)"
@@ -492,11 +483,11 @@ else
 fi
 home="$(new_home)"
 CLAUDE_STUB_VERSION='2.1.200 (Claude Code)' install_must_succeed "${home}" sync --target all --intent hooks
-assert_contains "${INSTALL_OUT}" "Skipping Claude project hooks: ycc-hooks needs Claude Code 2.1.300" "all-target sync warns and skips old Claude project hooks"
+assert_contains "${INSTALL_OUT}" "Skipping Claude hooks: ycc-hooks needs Claude Code 2.1.300" "all-target sync warns and skips old Claude project hooks"
 assert_contains "${INSTALL_OUT}" "Cursor sync complete" "all-target sync still completes other targets with old Claude"
 assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin install ycc-hooks" "all-target old Claude does not install project hooks"
 CLAUDE_STUB_VERSION='2.1.200 (Claude Code)' install_must_succeed "${home}" remove --target all --intent hooks
-assert_contains "${INSTALL_OUT}" "Skipping Claude project hooks: ycc-hooks needs Claude Code 2.1.300" "all-target remove warns and skips old Claude project hooks"
+assert_contains "${INSTALL_OUT}" "Skipping Claude hooks: ycc-hooks needs Claude Code 2.1.300" "all-target remove warns and skips old Claude project hooks"
 assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin uninstall ycc-hooks" "all-target old Claude does not uninstall project hooks"
 
 
@@ -517,25 +508,6 @@ else
     ko "HOME rejection writes nothing and calls no CLI"
 fi
 
-home="$(new_home)"
-ln -s "${REPO_ROOT}/ycc/settings/hooks" "${home}/.claude/hooks"
-install_must_succeed "${home}" sync --target claude --intent hooks
-assert_contains "${INSTALL_OUT}" "WorktreeCreate would run twice" "project hooks warns about a global hooks link"
-assert_contains "${INSTALL_OUT}" "remove --target claude --intent hooks --global" "project hooks warning gives the global removal command"
-if [[ -L "${home}/.claude/hooks" && ! -e "${home}/.claude/settings.json" ]]; then
-    ok "project hooks leaves the global hooks link and settings untouched"
-else
-    ko "project hooks leaves the global hooks link and settings untouched"
-fi
-install_must_succeed "${home}" remove --target claude --intent hooks
-assert_contains "${INSTALL_OUT}" "global installer-managed hooks are still active" "project hooks removal warns about global hooks left active"
-assert_contains "${INSTALL_OUT}" "remove --target claude --intent hooks --global" "project hooks removal gives the global removal command"
-
-
-home="$(new_home)"
-install_must_succeed "${home}" sync --target claude --intent hooks --global
-install_must_succeed "${home}" remove --target claude --only settings --global
-assert_not_contains "$(cat "${home}/.claude/settings.json" 2>/dev/null)" '"hooks"' "settings-only removal still takes legacy hook activation"
 
 home="$(new_home)"
 out="$(CLAUDE_STUB_VERSION='2.1.200 (Claude Code)' run_install "${home}" sync --target claude --intent hooks --dry-run)"
@@ -549,8 +521,8 @@ home="$(new_home)"
 cat > "${home}/.claude/settings.json" <<'JSON'
 { "editorMode": "vim", "env": { "MY_LOCAL_TOKEN": "keep-me" } }
 JSON
-install_must_succeed "${home}" sync --target claude --intent settings,rules,hooks,plugins --global
-install_must_succeed "${home}" remove --target claude --intent settings,rules,hooks,plugins --global
+install_must_succeed "${home}" sync --target claude --intent settings,rules,plugins --global
+install_must_succeed "${home}" remove --target claude --intent settings,rules,plugins --global
 out="${INSTALL_OUT}"
 assert_contains "${out}" "Claude remove complete" "claude remove of every config intent completes"
 merged="$(cat "${home}/.claude/settings.json")"
@@ -558,8 +530,7 @@ assert_contains "${merged}" '"editorMode": "vim"' "claude remove keeps unmanaged
 assert_contains "${merged}" '"MY_LOCAL_TOKEN": "keep-me"' "claude remove keeps unmanaged env leaf"
 assert_not_contains "${merged}" '"claude-fable-5-1"' "claude remove drops managed model"
 assert_not_contains "${merged}" '"pluginMarketplaces"' "claude remove takes back appended list items"
-assert_not_contains "${merged}" '"hooks"' "claude remove drops managed hooks"
-for f in CLAUDE.md AGENTS.md hooks statusline-command.sh; do
+for f in CLAUDE.md AGENTS.md statusline-command.sh; do
     if [[ ! -e "${home}/.claude/${f}" && ! -L "${home}/.claude/${f}" ]]; then ok "claude remove cleans ~/.claude/${f}"; else ko "claude remove cleans ~/.claude/${f}"; fi
 done
 
@@ -640,144 +611,6 @@ assert_contains "${calls}" "plugin marketplace remove ycc --scope user" "claude 
 assert_contains "${calls}" "plugin uninstall status-bar@ycc-mods --scope user" "claude mods remove uninstalls each mod"
 assert_contains "${calls}" "plugin marketplace remove ycc-mods --scope user" "claude mods remove drops the ycc-mods marketplace"
 assert_contains "${out}" "Claude remove complete" "claude base/mods remove completes"
-
-# Base installs are simulated (copies + links shaped like the real step) so
-# the test never runs the generators.
-echo "== install.sh: skills / agents / commands slices =="
-
-# Claude slices need no generation, so they run for real in the sandbox.
-home="$(new_home)"
-mkdir -p "${home}/.claude/skills/my-own-skill"
-install_must_succeed "${home}" install --target claude --only skills,agents,commands
-out="${INSTALL_OUT}"
-assert_not_contains "${out}" "register repo checkout" "claude slices do not run base"
-for d in skills/git-workflow skills/clean skills/_shared agents/codebase-advisor.md; do
-    if [[ -e "${home}/.claude/${d}" ]]; then ok "claude slice installs ~/.claude/${d}"; else ko "claude slice installs ~/.claude/${d}"; fi
-done
-if [[ ! -e "${home}/.claude/commands" ]]; then ok "claude commands slice installs no wrapper files"; else ko "claude commands slice installs no wrapper files"; fi
-assert_contains "$(grep -c 'install standalone' <<<"${out}")" "2" "claude skills+commands install skills once (plus agents)"
-if [[ ! -e "${home}/.claude/plugins" ]]; then ok "claude slices register no plugin"; else ko "claude slices register no plugin"; fi
-skill="$(cat "${home}/.claude/skills/git-workflow/SKILL.md")"
-assert_not_contains "${skill}" 'CLAUDE_PLUGIN_ROOT}/skills' "claude slice rewrites plugin-root paths"
-assert_contains "${skill}" "${home}/.claude/skills/" "claude slice points paths at ~/.claude/skills"
-assert_not_contains "$(cat "${home}/.claude/skills/clean/SKILL.md")" '/ycc:clean' "claude slice strips the ycc: namespace"
-assert_contains "$(cat "${home}/.claude/skills/releaser/SKILL.md")" 'disable-model-invocation: true' "claude slice retains releaser manual invocation policy"
-assert_not_contains "$(cat "${home}/.claude/skills/init/SKILL.md")" 'disable-model-invocation' "claude slice keeps init model-invocable"
-if [[ -d "${home}/.claude/skills/my-own-skill" ]]; then ok "claude slice leaves user skills alone"; else ko "claude slice leaves user skills alone"; fi
-install_must_succeed "${home}" install --target claude --only skills
-out="${INSTALL_OUT}"
-assert_contains "${out}" "entries up to date" "claude slice rerun is idempotent"
-
-home="$(new_home)"
-mkdir -p "${home}/.claude/skills/git-workflow" && echo "# mine" > "${home}/.claude/skills/git-workflow/SKILL.md"
-out="$(run_install "${home}" install --target claude --only skills)"
-assert_contains "${out}" "refusing to replace ${home}/.claude/skills/git-workflow" "claude slice refuses a foreign entry"
-assert_contains "$(cat "${home}/.claude/skills/git-workflow/SKILL.md")" "# mine" "claude slice keeps the foreign entry"
-install_must_succeed "${home}" install --target claude --only skills --force
-assert_not_contains "$(cat "${home}/.claude/skills/git-workflow/SKILL.md")" "# mine" "claude slice --force replaces it"
-
-install_must_succeed "${home}" remove --target claude --intent skills
-if [[ ! -e "${home}/.claude/skills" ]]; then ok "claude skills remove takes back every entry"; else ko "claude skills remove takes back every entry" "$(ls "${home}/.claude/skills")"; fi
-
-home="$(new_home)"
-install_must_succeed "${home}" sync --target codex --intent commands
-out="${INSTALL_OUT}"
-assert_contains "${out}" "intent 'commands' is not supported by target 'codex'" "codex skips commands intent"
-assert_not_contains "${out}" "Generate" "unsupported commands intent generates nothing"
-
-home="$(new_home)"
-install_must_succeed "${home}" install --target claude,cursor --only skills,commands --skills-home native
-if [[ -e "${home}/.claude/skills/clean" && -e "${home}/.cursor/commands/clean.md" ]]; then ok "install --only commands runs on both supported targets"; else ko "install --only commands runs on both supported targets" "${INSTALL_OUT}"; fi
-
-# Legacy wrappers: only names recorded in installed-units.json are retired,
-# and only after the skills install succeeded.
-echo "== install.sh: legacy claude command wrappers =="
-
-legacy_home() {
-    local h
-    h="$(new_home)"
-    mkdir -p "${h}/.claude/commands" "${h}/.config/ycc"
-    echo "wrapper" > "${h}/.claude/commands/clean.md"
-    echo "mine" > "${h}/.claude/commands/my-own.md"
-    echo "mine too" > "${h}/.claude/commands/plan.md"   # unrecorded, same name as a skill
-    printf '{"version": 1, "units": {"%s/.claude/commands": ["clean.md", "../escape.md"]}}\n' "${h}" \
-        > "${h}/.config/ycc/installed-units.json"
-    echo "outside" > "${h}/.claude/escape.md"
-    echo "${h}"
-}
-
-home="$(legacy_home)"
-install_must_succeed "${home}" install --target claude --only commands
-out="${INSTALL_OUT}"
-assert_contains "${out}" "retired 1 legacy command wrapper" "commands install retires recorded wrappers"
-if [[ ! -e "${home}/.claude/commands/clean.md" ]]; then ok "recorded wrapper removed"; else ko "recorded wrapper removed"; fi
-assert_contains "$(cat "${home}/.claude/commands/my-own.md" "${home}/.claude/commands/plan.md")" "mine too" "unrecorded command files kept"
-if [[ -e "${home}/.claude/escape.md" ]]; then ok "recorded path traversal ignored"; else ko "recorded path traversal ignored"; fi
-if [[ -e "${home}/.claude/skills/clean/SKILL.md" ]]; then ok "skills installed by commands alias"; else ko "skills installed by commands alias"; fi
-assert_not_contains "$(cat "${home}/.config/ycc/installed-units.json")" ".claude/commands" "state forgets retired wrapper dir"
-
-home="$(legacy_home)"
-mkdir -p "${home}/.claude/skills/clean" && echo "# mine" > "${home}/.claude/skills/clean/SKILL.md"
-out="$(run_install "${home}" install --target claude --only skills)"
-assert_contains "${out}" "refusing to replace" "skills conflict reported"
-if [[ -e "${home}/.claude/commands/clean.md" ]]; then ok "no wrapper cleanup after failed skills install"; else ko "no wrapper cleanup after failed skills install"; fi
-
-home="$(legacy_home)"
-rm -f "${home}/.claude/commands/my-own.md" "${home}/.claude/commands/plan.md"
-install_must_succeed "${home}" install --target claude --only skills
-if [[ ! -e "${home}/.claude/commands" ]]; then ok "emptied legacy commands dir removed"; else ko "emptied legacy commands dir removed"; fi
-
-home="$(legacy_home)"
-install_must_succeed "${home}" remove --target claude --only commands
-out="${INSTALL_OUT}"
-if [[ ! -e "${home}/.claude/commands/clean.md" && -e "${home}/.claude/commands/my-own.md" ]]; then ok "commands remove retires only recorded wrappers"; else ko "commands remove retires only recorded wrappers" "${out}"; fi
-
-home="$(legacy_home)"
-install_must_succeed "${home}" install --target claude --only agents
-out="${INSTALL_OUT}"
-if [[ -e "${home}/.claude/commands/clean.md" ]]; then ok "agents-only install leaves wrappers"; else ko "agents-only install leaves wrappers" "${out}"; fi
-assert_contains "$(cat "${home}/.config/ycc/installed-units.json")" ".claude/commands" "agents-only install keeps wrapper state"
-
-# A recorded name that is now a directory is user data: never removed.
-home="$(legacy_home)"
-rm -f "${home}/.claude/commands/clean.md"
-mkdir "${home}/.claude/commands/clean.md"
-echo "precious" > "${home}/.claude/commands/clean.md/user.txt"
-install_must_succeed "${home}" install --target claude --only commands
-out="${INSTALL_OUT}"
-assert_contains "$(cat "${home}/.claude/commands/clean.md/user.txt" 2>/dev/null)" "precious" "recorded name replaced by a directory is preserved"
-assert_contains "${out}" "kept ${home}/.claude/commands/clean.md: not a ycc wrapper file" "directory replacement reported"
-
-# A recorded wrapper that is a symlink: only the link goes, never its target.
-home="$(legacy_home)"
-rm -f "${home}/.claude/commands/clean.md"
-echo "external" > "${home}/external.md"
-ln -s "${home}/external.md" "${home}/.claude/commands/clean.md"
-install_must_succeed "${home}" install --target claude --only commands
-if [[ ! -L "${home}/.claude/commands/clean.md" ]]; then ok "recorded symlink wrapper unlinked"; else ko "recorded symlink wrapper unlinked"; fi
-assert_contains "$(cat "${home}/external.md" 2>/dev/null)" "external" "symlink wrapper target untouched"
-
-# A symlinked commands dir is never removed or replaced; foreign files inside stay.
-home="$(legacy_home)"
-mv "${home}/.claude/commands" "${home}/ext-commands"
-ln -s "${home}/ext-commands" "${home}/.claude/commands"
-install_must_succeed "${home}" install --target claude --only commands
-if [[ -L "${home}/.claude/commands" && -d "${home}/ext-commands" ]]; then ok "symlinked commands dir kept"; else ko "symlinked commands dir kept"; fi
-assert_contains "$(cat "${home}/ext-commands/my-own.md" 2>/dev/null)" "mine" "symlinked commands dir keeps user files"
-
-home="$(legacy_home)"
-rm -f "${home}/.claude/commands/my-own.md" "${home}/.claude/commands/plan.md"
-mv "${home}/.claude/commands" "${home}/ext-commands"
-ln -s "${home}/ext-commands" "${home}/.claude/commands"
-install_must_succeed "${home}" install --target claude --only commands
-out="${INSTALL_OUT}"
-if [[ -L "${home}/.claude/commands" && -d "${home}/ext-commands" && ! -e "${home}/ext-commands/clean.md" ]]; then ok "emptied symlinked commands dir kept"; else ko "emptied symlinked commands dir kept" "${out}"; fi
-
-# Failed unlink retention: deterministic mock-based unit test (chmod is unreliable as root).
-if out="$(python3 "${REPO_ROOT}/scripts/test_install_slices_legacy.py" 2>&1)"; then ok "failed unlink keeps name recorded, others removed"; else ko "failed unlink keeps name recorded, others removed" "${out}"; fi
-
-# A copy the 'base' step mirrored is identical to the bundle, so a slice
-# remove takes it back even without a recorded install.
 
 echo
 echo "== install.sh rules: claude links only CLAUDE.md, legacy links removable =="
@@ -937,68 +770,6 @@ out="$(YCC_MODS_ROOT="${mods_fixture}" run_install_stubbed "${home}" sync --targ
 assert_contains "${out}" "unknown mod 'bogus'" "unknown mod rejected"
 assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin" "rejected --mods calls no claude CLI"
 
-echo
-echo "== install.sh --hooks: claude =="
-
-home="$(new_home)"
-install_must_succeed "${home}" list hooks --target claude
-if [[ "${INSTALL_OUT}" == "WorktreeCreate" ]]; then ok "list hooks --target claude lists managed hook events"; else ko "list hooks --target claude lists managed hook events" "${INSTALL_OUT}"; fi
-install_must_succeed "${home}" list hooks --target codex,cursor,opencode,omp,agents
-if [[ -z "${INSTALL_OUT}" ]]; then ok "list hooks is empty for targets without a hooks group"; else ko "list hooks is empty for targets without a hooks group" "${INSTALL_OUT}"; fi
-
-# An unselected managed event (SessionStart) with its ownership state, as an
-# earlier release would have recorded it.
-home="$(new_home)"
-state="${home}/.config/ycc/managed-config-state.json"
-mkdir -p "$(dirname "${state}")"
-cat > "${home}/.claude/settings.json" <<'JSON'
-{ "hooks": { "SessionStart": [ { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/old.sh" } ] } ] } }
-JSON
-printf '{ "claude-settings:%s": { "/hooks/SessionStart": { "last_applied_sha256": "pinned" } } }\n' \
-    "${home}/.claude/settings.json" > "${state}"
-# hook_state <state> <settings> — the recorded '/hooks/...' pointers and their sha, sorted.
-hook_state() {
-    python3 - "$1" "claude-settings:$2" <<'PY'
-import json, sys
-entry = json.load(open(sys.argv[1])).get(sys.argv[2], {})
-print(" ".join(f"{k}={v.get('last_applied_sha256')}" for k, v in sorted(entry.items()) if k.startswith("/hooks/")))
-PY
-}
-install_must_succeed "${home}" sync --target claude --intent hooks --hooks WorktreeCreate --global
-assert_contains "${INSTALL_OUT}" "Hook events: WorktreeCreate" "--hooks names the selection"
-merged="$(cat "${home}/.claude/settings.json")"
-assert_contains "${merged}" '"WorktreeCreate"' "--hooks merges the selected event"
-assert_contains "${merged}" 'old.sh' "--hooks leaves the unselected managed event alone"
-assert_contains "$(hook_state "${state}" "${home}/.claude/settings.json")" "/hooks/SessionStart=pinned" "--hooks leaves the unselected event's ownership state untouched"
-if [[ -L "${home}/.claude/hooks" ]]; then ok "sync --hooks links ~/.claude/hooks"; else ko "sync --hooks links ~/.claude/hooks"; fi
-
-# A trailing slash in HOME must still find the recorded state key (the
-# helper keys it by a normalised path).
-install_must_succeed "${home}/" remove --target claude --intent hooks --hooks WorktreeCreate --global
-merged="$(cat "${home}/.claude/settings.json")"
-assert_not_contains "${merged}" '"WorktreeCreate"' "remove --hooks takes the selected event"
-assert_contains "${merged}" 'old.sh' "remove --hooks keeps the unselected event"
-if [[ "$(hook_state "${state}" "${home}/.claude/settings.json")" == "/hooks/SessionStart=pinned" ]]; then
-    ok "remove --hooks drops only the selected event's ownership state"
-else
-    ko "remove --hooks drops only the selected event's ownership state" "$(hook_state "${state}" "${home}/.claude/settings.json")"
-fi
-if [[ -L "${home}/.claude/hooks" ]]; then ok "remove --hooks keeps the hooks link while an unselected event remains"; else ko "remove --hooks keeps the hooks link while an unselected event remains"; fi
-assert_contains "${INSTALL_OUT}" "managed hook events outside --hooks still use it" "remove --hooks says why the link stays"
-
-home="$(new_home)"
-install_must_succeed "${home}" sync --target claude --intent hooks --global
-install_must_succeed "${home}" remove --target claude --intent hooks --hooks WorktreeCreate --global
-if [[ ! -e "${home}/.claude/hooks" && ! -L "${home}/.claude/hooks" ]]; then ok "remove --hooks unlinks ~/.claude/hooks once no managed event remains"; else ko "remove --hooks unlinks ~/.claude/hooks once no managed event remains"; fi
-
-home="$(new_home)"
-out="$(run_install "${home}" sync --target claude --intent settings --hooks WorktreeCreate)"
-assert_contains "${out}" "--hooks needs the settings step (it narrows the hooks config group" "--hooks without the hooks group rejected"
-if [[ ! -e "${home}/.claude/settings.json" ]]; then ok "--hooks rejection writes nothing"; else ko "--hooks rejection writes nothing"; fi
-out="$(run_install "${home}" sync --target claude --intent hooks --hooks Bogus --global)"
-assert_contains "${out}" "unknown hook event 'Bogus'" "unknown hook event rejected"
-install_must_succeed_stubbed "${home}" install --target claude --hooks --global
-if [[ -L "${home}/.claude/hooks" ]]; then ok "install --hooks stays the boolean 'also run hooks' flag"; else ko "install --hooks stays the boolean 'also run hooks' flag" "${INSTALL_OUT}"; fi
 
 # The legacy-user hint: a home whose global settings file still holds
 # ycc-managed keys from an earlier sync is told that settings now default to
@@ -1039,5 +810,243 @@ home="$(new_home)"
 install_must_succeed_stubbed "${home}" sync --target claude --intent hooks --global
 install_must_succeed "${home}" sync --target claude --intent settings
 assert_not_contains "${INSTALL_OUT}" "settings now default to project scope" "no legacy hint from non-settings global state"
+
+echo
+echo "== install.sh: claude native mcp / hooks scopes =="
+
+home="$(new_home)"
+install_must_succeed "${home}" sync --target claude --intent mcp
+calls="$(cat "${home}/claude-calls.log")"
+assert_contains "${calls}" "plugin install ycc-mcp@ycc --scope project" "mcp installs ycc-mcp@ycc at project scope by default"
+if [[ ! -e "${home}/project/.mcp.json" && ! -e "${home}/.claude.json" ]]; then ok "native mcp merges no MCP config"; else ko "native mcp merges no MCP config"; fi
+
+home="$(new_home)"
+install_must_succeed "${home}" sync --target claude --intent mcp --global
+calls="$(cat "${home}/claude-calls.log")"
+assert_contains "${calls}" "plugin marketplace add ${REPO_REAL} --scope user" "global mcp registers the marketplace at user scope"
+assert_contains "${calls}" "plugin install ycc-mcp@ycc --scope user" "global mcp installs ycc-mcp@ycc at user scope"
+if [[ ! -e "${home}/.claude.json" ]]; then ok "global mcp writes no ~/.claude.json servers"; else ko "global mcp writes no ~/.claude.json servers"; fi
+install_must_succeed "${home}" remove --target claude --intent mcp --global
+assert_contains "$(cat "${home}/claude-calls.log")" "plugin uninstall ycc-mcp@ycc --scope user" "global mcp remove uninstalls at user scope"
+
+home="$(new_home)"
+mkdir -p "${home}/project/.claude"
+printf '{ "enabledPlugins": { "ycc-mcp@ycc": true } }\n' > "${home}/project/.claude/settings.json"
+install_must_succeed "${home}" remove --target claude --intent mcp
+assert_contains "$(cat "${home}/claude-calls.log")" "plugin uninstall ycc-mcp@ycc --scope project" "project mcp remove uninstalls at project scope"
+
+# A real ~/.claude/hooks directory holding the user's own script is never touched.
+home="$(new_home)"
+mkdir -p "${home}/.claude/hooks"
+echo "user hook" > "${home}/.claude/hooks/herdr-agent-state.sh"
+install_must_succeed "${home}" sync --target claude --intent hooks --global
+calls="$(cat "${home}/claude-calls.log")"
+assert_contains "${calls}" "plugin install ycc-hooks@ycc --scope user" "global hooks installs ycc-hooks@ycc at user scope"
+if [[ -d "${home}/.claude/hooks" && ! -L "${home}/.claude/hooks" ]] \
+    && [[ "$(cat "${home}/.claude/hooks/herdr-agent-state.sh")" == "user hook" ]]; then
+    ok "global hooks leaves a real ~/.claude/hooks directory untouched"
+else
+    ko "global hooks leaves a real ~/.claude/hooks directory untouched"
+fi
+assert_not_contains "$(cat "${home}/.claude/settings.json" 2>/dev/null)" '"WorktreeCreate"' "global hooks merges no settings hooks group"
+install_must_succeed "${home}" remove --target claude --intent hooks --global
+assert_contains "$(cat "${home}/claude-calls.log")" "plugin uninstall ycc-hooks@ycc --scope user" "global hooks remove uninstalls at user scope"
+if [[ -f "${home}/.claude/hooks/herdr-agent-state.sh" ]]; then ok "global hooks remove keeps the user's hooks dir"; else ko "global hooks remove keeps the user's hooks dir"; fi
+
+home="$(new_home)"
+out="$(CLAUDE_STUB_VERSION='2.1.200 (Claude Code)' run_install "${home}" sync --target claude --intent hooks --global)"
+assert_contains "${out}" "ycc-hooks needs Claude Code 2.1.300 or later" "global hooks keeps the Claude version gate"
+
+home="$(new_home)"
+install_must_succeed "${home}" sync --target claude --intent settings --global
+assert_not_contains "$(cat "${home}/.claude/settings.json")" '"hooks"' "global settings merge no longer writes hooks"
+
+# Legacy cleanup after a user-scope native install: an installer-owned
+# WorktreeCreate entry is pruned and the owned ~/.claude/hooks link goes once
+# ycc-hooks@ycc is enabled.
+home="$(new_home)"
+state="${home}/.config/ycc/managed-config-state.json"
+mkdir -p "$(dirname "${state}")"
+printf '{ "enabledPlugins": { "ycc-hooks@ycc": true } }\n' > "${home}/.claude/settings.json"
+HOME="${home}" YCC_MANAGED_CONFIG_STATE="${state}" python3 "${REPO_ROOT}/scripts/merge_managed_config.py" \
+    --profile claude-settings --source "${REPO_ROOT}/ycc/settings/settings.json" \
+    --destination "${home}/.claude/settings.json" --groups hooks >/dev/null
+assert_contains "$(cat "${home}/.claude/settings.json")" "worktree-create.sh" "seeded installer-owned WorktreeCreate entry"
+ln -s "${REPO_ROOT}/ycc/settings/hooks" "${home}/.claude/hooks"
+install_must_succeed "${home}" sync --target claude --intent hooks --global
+assert_not_contains "$(cat "${home}/.claude/settings.json")" "worktree-create.sh" "cleanup prunes the installer-owned WorktreeCreate entry"
+if [[ ! -e "${home}/.claude/hooks" && ! -L "${home}/.claude/hooks" ]]; then ok "cleanup removes the owned ~/.claude/hooks link"; else ko "cleanup removes the owned ~/.claude/hooks link" "${INSTALL_OUT}"; fi
+
+# Standalone copies as the old slice step wrote them (projected and recorded),
+# plus a recorded-but-edited copy, a user skill and recorded legacy wrappers.
+# seed_claude_slices <home> <enabledPlugins json>
+seed_claude_slices() {
+    local h="$1"
+    mkdir -p "${h}/.config/ycc" "${h}/.claude/skills/my-own-skill"
+    HOME="${h}" YCC_MANAGED_CONFIG_STATE="${h}/.config/ycc/managed-config-state.json" \
+        python3 "${REPO_ROOT}/scripts/install_slices.py" install --target claude --slice skills >/dev/null
+    HOME="${h}" YCC_MANAGED_CONFIG_STATE="${h}/.config/ycc/managed-config-state.json" \
+        python3 "${REPO_ROOT}/scripts/install_slices.py" install --target claude --slice agents >/dev/null
+    echo "# my edit" >> "${h}/.claude/skills/clean/SKILL.md"
+    echo "mine" > "${h}/.claude/skills/my-own-skill/SKILL.md"
+    mkdir -p "${h}/.claude/commands"
+    git -C "${REPO_ROOT}" show 7410693f^:ycc/commands/clean.md > "${h}/.claude/commands/clean.md"
+    git -C "${REPO_ROOT}" show 7410693f^:ycc/commands/plan.md > "${h}/.claude/commands/plan.md"
+    echo "# my edit" >> "${h}/.claude/commands/plan.md"
+    python3 - "${h}/.config/ycc/installed-units.json" "${h}/.claude/commands" <<'PY'
+import json, sys
+p = sys.argv[1]; data = json.load(open(p))
+data["units"][sys.argv[2]] = ["clean.md", "plan.md"]
+json.dump(data, open(p, "w"), indent=2)
+PY
+    printf '{ "enabledPlugins": %s }\n' "$2" > "${h}/.claude/settings.json"
+}
+
+# Installing only ycc-mcp never retires the standalone copies ycc@ycc replaces.
+home="$(new_home)"
+seed_claude_slices "${home}" '{ "ycc-mcp@ycc": true }'
+install_must_succeed "${home}" sync --target claude --intent mcp --global
+if [[ -d "${home}/.claude/skills/git-workflow" && -e "${home}/.claude/agents/codebase-advisor.md" && -e "${home}/.claude/commands/clean.md" ]]; then
+    ok "cleanup keeps standalone copies while ycc@ycc is not enabled"
+else
+    ko "cleanup keeps standalone copies while ycc@ycc is not enabled" "${INSTALL_OUT}"
+fi
+assert_contains "${INSTALL_OUT}" "ycc@ycc is not explicitly enabled" "cleanup says why standalone copies stay"
+
+# With ycc@ycc enabled: exact copies go; edited, foreign and user entries stay.
+home="$(new_home)"
+seed_claude_slices "${home}" '{ "ycc@ycc": true }'
+install_must_succeed "${home}" sync --target claude --intent mcp --global
+if [[ ! -e "${home}/.claude/skills/git-workflow" && ! -e "${home}/.claude/agents" ]]; then
+    ok "cleanup retires byte-identical standalone skills and agents"
+else
+    ko "cleanup retires byte-identical standalone skills and agents" "${INSTALL_OUT}"
+fi
+assert_contains "$(cat "${home}/.claude/skills/clean/SKILL.md" 2>/dev/null)" "# my edit" "cleanup keeps a recorded but edited skill"
+assert_contains "${INSTALL_OUT}" "kept ${home}/.claude/skills/clean: edited or ownership uncertain" "cleanup reports the edited skill"
+if [[ -d "${home}/.claude/skills/_shared" ]]; then ok "cleanup keeps _shared while a retained skill may use it"; else ko "cleanup keeps _shared while a retained skill may use it"; fi
+assert_contains "$(cat "${home}/.claude/skills/my-own-skill/SKILL.md" 2>/dev/null)" "mine" "cleanup keeps a user skill"
+if [[ ! -e "${home}/.claude/commands/clean.md" ]]; then ok "cleanup retires a byte-identical legacy wrapper"; else ko "cleanup retires a byte-identical legacy wrapper" "${INSTALL_OUT}"; fi
+assert_contains "$(cat "${home}/.claude/commands/plan.md" 2>/dev/null)" "# my edit" "cleanup keeps a recorded but edited wrapper"
+units="$(cat "${home}/.config/ycc/installed-units.json")"
+assert_not_contains "${units}" '"git-workflow"' "cleanup forgets retired skills"
+assert_contains "${units}" '"clean"' "cleanup keeps the record of a retained skill"
+assert_contains "${units}" '"plan.md"' "cleanup keeps the record of a retained wrapper"
+
+# remove --intent base: ycc@ycc is gone, so its exact copies are retired anyway.
+home="$(new_home)"
+seed_claude_slices "${home}" '{}'
+install_must_succeed "${home}" remove --target claude --intent base
+if [[ ! -e "${home}/.claude/skills/git-workflow" && -e "${home}/.claude/skills/clean" ]]; then
+    ok "remove base retires exact standalone copies and keeps edited ones"
+else
+    ko "remove base retires exact standalone copies and keeps edited ones" "${INSTALL_OUT}"
+fi
+
+# A symlinked ~/.claude is never traversed.
+home="$(new_home)"
+mv "${home}/.claude" "${home}/claude-real"
+ln -s "${home}/claude-real" "${home}/.claude"
+seed_claude_slices "${home}" '{ "ycc@ycc": true }'
+install_must_succeed "${home}" sync --target claude --intent mcp --global
+assert_contains "${INSTALL_OUT}" "symlinked configuration directory" "cleanup skips a symlinked ~/.claude"
+if [[ -d "${home}/claude-real/skills/git-workflow" ]]; then ok "cleanup leaves a symlinked ~/.claude untouched"; else ko "cleanup leaves a symlinked ~/.claude untouched"; fi
+
+# A cleanup refusal after the native install is reported, never fatal.
+home="$(new_home)"
+echo '{ not json' > "${home}/.claude/settings.json"
+install_must_succeed "${home}" sync --target claude --intent mcp --global
+assert_contains "$(cat "${home}/claude-calls.log")" "plugin install ycc-mcp@ycc --scope user" "native install runs before a failing cleanup"
+assert_contains "${INSTALL_OUT}" "legacy cleanup skipped: see above; rerun after resolving" "a failing cleanup warns instead of aborting"
+
+# Project-scope mcp has the same $HOME guard as hooks.
+home="$(new_home)"
+for args in "sync --target claude --intent mcp" "install --target claude --mcp"; do
+    # shellcheck disable=SC2086  # args is a word list.
+    out="$(cd "${home}" && HOME="${home}" PATH="${STUB_BIN}:${PATH}" CLAUDE_STUB_LOG="${home}/claude-calls.log" \
+        YCC_INSTALL_SKIP_BUILD=1 bash "${INSTALL}" ${args} 2>&1)"
+    assert_contains "${out}" "claude project scope needs a project directory" "project mcp rejects \$HOME (${args})"
+done
+if [[ ! -e "${home}/claude-calls.log" ]]; then ok "project mcp HOME rejection calls no CLI"; else ko "project mcp HOME rejection calls no CLI"; fi
+
+
+# Ported migrate fixtures: legacy state as an earlier release recorded it,
+# retired automatically by a user-scope native install.
+# seed_legacy_claude <home> <groups-csv: hooks,mcp> — record managed hooks/MCP and the hooks link.
+seed_legacy_claude() {
+    local h="$1" groups="$2"
+    local state="${h}/.config/ycc/managed-config-state.json"
+    mkdir -p "$(dirname "${state}")"
+    [[ -f "${h}/.claude/settings.json" ]] || echo '{}' > "${h}/.claude/settings.json"
+    if [[ ",${groups}," == *",hooks,"* ]]; then
+        HOME="${h}" YCC_MANAGED_CONFIG_STATE="${state}" python3 "${REPO_ROOT}/scripts/merge_managed_config.py" \
+            --profile claude-settings --source "${REPO_ROOT}/ycc/settings/settings.json" \
+            --destination "${h}/.claude/settings.json" --groups hooks >/dev/null
+        ln -s "${REPO_ROOT}/ycc/settings/hooks" "${h}/.claude/hooks"
+    fi
+    if [[ ",${groups}," == *",mcp,"* ]]; then
+        HOME="${h}" YCC_MANAGED_CONFIG_STATE="${state}" python3 "${REPO_ROOT}/scripts/merge_managed_config.py" \
+            --profile claude-mcp --source "${REPO_ROOT}/mcp-configs/mcp.json" \
+            --destination "${h}/.claude.json" --groups mcp >/dev/null
+    fi
+}
+# set_enabled <settings.json> <python dict literal>
+set_enabled() {
+    python3 - "$1" "$2" <<'PY'
+import ast, json, sys
+from pathlib import Path
+p = Path(sys.argv[1]); data = json.loads(p.read_text())
+data['enabledPlugins'] = ast.literal_eval(sys.argv[2])
+p.write_text(json.dumps(data, indent=2) + '\n')
+PY
+}
+
+home="$(new_home)"
+seed_legacy_claude "${home}" hooks,mcp
+set_enabled "${home}/.claude/settings.json" "{'ycc-hooks@ycc': True, 'ycc-mcp@ycc': True}"
+python3 - "${home}" <<'PY'
+import json, sys
+from pathlib import Path
+home = Path(sys.argv[1])
+p = home / '.claude/settings.json'
+data = json.loads(p.read_text())
+data['hooks']['WorktreeCreate'][0]['hooks'].append({'type': 'command', 'command': 'echo my-hook'})
+data['editorMode'] = 'vim'
+p.write_text(json.dumps(data, indent=2) + '\n')
+p = home / '.claude.json'
+data = json.loads(p.read_text())
+first = next(iter(data['mcpServers']))
+data['mcpServers'][first] = {'url': 'https://edited.example'}
+data['mcpServers']['mine'] = {'url': 'https://mine.example'}
+p.write_text(json.dumps(data, indent=2) + '\n')
+PY
+install_must_succeed "${home}" sync --target claude --intent mcp --global
+settings="$(cat "${home}/.claude/settings.json")"
+assert_contains "${settings}" "echo my-hook" "cleanup keeps a user hook inside the managed wrapper"
+assert_not_contains "${settings}" "worktree-create.sh" "cleanup prunes only the managed hook command"
+assert_contains "${settings}" '"editorMode": "vim"' "cleanup keeps unrelated settings"
+assert_contains "$(cat "${home}/.claude.json")" "edited.example" "cleanup keeps an edited managed MCP server"
+assert_contains "$(cat "${home}/.claude.json")" "mine.example" "cleanup keeps a foreign MCP server"
+if [[ ! -L "${home}/.claude/hooks" ]]; then ok "cleanup removes the owned unused hooks link"; else ko "cleanup removes the owned unused hooks link"; fi
+
+home="$(new_home)"
+seed_legacy_claude "${home}" hooks,mcp
+set_enabled "${home}/.claude/settings.json" "{'ycc-all@ycc': True, 'ycc-hooks@ycc': False, 'ycc-mcp@ycc': False}"
+before="$(cat "${home}/.claude/settings.json" "${home}/.claude.json")"
+install_must_succeed "${home}" sync --target claude --intent mcp --global
+if [[ "$(cat "${home}/.claude/settings.json" "${home}/.claude.json")" == "${before}" && -L "${home}/.claude/hooks" ]]; then
+    ok "disabled native plugins and the aggregate do not authorize cleanup"
+else
+    ko "disabled native plugins and the aggregate do not authorize cleanup"
+fi
+
+home="$(new_home)"
+seed_legacy_claude "${home}" hooks
+set_enabled "${home}/.claude/settings.json" "{'ycc-hooks@ycc': True}"
+rm -f "${home}/.config/ycc/managed-config-state.json"
+install_must_succeed "${home}" sync --target claude --intent hooks --global
+assert_contains "$(cat "${home}/.claude/settings.json")" "worktree-create.sh" "cleanup without ownership state retains the hook"
+if [[ -L "${home}/.claude/hooks" ]]; then ok "cleanup without ownership state retains the hooks link"; else ko "cleanup without ownership state retains the hooks link"; fi
+
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then install_tests_finish; fi

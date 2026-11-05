@@ -285,7 +285,10 @@ sync_omp_target() {
     printf '\n%somp %s complete.%s\n' "${BOLD}" "${COMMAND}" "${NC}"
 }
 
-# sync_omp_base — build the OMP packages, then install them natively.
+# sync_omp_base — build the OMP packages, retire proven legacy omp state
+# (run_legacy_cleanup omp: an 'omp plugin link' of a ycc package or a ycc
+# marketplace at this checkout root), then install the packages natively. The
+# cleanup runs first because the native install refuses both legacy forms.
 sync_omp_base() {
     # A dry-run never regenerates repo files, and --mode repo installs from the
     # upstream catalog, so neither needs the local package build.
@@ -317,6 +320,9 @@ sync_omp_base() {
     elif [[ "${DRY_RUN:-0}" == "1" ]]; then
         info "dry-run: skipping the OMP package build"
     fi
+
+    printf '\n%somp: retire legacy omp links and checkout-root marketplace%s\n' "${BOLD}" "${NC}"
+    run_legacy_cleanup omp || exit 1
 
     step=$((step + 1))
     printf '\n%s[%d/%d] Install native OMP packages (%s scope)%s\n' "${BOLD}" "$step" "$total" "$(omp_scope)" "${NC}"

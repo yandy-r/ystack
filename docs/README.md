@@ -27,12 +27,14 @@ Claude-only notes, and path-specific Claude rules live under
 
 Runtime-specific install instructions live under [`install/`](install/):
 
-- [`install/README.md`](install/README.md) — shared installer concepts and target matrix.
-- [`install/claude.md`](install/claude.md) — Claude Code plus Claude Desktop MCP setup.
-- [`install/codex.md`](install/codex.md) — Codex plugin, custom agents, and Codex Desktop setup.
-- [`install/cursor.md`](install/cursor.md) — Cursor-native bundle sync and MCP setup.
+- [`install/README.md`](install/README.md) — the installer reference: intents, scope, automatic legacy cleanup, removal.
+- [`install/claude.md`](install/claude.md) — Claude Code native plugins plus Claude Desktop MCP setup.
+- [`install/codex.md`](install/codex.md) — Codex native plugins, custom agents, and Codex Desktop setup.
+- [`install/cursor.md`](install/cursor.md) — Cursor native plugins (marketplace registration and `/plugins`) and CLI settings.
 - [`install/opencode.md`](install/opencode.md) — opencode-native skills, agents, commands, config, and rules.
-- [`install/omp.md`](install/omp.md) — OMP (oh-my-pi) native packages, `install.sh --target omp`, and platform limits.
+- [`install/agents.md`](install/agents.md) — cross-tool skills in `~/.agents/skills`.
+- [`install/omp.md`](install/omp.md) — OMP (oh-my-pi) native packages, `install.sh install --target omp`, and platform limits.
+- [`install/v6/README.md`](install/v6/README.md) — native package reference: package IDs, catalog shape, tested versions, evidence.
 
 ## Plans
 
@@ -58,7 +60,7 @@ Latest entries:
 
 - [`releases/6.1.1.md`](releases/6.1.1.md) pins Node.js 22.23.4 and 24.22.1 and markdown-it 14.3.3. Plugin behavior is unchanged.
 - [`releases/6.1.0.md`](releases/6.1.0.md) adds OMP packages (`omp >= 18.12.2`), `install.sh` item selection, and opencode restricted-agent permission fixes.
-- [`releases/6.0.0.md`](releases/6.0.0.md) covers native packages in the Claude, Codex, and Cursor marketplaces, and `install.sh migrate`.
+- [`releases/6.0.0.md`](releases/6.0.0.md) covers native packages in the Claude, Codex, and Cursor marketplaces, and the installer's migration onto them (automatic since v6.3.0).
 - [`releases/5.3.0.md`](releases/5.3.0.md) covers per-runtime worktree roots, `AGENTS.md` from `ycc:init`, and retired command wrappers.
 
 Older notes stay in [`releases/`](releases/).

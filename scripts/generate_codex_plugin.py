@@ -165,9 +165,9 @@ def repository_native_enabled(packages: Iterable[Package]) -> bool:
     """Whether the repository switches to the native catalog and payloads.
 
     Every migration package must be an included, non-opt-in native row that is
-    listed. Partial listing keeps the legacy combined ycc payload and catalog:
-    the installer still registers ycc@local-ycc-plugins with MCP, and
-    codex_eligible refuses to migrate until the flip is complete.
+    listed. Partial listing keeps the legacy combined ycc payload and catalog,
+    and codex_eligible refuses the native install and legacy cleanup until the
+    flip is complete.
     """
     rows = {}
     for package in packages:

@@ -1,11 +1,9 @@
-# agents (`~/.agents`) v6 Install Guide
+# agents (`~/.agents`) Package Reference
 
 The `agents` target stays **file-copy only** in v6: there is no native
-package, no marketplace, and nothing to migrate. `install.sh migrate` and
-`install.sh install --package` do not apply to it (`migrate` rejects the
-`agents` target, and the native packages for Claude, Codex, and Cursor do
-not change it). The live installer in `docs/install/` is the only supported
-install route.
+package and no marketplace. `install.sh install --package` does not apply to
+it, and `install.sh` runs no legacy cleanup for it. The install how-to is
+[agents Install](../agents.md); this page records the `npx skills` evidence.
 
 ## Install (skills-only file copy)
 
@@ -36,16 +34,15 @@ Rules of the target, unchanged in v6:
 
 ## Duplicates
 
-Every supported tool that reads `~/.agents/skills` (today: Codex, opencode,
-Cursor) also reads its own skill directory, so installing ycc skills natively
-for one of them **and** via this target lists every skill twice. The installer
-detects this for any such target and offers:
+opencode reads `~/.agents/skills` and its own skill directory, so installing
+ycc skills natively for opencode **and** via this target lists every skill
+twice. The installer detects this and offers:
 
 ```bash
-./install.sh install --target claude,codex,opencode --only base
-# warning: codex and opencode will produce duplicate ycc skills ...
-#   [1] Recommended — skills → ~/.agents/skills; codex and opencode get only
-#       their non-skill pieces natively  (default)
+./install.sh install --target opencode,agents --only base
+# warning: opencode will duplicate the ycc skills in ~/.agents/skills ...
+#   [1] Recommended — skills → ~/.agents/skills; opencode get only their
+#       non-skill pieces natively  (default)
 #   [2] Keep as requested (native skills per tool; duplicates possible)
 #   [3] Abort
 ```
@@ -53,7 +50,10 @@ detects this for any such target and offers:
 The prompt appears only on a terminal. Answer in advance with
 `--skills-home agents` (option 1) or `--skills-home native` (option 2). On a
 non-terminal run without the flag, the installer warns and continues as
-requested (option 2 semantics).
+requested (option 2 semantics). Codex and Cursor also read
+`~/.agents/skills`, but their ycc skills come from their native `ycc`
+package; installing this target next to them lists the skills twice, so skip
+it if you use only those tools.
 
 ## `npx skills` evidence (YAN-1126, 2026-10-16)
 
@@ -105,14 +105,13 @@ nothing. Repository-root discovery surfacing the Claude source tree also needs
 a manifest or ignore mechanism to hide `ycc/skills/` before `npx skills` could
 ever be advertised.
 
-## Duplicates and migration
+## Moving off the file copy
 
-There is no migration here: the file copy is the product. `install.sh migrate`
-rejects the `agents` target and no `--package` selection covers it; the native
-packages for other targets do not apply here. If `npx
-skills` were ever adopted, the explicit-tree-URL route would still need a
-dependency mechanism for `~/.agents/ycc-shared/` first; until that exists, use
-the live commands at the top of this page.
+There is nothing to move to: the file copy is the product, and no `--package`
+selection covers this target. If `npx skills` were ever adopted, the
+explicit-tree-URL route would still need a dependency mechanism for
+`~/.agents/ycc-shared/` first; until that exists, use the commands at the top
+of this page.
 
 ## Evidence
 

@@ -17,10 +17,10 @@
 #   root (<repo-root>/.claude/worktrees/), and returns the created path.
 #
 # INSTALL:
-#   ~/.claude/hooks/ must resolve to (or contain) this file.
-#   The simplest approach is a symlink:
-#     ln -s "$(pwd)/ycc/settings/hooks" ~/.claude/hooks
-#   See CONTRIBUTING.md → Developer Setup for details.
+#   Shipped by the native ycc-hooks Claude package, which registers it via
+#   ${CLAUDE_PLUGIN_ROOT}/hooks/worktree-create.sh. Install it with:
+#     ./install.sh sync --target claude --intent hooks [--global]
+#   (project scope by default; --global installs ycc-hooks@ycc at user scope).
 
 set -euo pipefail
 
