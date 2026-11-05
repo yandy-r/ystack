@@ -469,7 +469,7 @@ assert_rc 0 'config set enabledProviders [*]'
 ycc c4-dedupe "$home" install --target omp --only dedupe
 has c4-dedupe '[ok] OMP: hid ' 'agents/…, codex/…, opencode/…' \
   '[!!] enabledProviders includes claude: ' \
-  'ycc skills in ~/.claude/skills outrank the OMP package (it shows as ycc/<name>); remove them with ./install.sh remove --target claude --intent skills, or drop claude from enabledProviders'
+  'ycc skills in ~/.claude/skills outrank the OMP package (it shows as ycc/<name>); retire them with ./install.sh sync --target claude --intent base (its legacy cleanup removes ycc-owned ~/.claude/skills copies), or drop claude from enabledProviders'
 rpc c4-probe "$home"
 check c4-proof mixed "$root/logs/c4-probe.stdout" "$repo/packages/omp/ycc-mcp/.mcp.json" "$pkg_agents"
 log 'PASS C4 enabledProviders ["*"]: W4 + W1 (agents/codex/opencode); precedence as documented'
