@@ -5,26 +5,26 @@
   },
   "metadata": {
     "description": "ycc development-workflow packages for oh-my-pi (omp >=18.12.2).",
-    "version": "6.3.0"
+    "version": "6.3.1"
   },
   "plugins": [
     {
       "name": "ycc",
       "source": "./packages/omp/ycc",
       "description": "Planning, implementation, review, and git-workflow skills and agents.",
-      "version": "6.3.0"
+      "version": "6.3.1"
     },
     {
       "name": "ycc-mcp",
       "source": "./packages/omp/ycc-mcp",
       "description": "MCP server connections for the ycc skills and agents.",
-      "version": "6.3.0"
+      "version": "6.3.1"
     },
     {
       "name": "ycc-rules",
       "source": "./packages/omp/ycc-rules",
       "description": "Language and common coding rules for Cursor, OMP, and Pi.",
-      "version": "6.3.0"
+      "version": "6.3.1"
     }
   ]
 }

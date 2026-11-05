@@ -42,8 +42,8 @@ Discovery rules are implemented in `bundle-release/scripts/release_versions.py`
   `packages/omp/<key>/.omp-plugin/plugin.json` plus `packages/omp/<key>/.cursor-plugin/plugin.json`
   and `packages/omp/<key>/package.json`. Generated manifests are check-only.
 - Included opencode npm packages use `packages/opencode/<unscoped-key>/package.json`
-  and are required to exist at the lockstep version (check-only). The package is
-  experimental, opt-in, and not yet published.
+  and are required to exist at the lockstep version (check-only). `release.yml`
+  publishes the package to npm on the maintainer-pushed tag.
 - `deferred` and `excluded` entries require no manifest and suppress their modeled
   paths from the bounded backstop. `file-copy` entries are skipped entirely.
 - `ycc/mods/**` is excluded entirely — `ycc-mods` keeps its own version. Marketplace

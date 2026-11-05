@@ -1,4 +1,4 @@
-<!-- Template used by bundle-release/scripts/draft-notes.sh. Placeholders are replaced at generation time; do not remove or rename them. The PACKAGES_TABLE placeholder renders one row per package and runtime from ycc/settings/packages.json (columns Package | Runtime | Status | Mechanism | Listed | Version or target | Notes): included packages show the release version, deferred and excluded packages show their target, and opencode is marked experimental, opt-in, and not yet published. -->
+<!-- Template used by bundle-release/scripts/draft-notes.sh. Placeholders are replaced at generation time; do not remove or rename them. The PACKAGES_TABLE placeholder renders one row per package and runtime from ycc/settings/packages.json (columns Package | Runtime | Status | Mechanism | Listed | Version or target | Notes): included packages show the release version, deferred and excluded packages show their target, and experimental/opt-in markers come from the package model. -->
 
 # Release {{VERSION}} — {{DATE}}
 

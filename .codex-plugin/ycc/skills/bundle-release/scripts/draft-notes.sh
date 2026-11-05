@@ -172,8 +172,6 @@ for key in sorted(packages):
             notes.append("experimental")
         if entry.get("opt_in"):
             notes.append("opt-in")
-        if mechanism == "npm" and status == "included":
-            notes.append("not yet published")
         if entry.get("notes"):
             notes.append(str(entry["notes"]))
         rows.append(
