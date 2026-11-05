@@ -1,6 +1,6 @@
 {
   "name": "ycc-hooks",
-  "version": "6.2.1",
+  "version": "6.3.0",
   "description": "Lifecycle hooks for ycc.",
   "author": {
     "name": "yandy-r"
