@@ -74,7 +74,6 @@ validate_scope_owned_targets() {
         # generators (skills/agents/rules) stay on the catch-all: install tests
         # and other targets import or regenerate them.
         scripts/generate_cursor_packages.py | scripts/cursor_native_resources.py | scripts/generate-cursor-packages.sh | scripts/validate-cursor-packages.sh | scripts/validate_cursor_native.py | scripts/test_validate_cursor_native.py | scripts/test_generate_cursor_packages.py | scripts/vendor/cursor/*) echo "cursor cursor-native config" ;;
-        scripts/cursor_live_smoke.py | scripts/test_cursor_live_smoke.py) echo "cursor-native" ;;
         # The MCP secret-literal audit shared by the Cursor and OMP package generators (typed,
         # so it also selects `types` through the scripts/*.py rule).
         scripts/mcp_secret_audit.py) echo "cursor cursor-native omp config" ;;
@@ -153,7 +152,7 @@ validate_scope_owned_targets() {
         scripts/install_migrate.py | scripts/package_install_plan.py | scripts/test_package_install_plan.py) echo "config" ;;
         scripts/merge_managed_config.py | scripts/managed_config_*.py) echo "config" ;;
         scripts/test_merge_managed_config.py | scripts/test_managed_config_entries.py) echo "config" ;;
-        scripts/codex_marketplace.py | scripts/test_codex_marketplace.py) echo "config codex-native" ;;
+        scripts/codex_marketplace.py) echo "config codex-native" ;;
         scripts/generate_codex_plugin.py | scripts/validate-codex-plugin.sh | scripts/validate_codex_native.py | scripts/test_validate_codex_native.py | scripts/test_generate_codex_plugin.py) echo "codex codex-native config" ;;
 
         # Single-target tests and validators.

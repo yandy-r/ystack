@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
-"""Preview or apply the global, ownership-safe native package migrations."""
+"""Retire proven installer-owned legacy state after a native package install (internal helper)."""
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from codex_marketplace import build_entry, validate_marketplace_catalog
+from codex_marketplace import validate_marketplace_catalog
 from generate_codex_plugin import (
     MIGRATION_PACKAGES,
     build_repository_marketplace,
@@ -35,6 +38,9 @@ from install_slices import (
     load_state as load_slice_state,
 )
 from install_slices import (
+    save_state as save_slice_state,
+)
+from install_slices import (
     state_path as slice_state_path,
 )
 from merge_managed_config import PROFILES, load_state, remove_hook_commands
@@ -46,13 +52,29 @@ PACKAGES = MIGRATION_PACKAGES
 # Repo-mode catalog entries written before the GitHub rename pointed at this URL. This literal is
 # historical data: install_migrate.py is deliberately not in rename_repo.ALLOWLIST_FILES.
 PRE_RENAME_REPO_URL = "https://github.com/yandy-r/claude-plugins.git"
+REPO_URL = "https://github.com/yandy-r/ystack.git"
 
 
-def legacy_repo_entry() -> dict[str, Any]:
-    """Return the exact repo-mode catalog entry the installer wrote before the repository rename."""
-    entry = build_entry("repo", "")
-    entry["source"] = {**entry["source"], "url": PRE_RENAME_REPO_URL}
-    return entry
+def legacy_catalog_entries() -> list[dict[str, Any]]:
+    """Return every exact ycc entry the retired installer wrote into ~/.agents/plugins/marketplace.json."""
+
+    def entry(source: dict[str, str]) -> dict[str, Any]:
+        return {
+            "name": "ycc",
+            "source": source,
+            "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+            "category": "Productivity",
+        }
+
+    def repo(url: str) -> dict[str, str]:
+        return {"source": "git-subdir", "url": url, "path": "./.codex-plugin/ycc", "ref": "main"}
+
+    return [
+        entry({"source": "local", "path": "./.agents/plugins/ycc"}),
+        entry({"source": "local", "path": "./plugins/ycc"}),
+        entry(repo(REPO_URL)),
+        entry(repo(PRE_RENAME_REPO_URL)),
+    ]
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -210,6 +232,35 @@ def released_codex_trees(root: Path) -> ReleasedTrees | None:
     return ReleasedTrees(algorithm, trees, shallow)
 
 
+@functools.cache
+def historical_claude_commands(root: Path) -> dict[str, list[bytes]] | None:
+    """Every distinct ycc/commands/<name> blob in this checkout's HEAD history.
+
+    The old Claude commands slice copied these files into ~/.claude/commands;
+    the directory has since been retired, so ownership proof needs history.
+    None when git or this checkout's history is unavailable.
+    """
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+
+    def git(*args: str) -> bytes:
+        return subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, env=env).stdout
+
+    try:
+        if Path(git("rev-parse", "--show-toplevel").decode().strip()).resolve() != root.resolve():
+            return None
+        commits = git("rev-list", "--full-history", "HEAD", "--", "ycc/commands").decode().split()
+        blobs: dict[str, set[str]] = {}
+        for commit in commits:
+            for line in git("ls-tree", commit, "ycc/commands/").decode().splitlines():
+                meta, _, path = line.partition("\t")
+                fields = meta.split()
+                if len(fields) == 3 and fields[1] == "blob":
+                    blobs.setdefault(Path(path).name, set()).add(fields[2])
+        return {name: [git("cat-file", "blob", blob) for blob in sorted(ids)] for name, ids in blobs.items()}
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
 def codex_rewrite_sets(home: Path) -> tuple[list[tuple[str, str]], ...]:
     """Return the current projected rewrites plus the historical narrow form.
 
@@ -230,6 +281,8 @@ class Migration:
     def __init__(self, apply: bool) -> None:
         self.apply = apply
         self.home = Path.home()
+        # Native Cursor packages whose legacy carriers this run retired (or would retire).
+        self.cursor_retired: set[str] = set()
         # omp_install.MigratePlan, set by main's preflight (omp_install is imported lazily).
         self.omp_plan: Any = None
 
@@ -267,7 +320,7 @@ class Migration:
             if released is not None and released.shallow:
                 print(
                     f"[!!] kept {path}: not in this shallow checkout's history; "
-                    "run 'git fetch --unshallow' and rerun migrate"
+                    "run 'git fetch --unshallow' and rerun the install"
                 )
             else:
                 print(f"[!!] kept {path}: edited or ownership uncertain")
@@ -305,19 +358,31 @@ class Migration:
             command.append("--dry-run")
         subprocess.run(command, check=True)
 
-    def claude(self) -> None:
-        dest = self.home / ".claude/settings.json"
+    def claude(self, *, removing: bool = False) -> None:
+        """Retire legacy Claude installer state the enabled native packages replace.
+
+        ``removing`` (from 'install.sh remove --intent base'): ycc@ycc is gone,
+        so its standalone copies are retired without the enablement proof.
+        """
+        claude_dir = self.home / ".claude"
+        if claude_dir.is_symlink() or not safe_parent(claude_dir / "entry"):
+            print(f"[!!] kept {claude_dir}: symlinked configuration directory (no Claude cleanup)")
+            return
+        dest = claude_dir / "settings.json"
+        settings = load_json(dest) if dest.is_file() else {}
+        enabled = settings.get("enabledPlugins", {})
+        if not isinstance(enabled, dict):
+            enabled = {}
+        # Installed registry membership or ycc-all's dependency closure is NOT
+        # evidence of explicit enablement at user scope.
+        if removing or enabled.get("ycc@ycc") is True:
+            self.claude_slices()
+        else:
+            print("[!!] Claude standalone skills/agents retained: ycc@ycc is not explicitly enabled")
         if dest.is_symlink():
             print(f"[!!] kept {dest}: symlinked config file (hooks, target and ownership state retained)")
             return
-        if not safe_parent(dest):
-            print(f"[!!] kept {dest}: symlinked parent directory")
-            return
-        settings = load_json(dest) if dest.exists() else {}
-        enabled = settings.get("enabledPlugins", {})
-        # Installed registry membership or ycc-all's dependency closure is NOT
-        # evidence of explicit enablement at user scope.
-        if isinstance(enabled, dict) and enabled.get("ycc-hooks@ycc") is True:
+        if enabled.get("ycc-hooks@ycc") is True:
             self.merge_remove(
                 "claude-settings", ROOT / "ycc/settings/settings.json", dest, "hooks", "--prune-hook-commands"
             )
@@ -360,7 +425,95 @@ class Migration:
             self.merge_remove("claude-mcp", ROOT / "mcp-configs/mcp.json", self.home / ".claude.json", "mcp")
         else:
             print("[!!] Claude MCP retained: ycc-mcp@ycc is not explicitly enabled")
-        print("Claude migrate complete (global scope only).")
+        print("Claude legacy cleanup complete (global scope only).")
+
+    def claude_slices(self) -> None:
+        """Retire standalone ~/.claude/{skills,agents} copies and legacy command wrappers.
+
+        An entry goes only when its bytes equal what the old installer wrote:
+        the canonical source, raw or projected (plugin-root rewrites, ycc:
+        namespace stripped). Wrappers are matched against every historical
+        ycc/commands version. Recorded names alone never prove ownership, so
+        recorded-but-edited entries stay and are reported.
+        """
+        rewrites = rewrites_for("claude", self.home)
+        state_file = slice_state_path()
+        state = load_slice_state(state_file)
+        retired: dict[str, set[str]] = {}
+        with tempfile.TemporaryDirectory(prefix="ycc-cleanup-") as tmp:
+            staging = Path(tmp)
+            for slice_name in ("skills", "agents"):
+                unit = SPECS[("claude", slice_name)][0]
+                dest = self.home / unit.dest
+                if not dest.is_dir() or dest.is_symlink():
+                    continue
+                entries = shipped_entries(unit)
+                gone: set[str] = set()
+
+                def candidates(name: str, src: Path, slice_name: str = slice_name) -> tuple[Path, ...]:
+                    trusted_source(src, ROOT)
+                    reject_escaping_symlinks(src)
+                    projected = stage(name, src, staging / slice_name, rewrites, namespace_pattern("claude"))
+                    return (src, projected)
+
+                for name, src in sorted(entries.items()):
+                    if name != "_shared" and self.remove(dest / name, candidates(name, src)):
+                        gone.add(name)
+                if "_shared" in entries and (dest / "_shared").exists():
+                    # Retained skills (edited or foreign) may source the helpers.
+                    left = sorted(e.name for e in dest.iterdir() if e.name not in gone | {"_shared"})
+                    if left:
+                        print(f"[!!] kept {dest / '_shared'}: retained entries may depend on it: {', '.join(left)}")
+                    elif self.remove(dest / "_shared", candidates("_shared", entries["_shared"])):
+                        gone.add("_shared")
+                retired[str(dest)] = gone
+                if self.apply and dest.is_dir() and not any(dest.iterdir()):
+                    dest.rmdir()
+            commands = self.home / ".claude/commands"
+            recorded = [n for n in state.get(str(commands), []) if n not in ("", ".", "..") and Path(n).name == n]
+            if recorded and commands.is_dir() and not commands.is_symlink():
+                retired[str(commands)] = self.claude_wrappers(commands, recorded, staging / "commands")
+                if self.apply and not any(commands.iterdir()):
+                    commands.rmdir()
+        if self.apply and any(retired.values()):
+            hashes: dict[str, str] = {}
+            if state_file.is_file():
+                raw = json.loads(state_file.read_text(encoding="utf-8")).get("sha256", {})
+                hashes = raw if isinstance(raw, dict) else {}
+            for key, gone in retired.items():
+                if key in state:
+                    state[key] = [name for name in state[key] if name not in gone]
+            save_slice_state(state_file, state, hashes)
+
+    def claude_wrappers(self, commands: Path, recorded: list[str], staging: Path) -> set[str]:
+        """Remove recorded wrappers byte-identical to a historical ycc/commands projection."""
+        history = historical_claude_commands(ROOT)
+        if history is None:
+            print(f"[!!] kept {commands}: git history unavailable; legacy command wrappers cannot be proven owned")
+            return set()
+        names = {Path(n).stem for n in recorded} | {
+            p.stem for kind in ("skills", "agents") for p in (ROOT / "ycc" / kind).iterdir()
+        }
+        alternation = "|".join(sorted(map(re.escape, names), key=len, reverse=True))
+        pattern = re.compile(rf"(?<![A-Za-z0-9_-])(/?)ycc:({alternation})(?![A-Za-z0-9_-])")
+        rewrites = rewrites_for("claude", self.home)
+        gone: set[str] = set()
+        for name in sorted(recorded):
+            versions = history.get(name, [])
+            sources: list[Path] = []
+            for index, body in enumerate(versions):
+                raw = staging / f"raw-{index}" / name
+                raw.parent.mkdir(parents=True, exist_ok=True)
+                raw.write_bytes(body)
+                sources += [raw, stage(name, raw, staging / f"projected-{index}", rewrites, pattern)]
+            target = commands / name
+            if not target.exists() and not target.is_symlink():
+                gone.add(name)  # already gone: forget the record
+            elif sources and self.remove(target, tuple(sources)):
+                gone.add(name)
+            elif not sources:
+                print(f"[!!] kept {target}: no ycc command of that name in history")
+        return gone
 
     def retire_cursor_carriers(self) -> None:
         """Retract installer-owned Cursor command wrappers and the sessionStart hook.
@@ -369,7 +522,8 @@ class Migration:
         native ycc-hooks package, so both must go before skills are removed. The
         slice and merge engines own the ownership proof (recorded names plus
         content hashes); every decision is preflighted with --dry-run before
-        any mutation, and a refusal stops the whole Cursor migration closed.
+        any mutation, and a refusal stops the whole Cursor cleanup closed. Unrecorded
+        files in ~/.cursor/commands are the user's: they are kept, never a refusal.
         """
         helper = str(ROOT / "scripts/install_slices.py")
         merge = str(ROOT / "scripts/merge_managed_config.py")
@@ -397,34 +551,19 @@ class Migration:
         ]
         owned = load_slice_state(slice_state_path())
         commands_dir = self.home / ".cursor/commands"
-        # The strict slice remover intentionally ignores unrecorded user files.
-        # Do not delete their referenced skills behind its back: require manual
-        # resolution for possible former carriers that lack ownership proof.
+        # The strict slice remover acts only on recorded wrappers; anything unrecorded in
+        # ~/.cursor/commands is the user's and stays (it is reported, never a refusal).
         if commands_dir.is_dir() and not commands_dir.is_symlink() and safe_parent(commands_dir / "entry"):
             tracked = set(owned.get(str(commands_dir), []))
-            shipped = shipped_entries(SPECS[("cursor", "commands")][0])
-            for entry in commands_dir.iterdir():
-                if entry.name in tracked:
-                    continue
-                references_skills = (
-                    entry.is_file()
-                    and not entry.is_symlink()
-                    and any(
-                        marker in entry.read_text(encoding="utf-8", errors="replace")
-                        for marker in (
-                            str(self.home / ".cursor/skills"),
-                            str(self.home / ".agents/skills"),
-                            "~/.cursor/skills",
-                            "~/.agents/skills",
-                        )
-                    )
-                )
-                if entry.name in shipped or entry.is_symlink() or references_skills:
-                    raise ValueError(
-                        f"Cursor command may reference file-copy skills but has no ownership proof: {entry}; "
-                        "no Cursor cleanup performed. Back it up and edit or remove it manually, then re-run migrate "
-                        "before applying or activating native packages"
-                    )
+            for entry in sorted(commands_dir.iterdir()):
+                if entry.name not in tracked:
+                    print(f"[!!] kept {entry}: not recorded as installed by ycc")
+        merge_owned = load_state()
+        retiring: list[str] = []
+        if owned.get(str(commands_dir)):
+            retiring.append("ycc")
+        if owned.get(str(self.home / ".cursor/hooks")) or merge_owned.get(f"cursor-hooks:{hooks_json}"):
+            retiring.append("ycc-hooks")
         print(f"[ok] Cursor carriers {'will retire' if self.apply else 'would retire'} before file-copy skills")
 
         def run(label: str, command: list[str], dry_run: bool) -> None:
@@ -433,9 +572,8 @@ class Migration:
             except subprocess.CalledProcessError as error:
                 raise ValueError(
                     f"Cursor {label} cleanup refused; no file-copy skills, agents or rules removed. "
-                    "Back up and resolve the reported carrier manually, then run "
-                    "`./install.sh remove --target cursor --intent commands,hooks` and retry "
-                    "`./install.sh migrate --target cursor` before applying or activating native packages"
+                    "Back up and resolve the reported carrier manually, then re-run "
+                    "`./install.sh install --target cursor`"
                 ) from error
 
         # Preflight everything first: no step may mutate if any would refuse.
@@ -450,8 +588,14 @@ class Migration:
                 if key is not None and not owned.get(str(self.home / key)):
                     continue
                 run(label, command, False)
+        self.cursor_retired.update(retiring)
 
     def cursor(self) -> None:
+        """Retire the file-copy Cursor install: carriers first, then byte-identical unit copies.
+
+        Ownership is proven against the committed packages/cursor sources (raw,
+        and as the old installer projected them), never against recorded names.
+        """
         units = (("skills", "ycc"), ("agents", "ycc"), ("rules", "ycc-rules"))
         # Validate every canonical source before any removal or projection.
         for unit, package in units:
@@ -492,6 +636,7 @@ class Migration:
                         removed = self.remove(dest / src.name, (src, projected))
                     if removed:
                         gone.add(src.name)
+                        self.cursor_retired.add(package)
             if shared is not None:
                 # Retained skills (edited or foreign) may source this helper.
                 left = [e.name for e in dest.iterdir() if e.name not in gone | {"_shared"}] if dest.is_dir() else []
@@ -503,8 +648,24 @@ class Migration:
                 for entry in sorted(dest.iterdir()):
                     if not (source / entry.name).exists():
                         print(f"[!!] kept {entry}: not shipped by ycc")
-        print("Cursor: open /add-plugin and add the ycc marketplace, then select the native packages.")
-        print("Cursor migrate complete; native installation is interactive, not automatic.")
+        # The old global MCP step merged mcp-configs/mcp.json into ~/.cursor/mcp.json; the merge
+        # engine's ownership state takes back only the servers ycc wrote (ycc-mcp now carries them).
+        mcp = self.home / ".cursor/mcp.json"
+        if (mcp.exists() or mcp.is_symlink()) and load_state().get(f"cursor-mcp:{mcp}"):
+            self.merge_remove("cursor-mcp", ROOT / "mcp-configs/mcp.json", mcp, "mcp")
+            if not mcp.is_symlink() and safe_parent(mcp):
+                self.cursor_retired.add("ycc-mcp")
+        # Old installs linked the rules into ~/.cursor; retire only links to this checkout.
+        for name in ("CLAUDE.md", "AGENTS.md"):
+            link = self.home / ".cursor" / name
+            if link.is_symlink() and self.remove(link, (ROOT / "ycc/settings/rules" / name,), links_only=True):
+                self.cursor_retired.add("ycc-rules")
+        order = ("ycc", "ycc-rules", "ycc-mcp", "ycc-hooks")
+        retired = [package for package in order if package in self.cursor_retired]
+        if retired:
+            # cursor.sh reads this line to name the replacing packages in its /plugins hint.
+            print(f"Cursor legacy carriers {'retired' if self.apply else 'to retire'} for: {' '.join(retired)}")
+        print("Cursor legacy cleanup complete.")
 
     def omp(self) -> None:
         import omp_install
@@ -560,59 +721,42 @@ class Migration:
                 else:
                     self.remove(dest / "_shared", candidates("_shared", entries["_shared"]))
 
-    def codex(self, source: Path, eligible: bool) -> None:
-        if not eligible:
-            print("[!!] Codex native catalog not listed (YAN-1140); legacy ycc@local-ycc-plugins retained")
-            return
-        if not self.apply:
-            print(
-                f"Codex: would add marketplace {source}, install ycc@ycc and ycc-mcp@ycc, and verify installed/enabled"
-            )
-            print(
-                "Codex: would retire only proven legacy config, links and cache after successful verification; "
-                "~/.codex/agents retained"
-            )
-            self.codex_skills()
-            return
+    def codex_native_installed(self, package: str) -> bool:
+        """True when ``<package>@ycc`` is enabled in config.toml and has a snapshot Codex installed."""
+        config = self.home / ".codex/config.toml"
+        try:
+            plugins = tomllib.loads(config.read_text(encoding="utf-8")).get("plugins", {})
+        except (OSError, tomllib.TOMLDecodeError):
+            return False
+        entry = plugins.get(f"{package}@ycc") if isinstance(plugins, dict) else None
+        if not isinstance(entry, dict) or entry.get("enabled") is not True:
+            return False
+        root = self.home / ".codex/plugins/cache/ycc" / package
+        return root.is_dir() and any((snapshot / ".codex-plugin/plugin.json").is_file() for snapshot in root.iterdir())
 
-        def cli(*args: str) -> dict[str, Any]:
-            print(f"[ok] codex {' '.join(args)}", flush=True)
-            result = subprocess.run(["codex", *args, "--json"], check=True, capture_output=True, text=True)
-            payload = json.loads(result.stdout)
-            if not isinstance(payload, dict):
-                raise ValueError("Codex CLI returned a non-object response")
-            return payload
+    def codex(self, *, removing: bool = False) -> None:
+        """Retire proven legacy ycc@local-ycc-plugins state; never installs, never touches ~/.codex/agents.
 
-        added = cli("plugin", "marketplace", "add", str(source))
-        if added.get("marketplaceName") != "ycc":
-            raise ValueError("Codex did not register marketplace ycc; legacy retained")
-        listing = cli("plugin", "list", "--available")
-        # codex-cli 0.161 moves an installed id out of `available` into
-        # `installed`, so a rerun finds both ids only there. Eligibility is
-        # membership in either list; enablement is still verified below.
-        offered = {item.get("pluginId") for item in listing.get("available", [])}
-        offered |= {item.get("pluginId") for item in listing.get("installed", [])}
-        if not {f"{p}@ycc" for p in PACKAGES}.issubset(offered):
-            raise ValueError("native packages missing from Codex marketplace; legacy retained")
-        for package in PACKAGES:
-            cli("plugin", "add", f"{package}@ycc")
-        installed = {item.get("pluginId"): item for item in cli("plugin", "list").get("installed", [])}
-        version = native_version(load_package_model())
-        for package in PACKAGES:
-            item = installed.get(f"{package}@ycc", {})
-            if item.get("installed") is not True or item.get("enabled") is not True or item.get("version") != version:
-                raise ValueError(f"{package}@ycc not installed/enabled at {version}; legacy retained")
-        # No legacy mutation occurs above this point. CLI failures are fatal;
-        # there is deliberately no fallback to install_codex_plugin.
+        After an install, each legacy carrier goes only once its native replacement is
+        proven installed and enabled (ycc@ycc: plugin leaf, links, cache, catalog entry,
+        standalone skills; ycc-mcp@ycc: the [mcp_servers] group). ``removing`` (from
+        ``install.sh remove``) drops that proof: the native packages are going too.
+        Ownership proofs (byte-identical, owned link, released tree, exact entry) always apply.
+        """
+        base = removing or self.codex_native_installed("ycc")
+        mcp = removing or self.codex_native_installed("ycc-mcp")
+        config = self.home / ".codex/config.toml"
+        if mcp:
+            self.merge_remove("codex-config", ROOT / ".codex-plugin/config/mcp-servers.json", config, "mcp")
+        else:
+            print("[!!] ycc-mcp@ycc not installed and enabled; legacy Codex [mcp_servers] retained")
+        if not base:
+            print("[!!] ycc@ycc not installed and enabled; legacy ycc@local-ycc-plugins retained")
+            return
         with tempfile.TemporaryDirectory(prefix="ycc-migrate-") as tmp:
             leaf = Path(tmp) / "legacy.toml"
             leaf.write_text('[plugins."ycc@local-ycc-plugins"]\nenabled = true\n', encoding="utf-8")
-            self.merge_remove(
-                "codex-config", leaf, self.home / ".codex/config.toml", "plugins", "--entries", "ycc@local-ycc-plugins"
-            )
-        self.merge_remove(
-            "codex-config", ROOT / ".codex-plugin/config/mcp-servers.json", self.home / ".codex/config.toml", "mcp"
-        )
+            self.merge_remove("codex-config", leaf, config, "plugins", "--entries", "ycc@local-ycc-plugins")
         canonical = ROOT / ".codex-plugin/ycc"
         trusted_source(canonical, ROOT)
         # Decide which user-catalog entries survive before retiring any link
@@ -649,10 +793,19 @@ class Migration:
                 print(f"[ok] {'remove' if self.apply else 'would remove'} {cache}")
                 if self.apply:
                     cache.rmdir()
-        if catalog_path is not None and catalog is not None and kept is not None:
-            catalog["plugins"] = kept
-            catalog_path.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        print("Codex migrate complete; all ~/.codex/agents retained.")
+            if self.apply and safe_parent(cache):
+                # The local-ycc-plugins marketplace directory, once nothing is left in it.
+                with contextlib.suppress(OSError):
+                    cache.parent.rmdir()
+        if self.apply and catalog_path is not None and catalog is not None and kept is not None:
+            scaffold = {"name": "local-ycc-plugins", "interface": {"displayName": "Local YCC Plugins"}}
+            if kept or {key: value for key, value in catalog.items() if key != "plugins"} != scaffold:
+                catalog["plugins"] = kept
+                catalog_path.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            else:
+                # Only the installer's scaffold was left.
+                catalog_path.unlink()
+        print("Codex legacy cleanup complete; all ~/.codex/agents retained.")
 
     def plan_codex_catalog(self) -> tuple[Path | None, dict[str, Any] | None, list[Any] | None, set[Path]]:
         """Plan the user catalog edit without writing; return links to keep."""
@@ -668,12 +821,7 @@ class Migration:
         except (OSError, ValueError) as error:
             print(f"[!!] kept {path}: unreadable catalog ({error}); legacy links retained")
             return None, None, None, links
-        recognized = [
-            build_entry("local", "./.agents/plugins/ycc"),
-            build_entry("local", "./plugins/ycc"),
-            build_entry("repo", ""),
-            legacy_repo_entry(),
-        ]
+        recognized = legacy_catalog_entries()
         writable = catalog.get("name") == "local-ycc-plugins" and not path.is_symlink() and safe_parent(path)
         if not writable:
             print(f"[!!] kept {path}: symlinked or foreign catalog")
@@ -697,13 +845,11 @@ class Migration:
         return path, catalog, kept, retained
 
 
-def codex_eligible(source: Path, *, external: bool = False) -> None:
-    """Gate one marketplace source, defaulting to the repository listing state.
+def codex_eligible(source: Path) -> None:
+    """Gate the repository's native Codex listing before any legacy Codex state is retired.
 
-    The repository itself is only eligible once the modeled catalog flips to the
-    native distribution (every migration PACKAGES row listed). An explicit
-    --marketplace-source export is opt-in and stays eligible while each listed
-    entry's payload is present, as before.
+    Eligible only once the modeled catalog flips to the native distribution
+    (every migration PACKAGES row listed) and each listed payload is present.
     """
     catalog_path = source / ".agents/plugins/marketplace.json"
     if not source.is_dir() or source.is_symlink():
@@ -715,14 +861,14 @@ def codex_eligible(source: Path, *, external: bool = False) -> None:
     entries = {item["name"]: item for item in catalog["plugins"]}
     model = load_package_model()
     shipped = native_packages(model.packages)
-    if not external and not repository_native_enabled(model.packages):
+    if not repository_native_enabled(model.packages):
         raise ValueError("native catalog not listed: all migration packages must be listed together (YAN-1140)")
     for name in PACKAGES:
         runtime = model.lookup(name, "codex")
         if runtime is None or runtime.status != "included" or runtime.mechanism != "native" or runtime.opt_in:
             raise ValueError(f"ineligible native Codex package: {name}")
-    check_catalog(source, shipped, include_unlisted=external)
-    if not external and catalog != build_repository_marketplace(shipped):
+    check_catalog(source, shipped, include_unlisted=False)
+    if catalog != build_repository_marketplace(shipped):
         raise ValueError("repository catalog has not flipped to the native listing (YAN-1210)")
     for name in PACKAGES:
         if entries.get(name, {}).get("source") != {"source": "local", "path": f"./.codex-plugin/{name}"}:
@@ -740,30 +886,25 @@ def codex_eligible(source: Path, *, external: bool = False) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--targets", required=True)
-    parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--marketplace-source", type=Path, default=ROOT)
+    parser.add_argument("--dry-run", action="store_true", help="preview the cleanup without changing anything")
+    # Set by 'install.sh remove': the native packages are gone, so cleanup must not require them installed.
+    parser.add_argument("--removing", action="store_true")
     # The installer's project root (git toplevel, else cwd): omp project installs are recorded there.
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
     args = parser.parse_args()
     targets = args.targets.split(",")
     if not targets or any(target not in {"claude", "codex", "cursor", "omp"} for target in targets):
-        print("[err] unsupported migration targets", file=sys.stderr)
+        print("[err] unsupported cleanup targets", file=sys.stderr)
         return 1
-    migration = Migration(args.apply)
-    eligible = True
+    apply = not args.dry_run
+    migration = Migration(apply)
     try:
-        # Preflight the whole selection before applying any target.
+        # Preflight the whole selection before cleaning any target.
         if "codex" in targets:
             try:
-                codex_eligible(
-                    args.marketplace_source,
-                    external=args.marketplace_source.resolve() != ROOT.resolve(),
-                )
+                codex_eligible(ROOT)
             except (OSError, ValueError) as error:
-                eligible = False
-                print(f"[!!] Codex native gate: {error}")
-                if args.apply:
-                    raise ValueError(f"Codex native gate failed: {error}; legacy retained (YAN-1140)") from error
+                raise ValueError(f"Codex native gate failed: {error}; legacy retained (YAN-1140)") from error
         if "omp" in targets:
             import omp_install  # Lazy: keeps the claude/codex/cursor paths free of the omp helper.
 
@@ -773,16 +914,18 @@ def main() -> int:
                 raise ValueError(f"omp unavailable: {error}") from error
             # Every omp refusal (foreign link, unrecorded export, disabled or non-native legacy install,
             # export build) happens here, before any target mutates.
-            migration.omp_plan = omp_install.plan_migrate(args.project_root, apply=args.apply)
-        print(f"Migration {'apply' if args.apply else 'dry-run (pass --apply to change files)'}")
+            migration.omp_plan = omp_install.plan_migrate(args.project_root, apply=apply)
+        print(f"Legacy cleanup {'apply' if apply else 'dry-run (no changes)'}")
         for target in targets:
             if target == "codex":
-                migration.codex(args.marketplace_source.resolve(), eligible)
+                migration.codex(removing=args.removing)
+            elif target == "claude":
+                migration.claude(removing=args.removing)
             else:
                 getattr(migration, target)()
         return 0
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
-        print(f"[err] migration stopped: {error}", file=sys.stderr)
+        print(f"[err] cleanup stopped: {error}", file=sys.stderr)
         if isinstance(error, subprocess.CalledProcessError) and error.stderr:
             print(error.stderr, file=sys.stderr)
         return 1

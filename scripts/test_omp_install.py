@@ -191,6 +191,10 @@ class OmpInstallTests(unittest.TestCase):
 
     def omp(self, *argv: str) -> Result:
         """Run ``omp_install.main`` in-process; capture its prints and the fake's inherited output."""
+        return self.capture(lambda: omp_install.main(list(argv)))
+
+    def capture(self, body: Callable[[], int]) -> Result:
+        """Run ``body`` in-process; capture its prints and the fake's inherited output."""
         out, err = io.StringIO(), io.StringIO()
         with tempfile.TemporaryFile() as child_out, tempfile.TemporaryFile() as child_err:
             sys.stdout.flush()
@@ -200,7 +204,7 @@ class OmpInstallTests(unittest.TestCase):
             os.dup2(child_err.fileno(), 2)
             try:
                 with redirect_stdout(out), redirect_stderr(err):
-                    code = omp_install.main(list(argv))
+                    code = body()
             finally:
                 sys.stdout.flush()
                 sys.stderr.flush()
@@ -571,7 +575,7 @@ class OmpInstallTests(unittest.TestCase):
         self.clear_log()
         result = self.refused("install", "--scope", "user", "--project-root", str(self.home))
         self.assertIn(f"marketplace ycc has a different source ({foreign})", result.err)
-        self.assertIn("./install.sh migrate --target omp", result.err)
+        self.assertIn("(remove it: omp plugin marketplace remove ycc)", result.err)
         self.assertEqual(self.mutating(), [])
         self.assertEqual(self.snapshot(), before)
 
@@ -703,15 +707,13 @@ class OmpInstallTests(unittest.TestCase):
         result = self.omp("available")
         self.assertEqual((result.code, result.out), (0, "18.12.3\n"))
 
-    def test_missing_omp_is_unavailable_and_migrate_is_a_noop(self) -> None:
+    def test_missing_omp_is_unavailable_and_cleanup_is_a_noop(self) -> None:
         with patch.dict(os.environ, {"PATH": f"/usr/bin{os.pathsep}/bin"}):
             if shutil.which("omp") is not None:
                 self.skipTest("an omp binary is installed system-wide")
             result = self.omp("available")
             self.assertEqual((result.code, result.err), (1, "omp not found on PATH\n"))
-            self.assertEqual(
-                self.ok("migrate", "--apply").out, "[ok] omp: nothing to migrate (omp not found on PATH)\n"
-            )
+            self.assertEqual(self.cleanup().out, "[ok] omp: no legacy state to retire (omp not found on PATH)\n")
 
     def test_project_scope_at_home_is_refused(self) -> None:
         before = self.snapshot()
@@ -741,86 +743,131 @@ class OmpInstallTests(unittest.TestCase):
         self.assert_installed(("ycc", "ycc-mcp", "ycc-rules"), "user", self.model_version)
         self.assertFalse(omp_install.export_dir().exists())
 
-    # -- migration -----------------------------------------------------------------------------
+    # -- legacy cleanup (install_migrate.py runs it before the installer's native install) ------
 
-    def test_migrate_retires_an_in_checkout_link(self) -> None:
+    def cleanup(self, *, apply: bool = True) -> Result:
+        """Run the legacy cleanup the way install_migrate.py does; exit 2 on a refusal."""
+
+        def body() -> int:
+            try:
+                omp_install.apply_migrate(omp_install.plan_migrate(self.home, apply=apply), apply)
+            except (OSError, ValueError, subprocess.CalledProcessError) as error:
+                print(f"[err] native OMP legacy cleanup stopped: {error}", file=sys.stderr)
+                return 2
+            return 0
+
+        return self.capture(body)
+
+    def cleanup_ok(self, *, apply: bool = True) -> Result:
+        result = self.cleanup(apply=apply)
+        self.assertEqual(result.code, 0, f"cleanup: {result.err}{result.child}")
+        return result
+
+    def cleanup_refused(self, *, apply: bool = True) -> Result:
+        result = self.cleanup(apply=apply)
+        self.assertEqual(result.code, 2, f"cleanup: {result.out}{result.err}")
+        return result
+
+    def cleanup_preview(self) -> Result:
+        before = self.snapshot()
+        self.clear_log()
+        result = self.cleanup_ok(apply=False)
+        self.assertEqual(self.snapshot(), before, "cleanup dry-run mutated")
+        self.assertEqual(self.mutating(), [], "cleanup dry-run ran mutating omp calls")
+        return result
+
+    def test_cleanup_retires_an_in_checkout_link(self) -> None:
         self.fake("plugin", "link", str(omp_install.ROOT / "packages/omp/ycc"))
         self.assertEqual([item["name"] for item in self.listing(self.home)["npm"]], ["ycc"])
 
-        preview = self.assert_dry_run(("migrate",))
+        preview = self.cleanup_preview()
         self.assertIn("[dry-run] would run: omp plugin uninstall ycc", preview.out)
+        self.assertIn("[ok] would retire the ycc link; the native install follows", preview.out)
         self.assertIn("omp plugin uninstall --dry-run ycc", self.calls())
 
         self.clear_log()
-        result = self.ok("migrate", "--apply")
+        result = self.cleanup_ok()
         self.assertIn("omp plugin uninstall ycc", self.calls())
-        self.assertIn("[ok] run ./install.sh install --target omp to reinstall natively", result.out)
+        self.assertIn("[ok] retired the ycc link; the native install follows", result.out)
         self.assertEqual(self.listing(self.home)["npm"], [])
 
         self.clear_log()
-        self.assertIn("[ok] omp: nothing to migrate", self.ok("migrate", "--apply").out)
+        self.assertIn("[ok] omp: no legacy state to retire", self.cleanup_ok().out)
         self.assertEqual(self.mutating(), [])
 
-    def test_migrate_retires_the_checkout_root_marketplace_and_reinstalls_natively(self) -> None:
+    def test_cleanup_retires_the_checkout_root_marketplace_and_leaves_the_install_owed(self) -> None:
         other = make_fixture(self.tmp / "other", ("thing",), "1.0.0", name="other")
         self.fake("plugin", "marketplace", "add", str(other))
         self.legacy_checkout_marketplace("ycc")
         legacy = self.entry("ycc", "user")
         assert legacy is not None
         self.assertFalse((Path(legacy["installPath"]) / ".omp-plugin/plugin.json").exists())
-        skill = "plan"
-        self.agents_skill(skill, owned=True)
-        overlap_line = (
-            "[!!] OMP also loads 1 ycc skills from ~/.agents/skills as agents/<name>; "
-            "run ./install.sh install --target omp --only dedupe to hide them in OMP"
-        )
+        self.agents_skill("plan", owned=True)
 
-        preview = self.assert_dry_run(("migrate",))
+        preview = self.cleanup_preview()
         self.assertIn("[dry-run] would run: omp plugin uninstall --scope user ycc@ycc", preview.out)
         self.assertIn("[dry-run] would run: omp plugin marketplace remove ycc", preview.out)
-        self.assertIn("[ok] would install the native OMP packages (user scope)", preview.out)
-        self.assertIn(overlap_line, preview.out)
+        self.assertIn("[ok] native OMP install owed (user scope)", preview.out)
         self.assertIn("omp plugin uninstall --dry-run --scope user ycc@ycc", self.calls())
+        # The installer's dry-run install previews past the legacy marketplace the cleanup retires.
+        install_preview = self.assert_dry_run(
+            ("install", "--scope", "user", "--project-root", str(self.home), "--dry-run")
+        )
+        self.assertIn("is legacy; a real run needs it gone first", install_preview.out)
 
         self.clear_log()
-        result = self.ok("migrate", "--apply")
-        exported = omp_install.export_dir()
+        self.cleanup_ok()
         calls = self.calls()
-        for line in (
-            "omp plugin uninstall --scope user ycc@ycc",
-            "omp plugin marketplace remove ycc",
-            f"omp plugin marketplace add {exported}",
-            "omp plugin install --scope user ycc@ycc",
-        ):
-            self.assertIn(line, calls)
-        self.assertLess(
-            calls.index("omp plugin marketplace remove ycc"), calls.index(f"omp plugin marketplace add {exported}")
+        self.assertIn("omp plugin uninstall --scope user ycc@ycc", calls)
+        self.assertIn("omp plugin marketplace remove ycc", calls)
+        # The cleanup never installs: the installer's native install (its mode and packages) follows.
+        self.assertFalse(any(call.startswith(("omp plugin install", "omp plugin marketplace add")) for call in calls))
+        self.assertEqual(omp_install.ycc_items(self.listing(self.home), "user"), [])
+        self.assertEqual(self.marketplaces(), {"other": str(other)})
+        self.assertEqual(
+            self.state()["migrate_pending"], {self.profile_key(): [{"scope": "user", "project_root": None}]}
         )
-        self.assertIn(overlap_line, result.out)
-        # The default native selection replaces the legacy ycc with ycc and ycc-mcp.
+
+        self.install("user")
+        exported = omp_install.export_dir()
         items = omp_install.ycc_items(self.listing(self.home), "user")
         self.assertEqual([item["id"] for item in items], ["ycc@ycc", "ycc-mcp@ycc", "ycc-rules@ycc"])
         self.assertEqual([len(item["entries"]) for item in items], [1, 1, 1])
         self.assert_installed(("ycc", "ycc-mcp", "ycc-rules"), "user", self.model_version)
         self.assertEqual(self.marketplaces(), {"other": str(other), "ycc": str(exported)})
+        self.assertEqual(self.state()["migrate_pending"], {})
         self.assertEqual((self.home / ".agents/skills/plan/SKILL.md").read_text(encoding="utf-8"), "mine")
 
         self.clear_log()
-        result = self.ok("migrate", "--apply")
-        self.assertIn("[ok] omp: nothing to migrate", result.out)
-        self.assertIn(overlap_line, result.out)
+        self.assertIn("[ok] omp: no legacy state to retire", self.cleanup_ok().out)
         self.assertEqual(self.mutating(), [])
 
-    def test_migrate_keeps_a_foreign_ycc_marketplace(self) -> None:
+    def test_cleanup_then_repo_mode_and_package_selection_install_as_requested(self) -> None:
+        repo = self.tmp / "repo-catalog"
+        shutil.copytree(omp_install.ROOT / ".omp-plugin", repo / ".omp-plugin")
+        shutil.copytree(omp_install.ROOT / "packages/omp", repo / "packages/omp")
+        self.legacy_checkout_marketplace("ycc", "ycc-mcp")
+        self.cleanup_ok()
+        with patch.dict(os.environ, {"FAKE_OMP_REPO_CATALOG": str(repo)}):
+            self.ok(
+                "install", "--scope", "user", "--project-root", str(self.home), "--mode", "repo", "--packages", "ycc"
+            )
+        self.assertEqual(self.marketplaces(), {"ycc": omp_install.REPOSITORY})
+        items = omp_install.ycc_items(self.listing(self.home), "user")
+        self.assertEqual([item["id"] for item in items], ["ycc@ycc"])
+        self.assertFalse(omp_install.export_dir().exists())
+        self.assertEqual(self.state()["migrate_pending"], {})
+
+    def test_cleanup_keeps_a_foreign_ycc_marketplace(self) -> None:
         foreign = make_fixture(self.tmp / "foreign", ("ycc",), "0.1.0")
         self.fake("plugin", "marketplace", "add", str(foreign))
         self.fake("plugin", "install", "--scope", "user", "ycc@ycc")
         before = self.snapshot()
         self.clear_log()
-        for argv in (("migrate",), ("migrate", "--apply")):
-            result = self.ok(*argv)
+        for apply in (False, True):
+            result = self.cleanup_ok(apply=apply)
             self.assertIn(f"[!!] kept marketplace ycc ({foreign}): foreign", result.out)
-            self.assertIn("[ok] omp: nothing to migrate", result.out)
+            self.assertIn("[ok] omp: no legacy state to retire", result.out)
         self.assertEqual(self.mutating(), [])
         self.assertEqual(self.snapshot(), before)
 
@@ -830,32 +877,33 @@ class OmpInstallTests(unittest.TestCase):
         for package in packages:
             self.fake("plugin", "install", "--scope", "user", f"{package}@ycc", FAKE_OMP_CLAUDE_CATALOG="1")
 
-    def test_migrate_refuses_a_disabled_legacy_install_and_never_toggles_it(self) -> None:
+    def test_cleanup_refuses_a_disabled_legacy_install_and_never_toggles_it(self) -> None:
         self.legacy_checkout_marketplace("ycc")
         self.fake("plugin", "disable", "--scope", "user", "ycc@ycc")
         before = self.snapshot()
         self.clear_log()
-        for argv in (("migrate",), ("migrate", "--apply")):
-            result = self.refused(*argv)
-            self.assertIn("ycc@ycc is disabled (user) and migrate would reinstall it enabled", result.err)
+        for apply in (False, True):
+            result = self.cleanup_refused(apply=apply)
+            self.assertIn("ycc@ycc is disabled (user) and the native install would reinstall it enabled", result.err)
             self.assertIn("omp plugin uninstall --scope user ycc@ycc", result.err)
             self.assertIn("omp plugin disable --scope user ycc@ycc", result.err)
         self.assertEqual(self.mutating(), [])
         self.assertEqual(self.snapshot(), before)
 
-    def test_migrate_refuses_a_legacy_install_with_no_native_package(self) -> None:
+    def test_cleanup_refuses_a_legacy_install_with_no_native_package(self) -> None:
         self.legacy_checkout_marketplace("ycc", "ycc-hooks")
         before = self.snapshot()
         self.clear_log()
-        result = self.refused("migrate", "--apply")
+        result = self.cleanup_refused()
         self.assertIn("ycc-hooks@ycc (user) has no native OMP package yet", result.err)
         self.assertEqual(self.mutating(), [])
         self.assertEqual(self.snapshot(), before)
 
-    def test_migrate_carries_a_legacy_ycc_and_ycc_mcp_pair_to_native(self) -> None:
+    def test_cleanup_then_install_carries_a_legacy_ycc_and_ycc_mcp_pair_to_native(self) -> None:
         self.legacy_checkout_marketplace("ycc", "ycc-mcp")
         self.clear_log()
-        self.ok("migrate", "--apply")
+        self.cleanup_ok()
+        self.install("user")
         calls = self.calls()
         for package in ("ycc", "ycc-mcp"):
             self.assertIn(f"omp plugin uninstall --scope user {package}@ycc", calls)
@@ -863,58 +911,40 @@ class OmpInstallTests(unittest.TestCase):
         self.assert_installed(("ycc", "ycc-mcp"), "user", self.model_version)
         self.assertEqual(self.marketplaces(), {"ycc": str(omp_install.export_dir())})
 
-    def test_migrate_failure_records_pending_scopes_and_rerun_finishes_them(self) -> None:
+    def test_owed_install_survives_a_failed_native_install_until_one_succeeds(self) -> None:
         self.legacy_checkout_marketplace("ycc")
+        self.cleanup_ok()
+        owed = {self.profile_key(): [{"scope": "user", "project_root": None}]}
         with patch.dict(os.environ, {"FAKE_OMP_FAIL": "install:ycc@ycc"}):
-            result = self.refused("migrate", "--apply")
+            result = self.refused("install", "--scope", "user", "--project-root", str(self.home))
         self.assertIn("'omp plugin install --scope user ycc@ycc' failed (exit 1)", result.err)
-        self.assertIn("re-run ./install.sh migrate --target omp --apply, or install directly:", result.err)
-        self.assertIn(f"[!!]   {omp_install.ROOT}/install.sh install --target omp\n", result.err)
-        # The legacy install and the checkout-root marketplace are gone; the owed scope is recorded.
-        self.assertEqual(omp_install.ycc_items(self.listing(self.home), "user"), [])
-        self.assertEqual(self.marketplaces(), {})
-        self.assertEqual(
-            self.state()["migrate_pending"], {self.profile_key(): [{"scope": "user", "project_root": None}]}
-        )
-
+        self.assertEqual(self.state()["migrate_pending"], owed)
+        # A re-run of the cleanup reports the owed install again without retiring anything new.
         self.clear_log()
-        self.ok("migrate", "--apply")
-        self.assertIn("omp plugin install --scope user ycc@ycc", self.calls())
-        self.assert_installed(("ycc",), "user", self.model_version)
-        self.assertEqual(self.marketplaces(), {"ycc": str(omp_install.export_dir())})
-        self.assertEqual(self.state()["migrate_pending"], {})
-
-        self.clear_log()
-        self.assertIn("[ok] omp: nothing to migrate", self.ok("migrate", "--apply").out)
+        self.assertIn("[ok] native OMP install owed (user scope)", self.cleanup_ok().out)
         self.assertEqual(self.mutating(), [])
 
-    def test_migrate_pending_refuses_a_foreign_ycc_marketplace_before_any_change(self) -> None:
+        self.install("user")
+        self.assert_installed(("ycc", "ycc-mcp", "ycc-rules"), "user", self.model_version)
+        self.assertEqual(self.state()["migrate_pending"], {})
+        self.clear_log()
+        self.assertIn("[ok] omp: no legacy state to retire", self.cleanup_ok().out)
+        self.assertEqual(self.mutating(), [])
+
+    def test_owed_install_refuses_a_foreign_ycc_marketplace_before_any_change(self) -> None:
         self.legacy_checkout_marketplace("ycc")
-        with patch.dict(os.environ, {"FAKE_OMP_FAIL": "install:ycc@ycc"}):
-            self.refused("migrate", "--apply")
+        self.cleanup_ok()
         pending = self.state()["migrate_pending"]
-        self.assertEqual(pending, {self.profile_key(): [{"scope": "user", "project_root": None}]})
         foreign = make_fixture(self.tmp / "foreign", ("ycc",), "0.1.0")
         self.fake("plugin", "marketplace", "add", str(foreign))
-        self.fake("plugin", "link", str(omp_install.ROOT / "packages/omp/ycc"))
         before = self.snapshot()
         self.clear_log()
-        for argv in (("migrate",), ("migrate", "--apply")):
-            result = self.refused(*argv)
-            self.assertIn(f"marketplace ycc has a different source ({foreign})", result.err)
+        self.cleanup_ok()
+        result = self.refused("install", "--scope", "user", "--project-root", str(self.home))
+        self.assertIn(f"marketplace ycc has a different source ({foreign})", result.err)
         self.assertEqual(self.mutating(), [])
         self.assertEqual(self.snapshot(), before)
         self.assertEqual(self.state()["migrate_pending"], pending)
-
-    def test_migrate_export_build_failure_stops_before_any_uninstall(self) -> None:
-        self.legacy_checkout_marketplace("ycc")
-        before = self.snapshot()
-        self.clear_log()
-        with patch.object(omp_install, "build_export", side_effect=ValueError("export broke")):
-            result = self.refused("migrate", "--apply")
-        self.assertIn("export broke", result.err)
-        self.assertEqual(self.mutating(), [])
-        self.assertEqual(self.snapshot(), before)
 
     def test_remove_keeps_a_ycc_install_now_served_by_a_foreign_marketplace(self) -> None:
         self.install("user")
@@ -985,8 +1015,8 @@ class OmpInstallTests(unittest.TestCase):
     )
     W4 = (
         "[!!] enabledProviders includes claude: 1 ycc skills in ~/.claude/skills outrank the OMP package "
-        "(it shows as ycc/<name>); remove them with ./install.sh remove --target claude --intent skills, "
-        "or drop claude from enabledProviders"
+        "(it shows as ycc/<name>); retire them with ./install.sh sync --target claude --intent base "
+        "(its legacy cleanup removes ycc-owned ~/.claude/skills copies), or drop claude from enabledProviders"
     )
     W5 = (
         "[!!] OMP also loads these skills; "

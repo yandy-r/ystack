@@ -1,12 +1,14 @@
 # Cursor Install Guide
 
-Cursor support is generated from the `ycc/` source tree. It is available as
-native plugins from the repository's Cursor marketplace and as files synced
-into Cursor-native config directories by `install.sh`.
+Cursor support is generated from the `ycc/` source tree and ships as native
+plugins from the repository's Cursor marketplace. `install.sh` registers that
+marketplace and merges the one piece no plugin carries: the CLI model
+preference in `~/.cursor/cli-config.json`.
 
-## Native Plugins
+## Quick Start
 
-The `ycc` marketplace lists `ycc`, `ycc-mcp`, `ycc-hooks`, and `ycc-rules`.
+The `ycc` marketplace lists `ycc` (skills, agents, commands), `ycc-rules`
+(rules), `ycc-mcp` (MCP servers) and `ycc-hooks` (the `sessionStart` hook).
 Add it from the agent CLI, then pick the packages in `/plugins` (the Cursor IDE
 reaches the same marketplace under `/plugins` → Marketplace):
 
@@ -14,113 +16,82 @@ reaches the same marketplace under `/plugins` → Marketplace):
 agent plugin marketplace add https://github.com/yandy-r/ystack
 ```
 
-`ycc-hooks` registers `sessionStart` only; `WorktreeCreate` is not available
-on Cursor. See [Cursor native packages](v6/cursor.md) for the package model, and
-[Migrating To Native Packages](README.md#migrating-to-native-packages) to move
-an existing file-copy install onto them (`migrate --target cursor` prints the
-`/add-plugin` step).
-
-## Quick Start (file copy)
-
-From the repository root:
+The agent CLI has no non-interactive `plugin install`, so the packages are
+always selected in `/plugins`. From a checkout, `install.sh` does the same
+registration:
 
 ```bash
-./install.sh install --target cursor
+./install.sh install --target cursor                       # register + /plugins hint for ycc
+./install.sh install --target cursor --rules --mcp --hooks # the hint adds ycc-rules, ycc-mcp, ycc-hooks
 ```
 
-The default `base` step generates, validates, formats, and rsyncs the Cursor
-bundle into `~/.cursor/`.
+The `base` step:
 
-## Add Commands, Settings, Rules, MCP, And Optional Hooks
+1. runs `agent plugin marketplace add https://github.com/yandy-r/ystack`, or
+   reports `ycc marketplace already registered` when it is;
+2. prints the `/plugins` step naming the packages the requested intents need:
+   `Install the packages in Cursor: open /plugins (agent CLI or IDE), pick the 'ycc' marketplace and select: <packages>`;
+3. runs the [legacy cleanup](README.md#automatic-legacy-cleanup), which retires
+   the file copies, command wrappers, `sessionStart` hook, global MCP merges and
+   rule links older installers wrote under `~/.cursor/`.
 
-After the base install, add the command wrappers and optional configuration:
+Cursor rejects filesystem marketplace sources, so local mode registers the
+published GitHub catalog too (the installer says so). Without the `agent` CLI
+the step warns with the manual IDE steps (open `/plugins`, add the marketplace
+URL, install the packages) and does not fail.
+
+Package IDs, payloads and evidence are in the
+[Cursor package reference](v6/cursor.md).
+
+## Intents And Steps
+
+Cursor has two steps, `base` and `settings`:
+
+| Intent                                 | Step       | `/plugins` hint names |
+| -------------------------------------- | ---------- | --------------------- |
+| `base`, `skills`, `agents`, `commands` | `base`     | `ycc`                 |
+| `rules`                                | `base`     | `ycc-rules`           |
+| `mcp`                                  | `base`     | `ycc-mcp`             |
+| `hooks`                                | `base`     | `ycc-hooks`           |
+| `settings`                             | `settings` | —                     |
+| `plugins`, `mods`                      | no-op      | —                     |
 
 ```bash
-./install.sh sync --target cursor --intent commands,rules,mcp
+./install.sh sync --target cursor --intent base,rules,mcp,hooks
 ./install.sh sync --target cursor --intent settings --global
+./install.sh install --target cursor --package ycc,ycc-hooks
 ```
 
-To combine the base install with those steps:
+`install --package` maps every Cursor package to the `base` step (the hint
+names the selected packages) plus the `settings` fallback. The selection flags
+(`--skills`, `--agents`, `--commands`, `--mcps`, `--with-deps`,
+`--skills-home`) do not apply to Cursor.
+
+## Settings
 
 ```bash
-./install.sh install --target cursor --only base,commands,settings,rules,mcp --global
+./install.sh install --target cursor --only settings --global
 ```
 
-Step behavior:
-
-| Step       | Effect                                                                                                                                                                                                                            |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `base`     | Generates and validates `packages/cursor/ycc/{skills,agents}` and `packages/cursor/ycc-rules/rules`, then rsyncs them into `~/.cursor/`.                                                                                          |
-| `skills`   | Generates the skills and installs each into `~/.cursor/skills/<name>`, leaving your own skills alone.                                                                                                                             |
-| `agents`   | Generates the agents and installs each into `~/.cursor/agents/<name>.md`.                                                                                                                                                         |
-| `commands` | Installs user-invocable skill wrappers into `~/.cursor/commands/<name>.md`, rewriting plugin-local skill references to absolute installed skill paths. Install the corresponding skills with `base` or `skills` first.            |
-| `settings` | `--global` only: merges `packages/cursor/installer-fallback/config/cli-config.json` into `~/.cursor/cli-config.json`. This file is generated from `ycc/settings/cursor/cli-config.json`; edit the source, not the generated copy. |
-| `rules`    | Links nothing: Cursor User Rules are set in Settings → Rules, not a file. Prints how to paste `ycc/settings/rules/CLAUDE.md`.                                                                                                     |
-| `mcp`      | Merges `mcp-configs/mcp.json` into `<project>/.cursor/mcp.json` (or `~/.cursor/mcp.json` with `--global`).                                                                                                                        |
-| `hooks`    | Optionally copies the canonical herdr session script into `~/.cursor/hooks/` and merges its `sessionStart` registration into `~/.cursor/hooks.json`, preserving unrelated user hooks.                                             |
-
-Only `plugins` remains a no-op among these intents: the installer does not
-activate account-native plugins. The generated `rules/` bundle unit ships with
-`base` only. Default `base` remains skills, agents, and rules; commands and
-hooks are explicit steps. Adding hooks is optional (`--hooks` also enables it).
+`settings` merges `packages/cursor/installer-fallback/config/cli-config.json`
+into `~/.cursor/cli-config.json`. The file is generated from
+`ycc/settings/cursor/cli-config.json`; edit the source, not the generated copy.
 
 Cursor settings have no project scope: Cursor's project `.cursor/cli.json`
 carries permissions only, and every other CLI setting must be set globally.
 Without `--global` the `settings` step is skipped with a notice and writes
-nothing; an explicit `--project` is rejected. The `--global` in the combined
-`install` above also sends MCP to `~/.cursor/mcp.json`; run `--only mcp`
-separately for project MCP. See
+nothing; an explicit `--project` is rejected. See
 [Project Vs Global Scope](README.md#project-vs-global-scope).
-
-> **Behavior change:** `settings` used to write `~/.cursor/cli-config.json`
-> without a flag. Pass `--global` to keep that.
-
-For package-aware file delivery:
-
-```bash
-./install.sh install --target cursor --package ycc
-./install.sh install --target cursor --package ycc-hooks
-```
-
-`ycc` owns the commands carrier (`ycc` selects `base,commands,settings`);
-`ycc-hooks` owns the hooks carrier (`ycc-hooks` selects `settings,hooks`).
-`ycc-mcp` selects `settings,mcp`; `ycc-rules` selects `base` (rules unit) plus
-`settings`. Selecting `ycc` or `ycc-rules` does not inherit the fallback's
-optional hooks. Neither package form registers a marketplace, activates a
-native account plugin, or treats a plugin cache as evidence of activation.
-
-### Optional Session Hook
-
-```bash
-./install.sh sync --target cursor --intent hooks
-./install.sh remove --target cursor --intent hooks
-```
-
-Only Cursor's `sessionStart` event is managed. The canonical herdr hook reports
-the agent session only when its herdr environment is configured; otherwise it
-exits without reporting. `WorktreeCreate` is unavailable for Cursor and is not
-implemented by the fallback. The settings-only `cli-config.json` does not
-register hooks.
-
-Command wrappers and the hook script have per-entry ownership in
-`installed-units.json`; the hook registration has ownership hashes in
-`managed-config-state.json`. Hook registration uses list-union on
-`hooks.sessionStart`, preserving foreign commands and unrelated event keys;
-removal takes back only tool-appended items. A conflicting foreign file is not
-overwritten without `--force`, and locally edited managed entries are not
-silently overwritten or deleted. Invalid `hooks.json` shapes (a version other
-than `1`, non-list events, or non-command `sessionStart` entries) fail closed
-before carrier writes. Back up configuration before using `--force`.
 
 ## Model Configuration
 
 Cursor splits model selection across two surfaces, so this repository manages
 both:
 
-| Surface         | File                        | Value                                   |
-| --------------- | --------------------------- | --------------------------------------- |
-| Main CLI model  | `~/.cursor/cli-config.json` | `claude-fable-5-1`                      |
-| Sub-agent model | `~/.cursor/agents/*.md`     | `claude-opus-5[effort=high,context=1m]` |
+| Surface         | File                                        | Value                                   |
+| --------------- | ------------------------------------------- | --------------------------------------- |
+| Main CLI model  | `~/.cursor/cli-config.json`                 | `claude-fable-5-1`                      |
+| Sub-agent model | each agent in the `ycc` package's `agents/` | `claude-opus-5[effort=high,context=1m]` |
 
 Sub-agent models live in each generated agent's frontmatter because that is
 where Cursor resolves them. `scripts/cursor_fast_agents.json` remains an
@@ -131,70 +102,49 @@ Both values are placeholders in the sense that Cursor may override them: model
 availability is plan- and admin-gated, and legacy request-based plans can force
 subagents onto Composer regardless of configuration.
 
-## Selective Steps
-
-Use `--only` to run exactly the listed steps:
+## Remove
 
 ```bash
-./install.sh install --target cursor --only base
-./install.sh install --target cursor --only settings --global    # ~/.cursor/cli-config.json
-./install.sh install --target cursor --only rules
-./install.sh install --target cursor --only commands             # requires installed skills
-./install.sh install --target cursor --only hooks                # optional sessionStart hook
-./install.sh remove --target cursor --intent commands,hooks      # managed entries only
-./install.sh install --target cursor --only mcp                   # <project>/.cursor/mcp.json
-./install.sh install --target cursor --only mcp --global          # ~/.cursor/mcp.json
-./install.sh remove --target cursor --only mcp --global   # remove managed servers
+./install.sh remove --target cursor --only base               # marketplace + legacy cleanup
+./install.sh remove --target cursor --intent settings --global
 ```
 
-MCP servers are merged, not symlinked, so servers you add survive; a symlink
-left at `~/.cursor/mcp.json` by older installers becomes a real file on the
-next `--global` run. See
-[Project Vs Global Scope](README.md#project-vs-global-scope) and
-[Removing Installed Config](README.md#removing-installed-config).
+`remove --only base` runs `agent plugin marketplace remove ycc` when the
+marketplace is registered, then the legacy cleanup. Uninstall the packages
+themselves in `/plugins`. Without the `agent` CLI it warns to remove them in
+the Cursor IDE.
 
-`--mode repo` is not supported for Cursor. Cursor reads files from local config
-directories, so use the default local mode.
+## Hooks: sessionStart Only
 
-## Installed Surfaces
+`ycc-hooks@ycc` registers Cursor's `sessionStart` event only. The canonical
+herdr hook reports the agent session only when its herdr environment is
+configured; otherwise it exits without reporting. `WorktreeCreate` is
+unavailable on Cursor and is not implemented. The settings-only
+`cli-config.json` registers no hooks.
 
-| Surface      | Location                                             |
-| ------------ | ---------------------------------------------------- |
-| Skills       | `~/.cursor/skills/`                                  |
-| Agents       | `~/.cursor/agents/`                                  |
-| Commands     | `~/.cursor/commands/`                                |
-| Hooks        | `~/.cursor/hooks.json` and `~/.cursor/hooks/`        |
-| Cursor rules | `~/.cursor/rules/`                                   |
-| CLI config   | `~/.cursor/cli-config.json`                          |
-| MCP config   | `<project>/.cursor/mcp.json` or `~/.cursor/mcp.json` |
+## Global Rules
 
 Cursor User Rules live in Cursor Settings (Customize → Rules); file-based
 user-global provisioning is unsupported/unverified per
-[cursor.com/docs/rules](https://cursor.com/docs/rules), so `rules` creates no
-files. Older `~/.cursor/CLAUDE.md` / `AGENTS.md` links are left in place on
-install and removed by `remove --intent rules` only while they point at this checkout.
+[cursor.com/docs/rules](https://cursor.com/docs/rules). The ycc rules ship as
+the `ycc-rules` package. Older `~/.cursor/CLAUDE.md` / `AGENTS.md` links that
+point at this checkout are retired by the legacy cleanup.
+
+## MCP
+
+The `ycc-mcp` package carries the managed servers (`mcp-configs/mcp.json`) with
+`${VAR}` placeholders. Older installers merged them into `~/.cursor/mcp.json`;
+the legacy cleanup takes back only the servers recorded as ycc-written, and
+your own servers stay. A `<project>/.cursor/mcp.json` an older installer wrote
+is not touched; remove its ycc servers by hand.
 
 ## Runtime Evidence And Native Limits
 
-User-file command and hook loading was exercised with `cursor-agent
-2026.10.14-941492e` in an isolated `HOME` and `XDG_CONFIG_HOME`. A fixture
-command wrapper returned its exact marker. The opt-in full-installer smoke
-then installed the canonical `go-patterns` wrapper and skill: `/go-patterns`
-read the absolute installed skill path and returned `Go Development Patterns`.
-The installed herdr `sessionStart` hook reported the same session ID as the
-runtime result, a foreign `sessionStart` hook fired for that session, the
-foreign command survived, and `$ARGUMENTS` substitution reached the model.
+The v6.0.0 maintainer verification (tracked in YAN-1141) covered the
+interactive Cursor marketplace installation of the four packages, through both
+the agent CLI and the Cursor IDE. `agent --plugin-dir <dir>` loads a local
+plugin's `sessionStart` hook in that one process without an account install.
 See [the internal evidence record](../internal/cursor-native-packages.md#observed-verification).
-
-Maintainers can repeat the authenticated, opt-in carrier smoke with
-`python3 scripts/cursor_live_smoke.py --keep`. It runs the real package installer
-with build/generation phases skipped, uses disposable configuration, performs
-real model inference, and removes the copied credential even when retaining the
-lab. It is not a CI or validation-suite check.
-
-This proves the user-file carriers; the native plugins are installed
-interactively through the marketplace described under
-[Native Plugins](#native-plugins).
 
 Agent shell scope is not enforced on Cursor. Cursor subagents have no
 per-command allowlist (only `readonly`), and shell hooks do not identify the
@@ -215,5 +165,5 @@ through the unified sync script:
 
 The generated native packages live under `packages/cursor/` (`ycc`, `ycc-rules`,
 `ycc-mcp`, and `ycc-hooks`) and are listed by the root
-`.cursor-plugin/marketplace.json`; the file-copy installer above remains the
-fallback route.
+`.cursor-plugin/marketplace.json`. Cursor installs them from the published
+repository, so local edits reach Cursor only after they are pushed.

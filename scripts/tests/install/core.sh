@@ -47,12 +47,10 @@ assert_contains "${out}" "cannot be combined with --only" "sync rejects --only"
 home="$(new_home)"
 out="$(run_install "${home}" sync --target claude --intent settings --mcp)"
 assert_contains "${out}" "cannot be combined with --only" "sync rejects additive flags"
-out="$(run_install "${home}" sync --target claude --intent settings --hooks)"
-assert_contains "${out}" "--hooks requires a comma-separated list of hook events on sync (install --hooks is the boolean step flag)" "sync --hooks is the hook-event selector (needs a value)"
-out="$(run_install "${home}" sync --target claude --intent hooks --hooks --force)"
-assert_contains "${out}" "--hooks requires a comma-separated list of hook events on sync" "sync --hooks never swallows a following flag"
-out="$(run_install "${home}" remove --hooks --target claude --intent hooks)"
-assert_contains "${out}" "--hooks requires a comma-separated list of hook events on remove" "remove --hooks never swallows --target"
+out="$(run_install "${home}" sync --target claude --intent hooks --hooks)"
+assert_contains "${out}" "--hooks is install's step flag; sync takes --intent hooks" "sync rejects the install-only --hooks flag"
+out="$(run_install "${home}" remove --hooks WorktreeCreate --target claude --intent hooks)"
+assert_contains "${out}" "--hooks is install's step flag; remove takes --intent hooks" "remove rejects --hooks <events>"
 
 home="$(new_home)"
 out="$(run_install "${home}" install --target claude --intent settings)"
@@ -72,7 +70,13 @@ assert_contains "${out}" "Codex sync complete" "multi-target runs codex"
 assert_contains "${out}" "Claude sync complete" "multi-target runs claude"
 assert_contains "${out}" "opencode sync complete" "multi-target runs opencode"
 assert_not_contains "${out}" "Cursor sync complete" "multi-target skips unlisted cursor"
-assert_contains "$(cat "${home}/project/.mcp.json")" '"mcpServers"' "multi-target merges claude MCP into project scope"
+calls="$(cat "${home}/claude-calls.log" 2>/dev/null)"
+assert_contains "${calls}" "plugin install ycc-mcp@ycc --scope project" "multi-target installs claude ycc-mcp@ycc at project scope"
+assert_contains "${calls}" "codex plugin add ycc-mcp@ycc" "multi-target installs codex ycc-mcp@ycc"
+assert_contains "$(cat "${home}/project/opencode.json")" '"mcp"' "multi-target merges opencode MCP into project scope"
+for f in .mcp.json .cursor/mcp.json .codex/config.toml; do
+    if [[ ! -e "${home}/project/${f}" ]]; then ok "no legacy MCP merge: ${f}"; else ko "no legacy MCP merge: ${f}"; fi
+done
 
 home="$(new_home)"
 install_must_succeed "${home}" sync --target claude,claude --intent mcp
@@ -94,8 +98,8 @@ out="$(run_install "${home}" sync --target all,claude --intent mcp)"
 assert_contains "${out}" "'all' cannot be combined" "all must stand alone"
 
 home="$(new_home)"
-out="$(run_install "${home}" sync --target claude,cursor --intent mcp --mode repo)"
-assert_contains "${out}" "--mode repo is not supported by the cursor target" "repo mode rejects listed cursor"
+out="$(run_install "${home}" sync --target claude,opencode --intent mcp --mode repo)"
+assert_contains "${out}" "--mode repo is not supported by the opencode target" "repo mode rejects listed opencode"
 assert_not_contains "${out}" "Claude sync complete" "repo-mode rejection happens before any target runs"
 
 home="$(new_home)"
@@ -115,7 +119,7 @@ home="$(new_home)"
 install_must_succeed "${home}" sync --target cursor --intent plugins
 out="${INSTALL_OUT}"
 assert_contains "${out}" "intent 'plugins' is not supported by target 'cursor'" "unsupported intent reported"
-assert_not_contains "${out}" "Generate Cursor-native bundle" "unsupported-only intent does not fall back to base"
+assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "agent plugin" "unsupported-only intent does not fall back to base"
 
 home="$(new_home)"
 install_must_succeed "${home}" sync --target codex --intent hooks
@@ -147,7 +151,7 @@ install_must_succeed "${home}" install --target claude --only settings,mcp --pro
 out="${INSTALL_OUT}"
 assert_contains "${out}" "Claude install complete" "--project allows claude settings and mcp together"
 assert_contains "$(cat "${home}/project/.claude/settings.json")" '"claude-fable-5-1"' "--project writes claude project settings"
-assert_contains "$(cat "${home}/project/.mcp.json")" '"mcpServers"' "--project still writes claude project MCP"
+assert_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin install ycc-mcp@ycc --scope project" "--project installs ycc-mcp@ycc at project scope"
 
 home="$(new_home)"
 out="$(run_install "${home}" install --target claude --only rules,mcp --project)"
@@ -155,25 +159,22 @@ assert_contains "${out}" "--project is not supported by step 'rules'" "--project
 assert_not_contains "${out}" "Claude sync complete" "--project rejection happens before any target runs"
 
 home="$(new_home)"
+out="$(run_install "${home}" install --target codex --only mcp --project)"
+assert_contains "${out}" "--project is not supported by step 'mcp' for target 'codex'" "codex mcp has no project scope"
+
+home="$(new_home)"
 out="$(run_install "${home}" install --target claude --package ycc --project)"
 assert_contains "${out}" "--project is not supported by step 'base' for target 'claude'" "package project scope is rejected before global-only settings run"
 assert_not_contains "${out}" "Claude install complete" "package --project rejection happens before any target runs"
 
 home="$(new_home)"
-install_must_succeed "${home}" sync --target all --intent mcp
-for f in .mcp.json .cursor/mcp.json .codex/config.toml opencode.json; do
-    if [[ -f "${home}/project/${f}" ]]; then ok "project MCP written: ${f}"; else ko "project MCP written: ${f}"; fi
-done
-if [[ ! -e "${home}/.claude.json" && ! -e "${home}/.cursor/mcp.json" ]]; then
-    ok "project scope leaves global MCP files alone"
-else
-    ko "project scope leaves global MCP files alone"
-fi
-
-home="$(new_home)"
 install_must_succeed "${home}" install --target claude --only mcp --global
-assert_contains "$(cat "${home}/.claude.json")" '"mcpServers"' "--global writes ~/.claude.json"
-if [[ ! -e "${home}/project/.mcp.json" ]]; then ok "--global leaves project alone"; else ko "--global leaves project alone"; fi
+assert_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin install ycc-mcp@ycc --scope user" "--global installs ycc-mcp@ycc at user scope"
+if [[ ! -e "${home}/.claude.json" && ! -e "${home}/project/.mcp.json" ]]; then
+    ok "--global writes no legacy MCP merge"
+else
+    ko "--global writes no legacy MCP merge"
+fi
 
 echo
 echo "== install.sh remove =="
@@ -195,16 +196,8 @@ out="$(run_install "${home}" remove --target claude --only rules --project)"
 assert_contains "${out}" "--project is not supported by step 'rules'" "remove keeps the --project guard"
 
 home="$(new_home)"
-cat > "${home}/project/.mcp.json" <<'JSON'
-{ "mcpServers": { "mine": { "url": "https://mine" } } }
-JSON
-install_must_succeed "${home}" install --target claude --only mcp
-install_must_succeed "${home}" remove --target claude --only mcp
-out="${INSTALL_OUT}"
-assert_contains "${out}" "Claude remove complete" "remove runs for claude"
-merged="$(cat "${home}/project/.mcp.json")"
-assert_contains "${merged}" '"mine"' "remove keeps user-added server"
-assert_not_contains "${merged}" '"playwright"' "remove drops managed server"
+install_must_succeed "${home}" remove --target opencode --only mcp
+assert_contains "${INSTALL_OUT}" "opencode remove complete" "remove runs the opencode mcp step"
 
 echo
 echo "== install.sh: project settings scope and HOME guard =="
@@ -278,10 +271,6 @@ for target in claude codex opencode; do
 done
 
 home="$(new_home)"
-out="$(run_install "${home}" sync --target claude --intent hooks --hooks WorktreeCreate --project)"
-assert_contains "${out}" "--hooks <events> narrows settings.json hook events, which only the --global hooks step manages" "claude --project rejects a global-only hook-event selection"
-
-home="$(new_home)"
 install_must_succeed "${home}" sync --target claude --intent settings
 assert_not_contains "${INSTALL_OUT}" "still holds ycc-managed keys from earlier syncs" "fresh default settings prints no legacy hint"
 install_must_succeed "${home}" sync --target claude --intent settings --global
@@ -291,22 +280,10 @@ assert_contains "${INSTALL_OUT}" "still holds ycc-managed keys from earlier sync
 home="$(new_home)"
 install_must_succeed "${home}" sync --target all --intent mcp --global
 install_must_succeed "${home}" remove --target all --intent mcp --global
-for f in .claude.json .cursor/mcp.json .codex/config.toml .config/opencode/opencode.json; do
-    if [[ ! -e "${home}/${f}" ]]; then ok "global remove cleans ${f}"; else ko "global remove cleans ${f}"; fi
+if [[ ! -e "${home}/.config/opencode/opencode.json" ]]; then ok "global remove cleans opencode MCP"; else ko "global remove cleans opencode MCP"; fi
+for f in .claude.json .cursor/mcp.json .codex/config.toml; do
+    if [[ ! -e "${home}/${f}" ]]; then ok "no legacy MCP merge at ${f}"; else ko "no legacy MCP merge at ${f}"; fi
 done
-
-home="$(new_home)"
-cat > "${home}/.codex/config.toml" <<'TOML'
-# keep me
-[mcp_servers.internal]
-url = "https://internal.example"
-TOML
-install_must_succeed "${home}" install --target codex --only mcp --global
-install_must_succeed "${home}" remove --target codex --only mcp --global
-merged="$(cat "${home}/.codex/config.toml")"
-assert_contains "${merged}" "# keep me" "codex remove keeps comments"
-assert_contains "${merged}" "[mcp_servers.internal]" "codex remove keeps user server"
-assert_not_contains "${merged}" "[mcp_servers.playwright]" "codex remove drops managed server"
 
 echo
 echo "== install.sh cli / completion =="
@@ -322,8 +299,8 @@ assert_contains "${out}" "link up-to-date" "cli rerun is a no-op"
 
 # The regression: a linked command run outside the repo must find its helpers
 # and write project MCP into the caller's directory.
-out="$(cd "${home}/project" && HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/state.json" "${bin}/ycc" sync --target claude --intent mcp 2>&1)"
-assert_contains "$(cat "${home}/project/.mcp.json" 2>/dev/null)" '"mcpServers"' "linked ycc merges project MCP from outside the repo"
+out="$(cd "${home}/project" && HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/state.json" "${bin}/ycc" sync --target opencode --intent mcp 2>&1)"
+assert_contains "$(cat "${home}/project/opencode.json" 2>/dev/null)" '"mcp"' "linked ycc merges project MCP from outside the repo"
 
 home="$(new_home)"
 mkdir -p "${home}/mybin" && echo "mine" > "${home}/mybin/ycc"
@@ -364,18 +341,20 @@ if ! command -v zsh >/dev/null || zsh -n "${REPO_ROOT}/scripts/completions/_ycc"
 if ! command -v fish >/dev/null || fish -n "${REPO_ROOT}/scripts/completions/ycc.fish"; then ok "fish completion parses"; else ko "fish completion parses"; fi
 out="$(bash -c 'source "$1"; COMP_WORDS=(ycc sync --target claude,co); COMP_CWORD=3; _ycc; echo "${COMPREPLY[*]}"' _ "${REPO_ROOT}/scripts/completions/ycc.bash")"
 assert_contains "${out}" "claude,codex" "bash completion completes comma lists"
-# bash completion behaviour: omp is a --target value (migrate too) and the
-# --dry-run is offered for install, sync and remove.
+# bash completion behaviour: omp is a --target value, migrate is no longer a
+# command, and --dry-run is offered for install, sync and remove.
 complete_bash() {
     bash -c 'source "$1"; shift; COMP_WORDS=("$@"); COMP_CWORD=$(($# - 1)); _ycc; echo "${COMPREPLY[*]}"' \
         _ "${REPO_ROOT}/scripts/completions/ycc.bash" "$@"
 }
 assert_contains " $(complete_bash ycc install --target o) " " omp " "bash completion offers --target omp"
-assert_contains " $(complete_bash ycc migrate --target o) " " omp " "bash completion offers migrate --target omp"
+assert_not_contains " $(complete_bash ycc m) " " migrate " "bash completion offers no migrate command"
 for sub in install sync remove; do
     assert_contains " $(complete_bash ycc "${sub}" --dry) " " --dry-run " "bash completion offers ${sub} --dry-run"
 done
-assert_not_contains "$(complete_bash ycc migrate --dry)" "--dry-run" "bash completion keeps --dry-run off migrate"
+for f in _ycc ycc.bash ycc.fish; do
+    assert_not_contains "$(cat "${REPO_ROOT}/scripts/completions/${f}")" "migrate" "${f} has no migrate command"
+done
 # zsh and fish: the static target lists and the --dry-run option.
 for f in _ycc ycc.fish; do
     script="$(cat "${REPO_ROOT}/scripts/completions/${f}")"

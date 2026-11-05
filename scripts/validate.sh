@@ -201,8 +201,7 @@ run_config_part() {
             python3 "${REPO_ROOT}/scripts/test_managed_config_entries.py" || fail "test_managed_config_entries.py"
             python3 "${REPO_ROOT}/scripts/test_opencode_plugin_catalog.py" || fail "test_opencode_plugin_catalog.py"
             python3 "${REPO_ROOT}/scripts/test_generate_codex_mcp.py" || fail "test_generate_codex_mcp.py"
-            echo "== validate: codex marketplace helper =="
-            python3 "${REPO_ROOT}/scripts/test_codex_marketplace.py" || fail "test_codex_marketplace.py"
+            echo "== validate: codex install helper =="
             python3 "${REPO_ROOT}/scripts/test_codex_install.py" || fail "test_codex_install.py"
             echo "== test: package install plan =="
             python3 "${REPO_ROOT}/scripts/test_package_install_plan.py" || fail "test_package_install_plan.py"
@@ -372,7 +371,6 @@ run_target() {
             "${REPO_ROOT}/scripts/validate-cursor-packages.sh" || fail "validate-cursor-packages.sh"
             python3 "${REPO_ROOT}/scripts/test_generate_cursor_packages.py" || fail "test_generate_cursor_packages.py"
             python3 "${REPO_ROOT}/scripts/test_validate_cursor_native.py" || fail "test_validate_cursor_native.py"
-            python3 "${REPO_ROOT}/scripts/test_cursor_live_smoke.py" || fail "test_cursor_live_smoke.py"
             ;;
         codex-native)
             echo "== validate: codex native packages =="

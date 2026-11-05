@@ -109,7 +109,8 @@ home="$(new_home)"
 if out="$(run_install "${home}" install --target cursor --only base --project)"; then
     ko "--project still rejects cursor base"
 else
-    assert_contains "${out}" "project scope currently supports: mcp; settings (claude, codex, opencode); claude: hooks; omp: base, dedupe" "--project still rejects cursor base"
+    assert_contains "${out}" "--project is not supported by step 'base' for target 'cursor'" "--project still rejects cursor base"
+    assert_contains "${out}" "omp: base, dedupe" "--project rejection names omp's project-capable steps"
 fi
 
 echo
@@ -523,5 +524,62 @@ assert_contains "$(cat "$(omp_agent "${home}")/config.yml")" "agents/backport" "
 assert_contains "${INSTALL_OUT}" "omp: kept the skills.ignoredSkills entries" "omp remove --intent base --project says it kept the entries"
 install_must_succeed "${home}" remove --target omp --intent plugins
 if [[ ! -e "$(omp_agent "${home}")/config.yml" ]]; then ok "omp remove --intent plugins of the last install takes the entries back"; else ko "omp remove --intent plugins of the last install takes the entries back" "$(cat "$(omp_agent "${home}")/config.yml")"; fi
+
+echo
+echo "== install.sh install: omp retires legacy state automatically =="
+
+# omp_installed <home> — the fake omp's user-scope listing as
+# 'npm=[<names>] marketplace=[<ids>]'.
+omp_installed() {
+    (cd "$1" && env -u OMP_PROFILE -u OMP_BIN -u FAKE_OMP_LOG HOME="$1" FAKE_OMP_HOME="$1/.fake-omp" \
+        CLAUDE_STUB_LOG="$1/claude-calls.log" "${STUB_BIN}/omp" plugin list --json) | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+npm = " ".join(item["name"] for item in data["npm"])
+market = " ".join(item["id"] for item in data["marketplace"])
+print(f"npm=[{npm}] marketplace=[{market}]")'
+}
+
+# A legacy 'omp plugin link' of this checkout's packages/omp/ycc (old live-iteration route).
+home="$(new_home)"
+(cd "${home}" && env -u OMP_PROFILE -u OMP_BIN -u FAKE_OMP_LOG \
+    HOME="${home}" FAKE_OMP_HOME="${home}/.fake-omp" CLAUDE_STUB_LOG="${home}/claude-calls.log" \
+    "${STUB_BIN}/omp" plugin link "${REPO_ROOT}/packages/omp/ycc" >/dev/null)
+assert_contains "$(omp_installed "${home}")" "npm=[ycc]" "fixture: ycc linked through omp plugin link"
+
+install_must_succeed "${home}" install --target omp --dry-run
+assert_contains "${INSTALL_OUT}" "[dry-run] would run: omp plugin uninstall ycc" "omp install --dry-run previews the legacy link retirement"
+assert_contains "$(omp_installed "${home}")" "npm=[ycc]" "omp install --dry-run keeps the legacy link"
+
+install_must_succeed "${home}" install --target omp
+log="$(omp_log "${home}")"
+assert_contains "${log}" "omp plugin uninstall ycc" "omp install retires the legacy link"
+assert_not_contains "${INSTALL_OUT}" "install.sh migrate" "omp install never points at a migrate command"
+assert_contains "$(omp_installed "${home}")" "npm=[] marketplace=[ycc@ycc ycc-mcp@ycc ycc-rules@ycc]" "omp install replaces the link with the native packages"
+
+before="$(omp_log "${home}")"
+install_must_succeed "${home}" install --target omp
+rerun_log="$(omp_log "${home}")"
+rerun_log="${rerun_log#"${before}"}"
+added="$(omp_mutations "${rerun_log}")"
+if [[ -z "${added}" ]]; then ok "omp re-run after cleanup makes no mutating omp calls"; else ko "omp re-run after cleanup makes no mutating omp calls" "${added}"; fi
+
+# --mode repo and --package over a legacy link: the cleanup only retires; the native install
+# that follows uses the run's mode and package (no local export, only the selected package).
+home="$(new_home)"
+(cd "${home}" && env -u OMP_PROFILE -u OMP_BIN -u FAKE_OMP_LOG \
+    HOME="${home}" FAKE_OMP_HOME="${home}/.fake-omp" CLAUDE_STUB_LOG="${home}/claude-calls.log" \
+    "${STUB_BIN}/omp" plugin link "${REPO_ROOT}/packages/omp/ycc" >/dev/null)
+repo_catalog="${home}/repo-catalog"
+mkdir -p "${repo_catalog}/packages"
+cp -R "${REPO_ROOT}/.omp-plugin" "${repo_catalog}/"
+cp -R "${REPO_ROOT}/packages/omp" "${repo_catalog}/packages/"
+FAKE_OMP_REPO_CATALOG="${repo_catalog}" install_must_succeed "${home}" install --target omp --mode repo --package ycc
+log="$(omp_log "${home}")"
+assert_contains "${log}" "omp plugin uninstall ycc" "--mode repo over a link retires the link"
+assert_contains "${log}" "omp plugin marketplace add https://github.com/yandy-r/ystack.git" "--mode repo over a link registers the repository catalog"
+assert_not_contains "${log}" "omp plugin marketplace add $(omp_export "${home}")" "--mode repo over a link registers no local export"
+assert_contains "$(omp_installed "${home}")" "npm=[] marketplace=[ycc@ycc]" "--mode repo --package ycc over a link installs only ycc@ycc"
+if [[ ! -e "$(omp_export "${home}")" ]]; then ok "--mode repo over a link writes no local export"; else ko "--mode repo over a link writes no local export"; fi
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then install_tests_finish; fi

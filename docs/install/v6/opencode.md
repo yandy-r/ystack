@@ -6,7 +6,7 @@ implemented. A generated package and a workflow are not proof of npm
 publication; registry availability is not established here. The package is
 opt-in and **never the default install**: unlike Claude, Codex, and Cursor,
 opencode has no native-package listing in v6, and the `install.sh` file copy
-stays the primary path. `install.sh migrate` rejects the `opencode` target and
+stays the primary path. opencode has no native route in `install.sh`, and
 `install.sh --package` does not accept the npm package.
 
 ## Primary path (v6): file copy
@@ -167,13 +167,12 @@ default definition with an id and an effect or setup function.`). The config
   its `{{package-root}}` tokens to an absolute temporary asset-tree root at
   setup, so shell snippets can reach shared helpers from any working directory.
 
-## Migration
+## Moving to the npm package
 
-`install.sh migrate` supports only `claude`, `codex`, and `cursor`; naming
-`opencode` is rejected. Move to the npm package by hand with the manual
-procedure above. For users staying on the file copy (the default and
-recommended path), no migration is needed: re-running the sync commands above
-keeps the bundle current.
+`install.sh` has no automatic cleanup for opencode. Move to the npm package by
+hand with the manual procedure above. For users staying on the file copy (the
+default and recommended path), nothing needs to move: re-running the sync
+commands above keeps the bundle current.
 
 ## Evidence
 

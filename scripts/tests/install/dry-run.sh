@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# install.sh tests — --dry-run previews managed config, rules, hooks and
-# base removal without writing config, links, copies or ownership state.
+# install.sh tests — --dry-run previews managed config, rules, native plugin
+# calls and base removal without writing config, links, copies, ownership
+# state or running a plugin CLI.
 # (omp's own dry-run is covered in omp.sh.)
 #
 # Runs alone (bash scripts/tests/install/dry-run.sh) or from scripts/test-install-sync.sh.
@@ -33,33 +34,27 @@ echo "== install.sh --dry-run: remove --target all --only mcp =="
 home="$(new_home)"
 install_must_succeed "${home}" sync --target all --intent mcp
 before="$(tree_digest "${home}")"
+# 'omp --version' (the --target all availability probe) is read-only; plugin commands are not.
+calls="$(grep ' plugin ' "${home}/claude-calls.log" 2>/dev/null)"
 install_must_succeed "${home}" remove --target all --only mcp --dry-run
 out="${INSTALL_OUT}"
 assert_contains "${out}" "would remove" "remove --dry-run lists what it would remove"
-for f in .mcp.json .cursor/mcp.json .codex/config.toml opencode.json; do
-    assert_contains "${out}" "${home}/project/${f}" "remove --dry-run previews ${f}"
-done
-after="$(tree_digest "${home}")"
-if [[ "${before}" == "${after}" ]]; then
-    ok "remove --dry-run leaves every file and the ownership state unchanged"
-else
-    ko "remove --dry-run leaves every file and the ownership state unchanged" "$(diff <(echo "${before}") <(echo "${after}"))"
-fi
+assert_contains "${out}" "${home}/project/opencode.json" "remove --dry-run previews the opencode merge"
+assert_contains "${out}" "ycc-mcp@ycc" "remove --dry-run previews the claude ycc-mcp uninstall"
+assert_home_unchanged "${home}" "${before}" "remove --dry-run"
+if [[ "$(grep ' plugin ' "${home}/claude-calls.log" 2>/dev/null)" == "${calls}" ]]; then ok "remove --dry-run runs no plugin CLI"; else ko "remove --dry-run runs no plugin CLI"; fi
 
 echo
-echo "== install.sh --dry-run: sync previews the merge, writes nothing =="
+echo "== install.sh --dry-run: sync previews the plugin install, writes nothing =="
 
 home="$(new_home)"
 before="$(tree_digest "${home}")"
-install_must_succeed "${home}" sync --target claude,codex --intent mcp --global --dry-run
+install_must_succeed "${home}" sync --target claude,opencode --intent mcp --global --dry-run
 out="${INSTALL_OUT}"
-assert_contains "${out}" "would set" "sync --dry-run lists what it would set"
-after="$(tree_digest "${home}")"
-if [[ "${before}" == "${after}" ]]; then
-    ok "sync --dry-run creates no config or state file"
-else
-    ko "sync --dry-run creates no config or state file" "$(diff <(echo "${before}") <(echo "${after}"))"
-fi
+assert_contains "${out}" "would run: claude plugin install ycc-mcp@ycc --scope user" "sync --dry-run previews the claude ycc-mcp install"
+assert_contains "${out}" "would set" "sync --dry-run previews the opencode merge"
+assert_home_unchanged "${home}" "${before}" "sync --dry-run"
+assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin" "sync --dry-run runs no plugin CLI"
 
 echo
 echo "== install.sh --dry-run: steps without a preview are skipped =="
@@ -75,10 +70,12 @@ install_must_succeed "${home}" sync --target codex,opencode,cursor,agents --inte
 out="${INSTALL_OUT}"
 assert_contains "${out}" "cursor: settings have no project scope" "cursor default settings dry-run explains the project-scope skip"
 assert_not_contains "${out}" "dry-run: cursor settings step has no preview" "skipped cursor settings does not also report a missing preview"
-for pair in "codex skills" "opencode skills" "cursor skills" "agents skills"; do
+for pair in "codex base" "opencode skills" "agents skills"; do
     assert_contains "${out}" "dry-run: ${pair% *} ${pair#* } step has no preview" "sync --dry-run skips ${pair}"
 done
+assert_contains "${out}" "would run: agent plugin marketplace add" "sync --dry-run previews the cursor marketplace step"
 assert_contains "${out}" "would set" "sync --dry-run still previews the mcp step alongside skipped steps"
+assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin" "sync --dry-run runs no plugin CLI"
 after="$(tree_digest "${home}")"
 if [[ "${before}" == "${after}" ]]; then
     ok "skipped dry-run steps write nothing"
@@ -146,24 +143,21 @@ for target in claude cursor codex opencode; do
     fi
     assert_home_unchanged "${home}" "${before}" "${target} fresh preview"
 
+    # cursor's rules ride its marketplace (base) step; settings is its only config.
     intents=settings,rules
-    [[ "${target}" != claude && "${target}" != cursor ]] || intents+=,hooks
+    [[ "${target}" != cursor ]] || intents=settings
+    [[ "${target}" != claude ]] || intents+=,hooks
     install_must_succeed "${home}" sync --target "${target}" --intent "${intents}" --global
-    if [[ "${target}" == cursor ]]; then
-        # User rules now live in Settings; legacy owned links still retire.
-        ln -s "${REPO_ROOT}/ycc/settings/rules/CLAUDE.md" "${home}/.cursor/CLAUDE.md"
-    fi
     before="$(tree_digest "${home}")"
     calls="$(cat "${home}/claude-calls.log" 2>/dev/null)"
     install_must_succeed "${home}" remove --target "${target}" --intent "${intents}" --global --dry-run
     assert_contains "${INSTALL_OUT}" "would remove" "${target} settings removal previews keys"
     if [[ "${target}" == claude ]]; then
         assert_contains "${INSTALL_OUT}" "would remove ${home}/.claude/statusline-command.sh" "Claude previews statusline removal"
-        assert_contains "${INSTALL_OUT}" "would unlink ${home}/.claude/hooks" "Claude previews hook unlink"
+        assert_contains "${INSTALL_OUT}" "ycc-hooks@ycc" "Claude previews the ycc-hooks uninstall"
         assert_contains "${INSTALL_OUT}" "would unlink ${home}/.claude/CLAUDE.md" "Claude previews rules unlink"
     fi
     case "${target}" in
-        cursor) assert_contains "${INSTALL_OUT}" "would unlink ${home}/.cursor/CLAUDE.md" "Cursor previews legacy rules unlink" ;;
         codex) assert_contains "${INSTALL_OUT}" "would unlink ${home}/.codex/rules/default.rules" "Codex previews rules unlink" ;;
         opencode) assert_contains "${INSTALL_OUT}" "would unlink ${home}/.config/opencode/AGENTS.md" "opencode previews rules unlink" ;;
     esac
@@ -181,16 +175,13 @@ for target in claude cursor codex opencode; do
     if [[ "${target}" == claude ]]; then
         assert_contains "${INSTALL_OUT}" "would run: claude plugin uninstall ycc@ycc" "Claude base previews uninstall"
         assert_contains "${INSTALL_OUT}" "would run: claude plugin marketplace remove ycc" "Claude base previews marketplace removal"
+    elif [[ "${target}" == cursor ]]; then
+        assert_contains "${INSTALL_OUT}" "would run: agent plugin marketplace remove ycc" "Cursor base previews marketplace removal"
     else
         assert_contains "${INSTALL_OUT}" "would remove" "${target} base previews owned entries"
-        if [[ "${target}" == cursor || "${target}" == opencode ]]; then
-            if [[ "${target}" == cursor ]]; then
-                mirror="${home}/.cursor"
-                units="skills agents rules"
-            else
-                mirror="${home}/.config/opencode"
-                units="skills agents commands shared"
-            fi
+        if [[ "${target}" == opencode ]]; then
+            mirror="${home}/.config/opencode"
+            units="skills agents commands shared"
             for unit in ${units}; do
                 for entry in "${mirror}/${unit}"/* "${mirror}/${unit}"/.[!.]*; do
                     [[ -e "${entry}" || -L "${entry}" ]] || continue
@@ -241,52 +232,13 @@ assert_contains "${INSTALL_OUT}" "would remove ${home}/.config/opencode/oh-my-op
 assert_contains "${INSTALL_OUT}" "would remove ${home}/.config/opencode/ycc-sensitive-guard/index.js" "bundle removal previews guard tree"
 assert_home_unchanged "${home}" "${before}" "catalog and guard removal preview"
 
-# Cursor hooks carrier previews its script copy, then its removal.
-home="$(new_home)"
-before="$(tree_digest "${home}")"
-install_must_succeed "${home}" sync --target cursor --intent hooks --dry-run
-assert_contains "${INSTALL_OUT}" "would copy ${REPO_ROOT}/packages/cursor/ycc-hooks/hooks/herdr-session-start.sh -> ${home}/.cursor/hooks/herdr-session-start.sh" "cursor hooks sync previews the script copy"
-assert_home_unchanged "${home}" "${before}" "cursor hooks sync preview"
-copy_lines="$(grep -c "would copy .*herdr-session-start.sh" <<<"${INSTALL_OUT}" || true)"
-if [[ "${copy_lines}" == "1" ]]; then ok "cursor hooks dry-run prints the script copy once"; else ko "cursor hooks dry-run prints the script copy once" "${INSTALL_OUT}"; fi
-install_must_succeed "${home}" sync --target cursor --intent hooks
-assert_not_contains "${INSTALL_OUT}" "[dry-run]" "live cursor hooks sync prints no preview lines"
-before="$(tree_digest "${home}")"
-install_must_succeed "${home}" remove --target cursor --intent hooks --dry-run
-assert_contains "${INSTALL_OUT}" "would remove ${home}/.cursor/hooks/herdr-session-start.sh" "cursor hooks remove previews the script removal"
-assert_contains "${INSTALL_OUT}" "would remove empty directory ${home}/.cursor/hooks" "cursor hooks remove previews the emptied hooks dir"
-remove_lines="$(grep -c "would remove ${home}/.cursor/hooks/herdr-session-start.sh" <<<"${INSTALL_OUT}" || true)"
-if [[ "${remove_lines}" == "1" ]]; then ok "cursor hooks dry-run prints the script removal once"; else ko "cursor hooks dry-run prints the script removal once" "${INSTALL_OUT}"; fi
-assert_home_unchanged "${home}" "${before}" "cursor hooks removal preview"
-install_must_succeed "${home}" remove --target cursor --intent hooks
-assert_not_contains "${INSTALL_OUT}" "[dry-run]" "live cursor hooks remove prints no preview lines"
-
-# Legacy Codex base removal previews the marketplace entry through the helper,
-# lists each path once, and forecasts the emptied marketplace cache directory.
-if ! repo_codex_native; then
-    home="$(new_home)"
-    mkdir -p "${home}/.codex/plugins/cache/local-ycc-plugins/ycc/skills" "${home}/.agents/plugins" "${home}/.codex/agents"
-    cp -R "${REPO_ROOT}/.codex-plugin/agents/." "${home}/.codex/agents/"
-    printf '%s\n' '{ "name": "local-ycc-plugins", "interface": { "displayName": "Local YCC Plugins" }, "plugins": [{ "name": "ycc" }, { "name": "other" }] }' > "${home}/.agents/plugins/marketplace.json"
-    before="$(tree_digest "${home}")"
-    install_must_succeed "${home}" remove --target codex --only base --dry-run
-    assert_contains "${INSTALL_OUT}" "would remove marketplace entry ycc from ${home}/.agents/plugins/marketplace.json" "codex legacy removal previews the marketplace entry"
-    assert_contains "${INSTALL_OUT}" "would remove ${home}/.codex/plugins/cache/local-ycc-plugins" "codex legacy removal previews the emptied cache directory"
-    first_agent="$(find "${REPO_ROOT}/.codex-plugin/agents" -maxdepth 1 -name '*.toml' -printf '%f\n' | sort | sed -n 1p)"
-    agent_lines="$(grep -c "would remove ${home}/.codex/agents/${first_agent}\$" <<<"${INSTALL_OUT}" || true)"
-    if [[ "${agent_lines}" == "1" ]]; then ok "codex legacy removal lists each agent once"; else ko "codex legacy removal lists each agent once" "${INSTALL_OUT}"; fi
-    assert_home_unchanged "${home}" "${before}" "codex legacy base removal preview"
-else
-    skip_listed "codex legacy base removal preview"
-fi
-
 echo
 echo "== install.sh --target all --only <step>: targets without the step sit it out =="
 
 home="$(new_home)"
 install_must_succeed "${home}" install --target all --only mcp
 assert_contains "${INSTALL_OUT}" "step 'mcp' is not supported by target 'agents' — skipping" "--target all --only mcp skips agents"
-if [[ -f "${home}/project/.mcp.json" ]]; then ok "--target all --only mcp still runs mcp elsewhere"; else ko "--target all --only mcp still runs mcp elsewhere"; fi
+if [[ -f "${home}/project/opencode.json" ]]; then ok "--target all --only mcp still runs mcp elsewhere"; else ko "--target all --only mcp still runs mcp elsewhere"; fi
 if out="$(run_install "${home}" install --target agents --only mcp)"; then
     ko "an explicit target still rejects a step it lacks"
 else

@@ -206,7 +206,7 @@
             "Claude Code 2.1.300 or later documented as the minimum",
             "Tested command-level installer dedupe that preserves user-owned hooks"
           ],
-          "notes": "Native plugin hooks/hooks.json needs Claude Code 2.1.300 or later; older clients keep installer-managed hooks. After enabling ycc-hooks@ycc, install.sh migrate --target claude --apply prunes the installer hooks."
+          "notes": "Native plugin hooks/hooks.json needs Claude Code 2.1.300 or later. install.sh installs it (project scope by default, user scope with --global); once ycc-hooks@ycc is explicitly enabled in ~/.claude/settings.json, the automatic legacy cleanup prunes the installer-owned settings hooks an older installer wrote."
         },
         "codex": {
           "status": "excluded",
@@ -241,7 +241,7 @@
             "v6.0.0 listing flip: package validators, lockstep preflight, per-target migration and dedupe tests, and clean-machine fork installs pass",
             "Interactive installation and installed-plugin runtime verification"
           ],
-          "notes": "sessionStart only; WorktreeCreate stays on install.sh."
+          "notes": "sessionStart only; WorktreeCreate is not implemented for Cursor."
         },
         "omp": {
           "status": "excluded",
@@ -477,7 +477,7 @@
             "docs/internal/spikes/cursor-plugin.md"
           ],
           "gates": [],
-          "notes": "install.sh only: Cursor settings and hooks, including WorktreeCreate, which stays off the native package."
+          "notes": "install.sh only: Cursor CLI settings (cli-config.json, --global). Hooks ship only in the native ycc-hooks package (sessionStart); WorktreeCreate is not implemented for Cursor."
         },
         "opencode": {
           "status": "included",

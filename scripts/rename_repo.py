@@ -27,7 +27,7 @@ ALLOWLIST_FILES: tuple[str, ...] = (
     "README.md",
     "docs/install/codex.md",
     "install.sh",
-    "scripts/codex_marketplace.py",
+    "scripts/codex_install.py",
     "scripts/generate_codex_plugin.py",
     "scripts/generate_opencode_package.py",
     "scripts/test_generate_opencode_package.py",
@@ -35,8 +35,7 @@ ALLOWLIST_FILES: tuple[str, ...] = (
     "docs/install/v6/claude.md",
     "ycc/skills/_shared/references/target-capability-matrix.md",
     "scripts/lib/install/targets/claude.sh",
-    "scripts/lib/install/targets/codex.sh",
-    "scripts/test_codex_marketplace.py",
+    "scripts/lib/install/targets/cursor.sh",
     "ycc/mods/.claude-plugin/marketplace.json",
     "ycc/settings/settings.json",
 )

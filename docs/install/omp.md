@@ -10,8 +10,8 @@ There are two install paths. Both need `omp` 18.12.2 or newer:
   `.omp-plugin/marketplace.json`, so `omp` installs straight from GitHub
   (see [Install From The Catalog](#install-from-the-catalog)).
 - **`install.sh`.** Run from a checkout. It adds ownership records,
-  `update`/`remove`/`migrate`, dedupe, and the opt-in `--settings` and
-  `--rules` steps.
+  `update`/`remove`, automatic legacy cleanup, dedupe, and the opt-in
+  `--settings` and `--rules` steps.
 
 ## Prerequisites
 
@@ -62,7 +62,7 @@ with the Linux `omp` build. A WSL install belongs to the WSL `omp`; a Windows
 The three packages share one lockstep version (`omp plugin list` shows it).
 `@ycc` names the marketplace: the repository catalog, or the export
 `install.sh` registers. A `ycc` marketplace pointing at the checkout root is
-an older setup; see [Migrate From Older Installs](#migrate-from-older-installs).
+an older setup that `install.sh` retires; see [Legacy Cleanup](#legacy-cleanup).
 
 ## Install From The Catalog
 
@@ -99,8 +99,8 @@ The `base` step generates and validates the OMP packages, then:
    (`ycc@ycc`, `ycc-mcp@ycc` and `ycc-rules@ycc`).
 
 What ycc installed is recorded in `~/.config/ycc/omp-native-install.json`.
-`update`, `remove` and `migrate` act only on what that file records; an
-install or marketplace you created yourself is reported and left untouched.
+`update`, `remove` and the legacy cleanup act only on what that file records;
+an install or marketplace you created yourself is reported and left untouched.
 
 After `base`, the default-on `dedupe` step hides the ycc skills OMP would
 otherwise load a second time from `~/.agents/skills` (see
@@ -485,7 +485,7 @@ With ycc also installed for Claude, Codex, Cursor, opencode or the `agents`
 target, OMP loads each ycc component once, from the OMP packages:
 
 - **Skills.** OMP reads `~/.agents/skills` by default, where the `agents`
-  target and consolidated Codex, Cursor and opencode skills live. A same-named
+  target and consolidated opencode skills live. A same-named
   skill whose text differs from the OMP package becomes an `agents/<name>`
   alias; the `dedupe` step hides those aliases (below). Identical copies are
   dropped by OMP itself.
@@ -534,8 +534,10 @@ skills:
 - **What it hides.** `agents/<name>`, `codex/<name>` and `opencode/<name>`
   entries, only for ycc skills that ycc itself installed in
   `~/.agents/skills`, `~/.codex/skills` or `~/.config/opencode/skills` (as
-  recorded in `~/.config/ycc/installed-units.json`). Skills you wrote are
-  never hidden. Claude copies are not hidden (see W4).
+  recorded in `~/.config/ycc/installed-units.json`). Current installers write
+  no `~/.codex/skills` copies; the entry covers older copies the Codex legacy
+  cleanup kept. Skills you wrote are never hidden. Claude copies are not
+  hidden (see W4).
 - **Other tools are untouched.** The entries match only the OMP alias, so
   Codex, Cursor and opencode keep reading their copies. When the OMP package
   is disabled or removed, the alias no longer exists and OMP loads the
@@ -573,13 +575,13 @@ or restart.
 
 Every install prints at most one line per finding, each naming one command:
 
-| Id  | Meaning                                                                                           | Line                                                                                                                                                                                                                                   |
-| --- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| W1  | `dedupe` hid ycc's own duplicates                                                                 | `[ok] OMP: hid N ycc duplicate skills (agents/…, codex/…) via skills.ignoredSkills in <config>; ./install.sh remove --target omp --only dedupe restores them`                                                                          |
-| W2  | Duplicates exist and `dedupe` was skipped (`--only base`, `migrate`)                              | `[!!] OMP also loads N ycc skills from ~/.agents/skills as agents/<name>; run ./install.sh install --target omp --only dedupe to hide them in OMP`                                                                                     |
-| W3  | A directory ycc did not install has a ycc skill name                                              | `[!!] ~/.agents/skills/<a>[, …] share ycc skill names but were not installed by ycc; OMP lists them as agents/<name> (left as is)`                                                                                                     |
-| W4  | `enabledProviders` lists `claude`, `*` or `all`, and ycc Claude skills are in `~/.claude/skills`  | `[!!] enabledProviders includes claude: N ycc skills in ~/.claude/skills outrank the OMP package (it shows as ycc/<name>); remove them with ./install.sh remove --target claude --intent skills, or drop claude from enabledProviders` |
-| W5  | `install --target agents` ran while ycc is installed on OMP and the new copies are not hidden yet | `[!!] OMP also loads these skills; run ./install.sh install --target omp --only dedupe to hide the ~/.agents copies in OMP`                                                                                                            |
+| Id  | Meaning                                                                                           | Line                                                                                                                                                                                                                                                                                              |
+| --- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| W1  | `dedupe` hid ycc's own duplicates                                                                 | `[ok] OMP: hid N ycc duplicate skills (agents/…, codex/…) via skills.ignoredSkills in <config>; ./install.sh remove --target omp --only dedupe restores them`                                                                                                                                     |
+| W2  | Duplicates exist and `dedupe` was skipped (`--only base`)                                         | `[!!] OMP also loads N ycc skills from ~/.agents/skills as agents/<name>; run ./install.sh install --target omp --only dedupe to hide them in OMP`                                                                                                                                                |
+| W3  | A directory ycc did not install has a ycc skill name                                              | `[!!] ~/.agents/skills/<a>[, …] share ycc skill names but were not installed by ycc; OMP lists them as agents/<name> (left as is)`                                                                                                                                                                |
+| W4  | `enabledProviders` lists `claude`, `*` or `all`, and ycc Claude skills are in `~/.claude/skills`  | `[!!] enabledProviders includes claude: N ycc skills in ~/.claude/skills outrank the OMP package (it shows as ycc/<name>); retire them with ./install.sh sync --target claude --intent base (its legacy cleanup removes ycc-owned ~/.claude/skills copies), or drop claude from enabledProviders` |
+| W5  | `install --target agents` ran while ycc is installed on OMP and the new copies are not hidden yet | `[!!] OMP also loads these skills; run ./install.sh install --target omp --only dedupe to hide the ~/.agents copies in OMP`                                                                                                                                                                       |
 
 W1 lists the namespaces it actually hid, for example
 `[ok] OMP: hid 41 ycc duplicate skills (agents/…) via skills.ignoredSkills in /home/u/.omp/agent/config.yml; ./install.sh remove --target omp --only dedupe restores them`.
@@ -595,9 +597,9 @@ except `~/.agents`. Widening it changes what wins:
 - **Claude skills outrank ycc.** With `claude`, `*` or `all`, standalone
   skills in `~/.claude/skills` load at priority 80, above the OMP package, so
   they take the bare names and the package copy shows as `ycc/<name>` (W4).
-  Remove the Claude copies with
-  `./install.sh remove --target claude --intent skills`, or drop `claude`
-  from `enabledProviders`. ycc writes nothing for this case.
+  Retire the ycc-owned Claude copies with
+  `./install.sh sync --target claude --intent base` (its legacy cleanup), or
+  drop `claude` from `enabledProviders`. ycc writes nothing for this case.
 - **Codex and opencode aliases.** `codex/<name>` and `opencode/<name>`
   aliases appear; `dedupe` hides the ones ycc installed. opencode commands
   also load under their bare names next to `/ycc:<skill>`.
@@ -692,49 +694,37 @@ prints `kept marketplace ycc: <reason>`. When the
 same name), recorded installs are dropped from the ycc record but never
 uninstalled (`kept ycc@ycc (<scope>): marketplace ycc now points at …`).
 
-## Migrate From Older Installs
+## Legacy Cleanup
 
-```bash
-./install.sh migrate --target omp           # dry-run
-./install.sh migrate --target omp --apply
-```
-
-Migration retires two older setups without leaving duplicates:
+Every `base` run (`install`, or `sync --intent base`) first retires two older
+setups without leaving duplicates, then installs the native packages:
 
 - `omp plugin link` installs that point at this checkout's `packages/omp/`
   tree (foreign links are kept and reported);
 - a `ycc` marketplace registered at the checkout root, which OMP falls back
   to the Claude catalog for. Its installs are uninstalled, the marketplace is
-  removed, and the default native packages (`ycc`, `ycc-mcp` and `ycc-rules`) are
+  removed, and the native packages (`ycc`, `ycc-mcp` and `ycc-rules`) are
   installed in the same scopes.
 
-Before anything is uninstalled, migration builds and validates the export.
-It refuses (and changes nothing) while a legacy install is disabled, because
-the native reinstall would come back enabled and ycc never toggles plugins
-for you, or while a legacy install has no native OMP package
+There is no separate command; `--dry-run` previews the cleanup with the rest
+of the run. Before anything is uninstalled, the cleanup builds and validates
+the export. It refuses (and changes nothing) while a legacy install is
+disabled, because the native reinstall would come back enabled and ycc never
+toggles plugins for you, or while a legacy install has no native OMP package
 (`ycc-hooks`, `ycc-all` are excluded). The message names the exact `omp`
 commands to run first. Project scope means the project root `install
 --project` uses (the git toplevel, else the current directory).
 
-If `--apply` stops partway (say, an omp install fails), the scopes still owed
-a native install are recorded. Re-run `./install.sh migrate --target omp
---apply` to finish them, or run the printed
-`<checkout>/install.sh install --target omp [--project]` commands.
-A `ycc` marketplace registered at another source (a fork with the same name)
-blocks the owed native install; migrate refuses before changing anything until
-you remove it.
+If the run stops partway (say, an omp install fails), the scopes still owed a
+native install are recorded. Re-run `./install.sh install --target omp` to
+finish them, or run the printed
+`<checkout>/install.sh install --target omp [--project]` commands. A `ycc`
+marketplace registered at another source (a fork with the same name) blocks
+the owed native install; the cleanup refuses before changing anything until
+you remove it. Combined with other targets (`--target claude,omp`), every omp
+refusal happens before any target changes.
 
-Migration does not run `dedupe`, so ycc skills OMP also loads from
-`~/.agents/skills` are reported with W2. Run
-`./install.sh install --target omp --only dedupe` to hide them (see
-[The `dedupe` Step](#the-dedupe-step)); never delete `~/.agents/skills`, since
-Codex, Cursor and opencode may read their skills from there.
-
-`migrate --target all` does not include OMP; run `migrate --target omp`
-separately. Combined with other targets (`--target claude,omp`), every omp
-refusal happens in the shared preflight, before any target changes.
-
-## Migrate From Another ycc Target
+## Install Beside Another ycc Target
 
 OMP gets its own packages; you do not convert a Claude, Codex, Cursor,
 opencode or `agents` install into an OMP one. Install OMP beside them:
@@ -751,7 +741,8 @@ omp skill list >/dev/null                    # stderr empty: no duplicates
 - **Claude skills.** OMP reads `~/.claude/skills` only when
   `enabledProviders` lists `claude`; then they outrank the package (W4).
   Either drop `claude` from `enabledProviders` or run
-  `./install.sh remove --target claude --intent skills`.
+  `./install.sh sync --target claude --intent base` (its legacy cleanup
+  retires ycc-owned `~/.claude/skills` copies).
 - **Leave another runtime.** Remove that target first (for example
   `./install.sh remove --target agents --only skills`), then re-run
   `./install.sh install --target omp` so `dedupe` takes back the entries whose
@@ -809,8 +800,8 @@ for the profile.
 | `--target omp needs PyYAML for python3; …`                                                    | `python3 -m pip install --user pyyaml`.                                                                                                                                         |
 | `--project at $HOME: omp project scope needs a project directory …`                           | `cd` into a project, or drop `--project`.                                                                                                                                       |
 | `omp needs a listed OMP package` (with `--mode repo`)                                         | The checkout's `ycc/settings/packages.json` lists no OMP package (an old checkout). Pull, or use the default `--mode local`.                                                    |
-| `runtime package <pkg> is linked (omp plugin link); run ./install.sh migrate --target omp`    | Run `./install.sh migrate --target omp --apply`.                                                                                                                                |
-| `marketplace ycc has a different source (…); retained …`                                      | Another `ycc` marketplace is registered. Inspect it with `omp plugin marketplace list`; migrate or `omp plugin marketplace remove ycc` if it is not yours to keep.              |
+| `runtime package <pkg> is linked (omp plugin link); unlink it …`                              | Run `omp plugin uninstall <pkg>`, then re-run `./install.sh install --target omp`.                                                                                              |
+| `marketplace ycc has a different source (…); retained …`                                      | Another `ycc` marketplace is registered. Inspect it with `omp plugin marketplace list`; run `omp plugin marketplace remove ycc` if it is not yours to keep.                     |
 | `<export> exists but is not the recorded ycc export; rerun with --force to replace it`        | The export directory was edited or not made by ycc. Re-run with `--force`.                                                                                                      |
 | `[!!] <pkg>@ycc … the export changed but its version did not …`                               | You regenerated packages without a version bump; re-run with `--force`.                                                                                                         |
 | `[!!] <pkg>@ycc project install at <root> lost its cache (omp GC); repair: …`                 | A project install made with omp older than 18.13.0 lost its cache. Run the printed `cd <root> && <checkout>/install.sh install --target omp --project`.                         |

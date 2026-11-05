@@ -130,9 +130,11 @@ worktrees follow the table above via the scripts, not via these defaults,
 except where noted:
 
 - **Claude Code**: repo-local placement is provided by the `WorktreeCreate`
-  hook (`ycc/settings/hooks/worktree-create.sh`), which defaults to
+  hook (`ycc/settings/hooks/worktree-create.sh`, shipped by the native
+  `ycc-hooks@ycc` plugin that `install.sh sync --target claude --intent
+hooks` installs), which defaults to
   `<repo-root>/.claude/worktrees` and honors `YCC_WORKTREE_ROOT`. Without the
-  hook, Claude Code creates worktrees with `git worktree add` under its
+  plugin, Claude Code creates worktrees with `git worktree add` under its
   default location and copies gitignored files per `.worktreeinclude`.
 - **opencode**: the built-in worktree tools (`opencode.worktree_create` /
   `worktree_list`) manage their own worktrees; their placement is not

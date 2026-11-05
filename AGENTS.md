@@ -35,17 +35,16 @@ other runtime bundles are generated from it. Keep the plugin name `ycc` stable.
 The capability contract is `ycc/skills/_shared/references/target-capability-matrix.md`;
 this table records install ownership, not a claim of runtime feature parity:
 
-| Target                 | Generated / managed surface                                                                        | User install destination                                                                         |
-| ---------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Cursor file copy       | `packages/cursor/`: `ycc/{skills,agents,commands}`, `ycc-rules/rules`, `installer-fallback/config` | `~/.cursor/` via unchanged installer                                                             |
-| Codex                  | `.codex-plugin/ycc/`; `.codex-plugin/agents/`                                                      | `~/.codex/plugins/ycc`; custom agents under `~/.codex/agents/`                                   |
-| Codex marketplace      | User marketplace managed by Codex target                                                           | `~/.agents/plugins/marketplace.json`                                                             |
-| opencode               | `.opencode-plugin/skills/`, `agents/`, `commands/`                                                 | Matching directories under `~/.config/opencode/`                                                 |
-| opencode settings      | `.opencode-plugin/opencode.json`, `AGENTS.md`                                                      | `~/.config/opencode/` via `install.sh install --target opencode --settings --global`             |
-| Cross-tool `agents`    | `.agents-plugin/skills/`, `ycc-shared/`                                                            | `~/.agents/skills/`, `~/.agents/ycc-shared/`                                                     |
-| Claude native add-ons  | `packages/claude/` MCP, hooks, dependency bundle                                                   | Listed in root `.claude-plugin/marketplace.json`; `install.sh migrate` dedupes                   |
-| Cursor native packages | `packages/cursor/{ycc,ycc-rules,ycc-mcp,ycc-hooks}/`                                               | Listed in root `.cursor-plugin/marketplace.json`; file-copy installer remains                    |
-| OMP native packages    | `packages/omp/{ycc,ycc-mcp,ycc-rules}/`; listed in root `.omp-plugin/marketplace.json`             | `omp plugin install <pkg>@ycc`, or `install.sh install --target omp` (user or `--project` scope) |
+| Target                 | Generated / managed surface                                                            | User install destination                                                                         |
+| ---------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Cursor settings        | `packages/cursor/installer-fallback/config/cli-config.json`                            | `~/.cursor/cli-config.json` via `install.sh` (`--global`)                                        |
+| Codex                  | `.codex-plugin/ycc/`, `ycc-mcp/`; listed in root `.agents/plugins/marketplace.json`    | `codex plugin add ycc@ycc ycc-mcp@ycc` (via `install.sh`); custom agents in `~/.codex/agents/`   |
+| opencode               | `.opencode-plugin/skills/`, `agents/`, `commands/`                                     | Matching directories under `~/.config/opencode/`                                                 |
+| opencode settings      | `.opencode-plugin/opencode.json`, `AGENTS.md`                                          | `~/.config/opencode/` via `install.sh install --target opencode --settings --global`             |
+| Cross-tool `agents`    | `.agents-plugin/skills/`, `ycc-shared/`                                                | `~/.agents/skills/`, `~/.agents/ycc-shared/`                                                     |
+| Claude native add-ons  | `packages/claude/` MCP, hooks, dependency bundle                                       | Listed in root `.claude-plugin/marketplace.json`; `install.sh` installs them via `claude plugin` |
+| Cursor native packages | `packages/cursor/{ycc,ycc-rules,ycc-mcp,ycc-hooks}/`                                   | Listed in root `.cursor-plugin/marketplace.json`; installed in Cursor's `/plugins`               |
+| OMP native packages    | `packages/omp/{ycc,ycc-mcp,ycc-rules}/`; listed in root `.omp-plugin/marketplace.json` | `omp plugin install <pkg>@ycc`, or `install.sh install --target omp` (user or `--project` scope) |
 
 - The `agents` target is skills-only; never write `~/.agents/plugins/` (owned by Codex).
 - Project rules here are not user-global plugin rules. opencode's generated `AGENTS.md`
@@ -70,7 +69,7 @@ this table records install ownership, not a claim of runtime feature parity:
 | `./scripts/validate.sh`                                       | Run every validate.sh target. CI runs it after `npm run lint`.      |
 | `./scripts/sync.sh --only claude`                             | Regenerate native Claude packages                                   |
 | `./scripts/validate.sh --only claude,claude-native,packages`  | Generator, native policy, parity, optional CLI validation           |
-| `./scripts/sync.sh --only cursor`                             | Regenerate native Cursor packages and file-copy inputs              |
+| `./scripts/sync.sh --only cursor`                             | Regenerate native Cursor packages and the settings input            |
 | `./scripts/validate.sh --only cursor,cursor-native,packages`  | Cursor content, generator, native policy fixtures, parity           |
 | `./scripts/validate.sh --only codex,codex-native,packages`    | Codex content, native export, policy fixtures, parity               |
 | `./scripts/sync.sh --only omp`                                | Regenerate OMP skills, agents, commands, manifests (`packages/omp`) |

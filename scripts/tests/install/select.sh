@@ -12,18 +12,22 @@ echo "== install.sh list =="
 
 home="$(new_home)"
 install_must_succeed "${home}" list
-if [[ "${INSTALL_OUT}" == $'mcps\nskills\nagents\ncommands\nplugins\nmods\nhooks' ]]; then ok "bare list prints the selectable kinds"; else ko "bare list prints the selectable kinds" "${INSTALL_OUT}"; fi
+if [[ "${INSTALL_OUT}" == $'mcps\nskills\nagents\ncommands\nplugins\nmods' ]]; then ok "bare list prints the selectable kinds"; else ko "bare list prints the selectable kinds" "${INSTALL_OUT}"; fi
 install_must_succeed "${home}" list mcps --target opencode
 list_out="${INSTALL_OUT}"
 install_must_succeed "${home}" list-mcps --target opencode
 if [[ -n "${list_out}" && "${list_out}" == "${INSTALL_OUT}" ]]; then ok "list-mcps is an alias of list mcps"; else ko "list-mcps is an alias of list mcps" "${INSTALL_OUT}"; fi
-# Union across targets, first-seen order.
+# Only opencode manages selectable MCP servers (native targets ship the ycc-mcp package).
 install_must_succeed "${home}" list mcps
-all_out="${INSTALL_OUT}"
-expected="$(for t in claude cursor codex opencode; do HOME="${home}" bash "${INSTALL}" list mcps --target "${t}"; done | awk '!seen[$0]++')"
-if [[ -n "${all_out}" && "${all_out}" == "${expected}" ]]; then ok "list mcps is the first-seen union across targets"; else ko "list mcps is the first-seen union across targets"; fi
+if [[ -n "${INSTALL_OUT}" && "${INSTALL_OUT}" == "${list_out}" ]]; then ok "list mcps names only opencode's servers"; else ko "list mcps names only opencode's servers" "${INSTALL_OUT}"; fi
+for t in claude codex cursor omp; do
+    install_must_succeed "${home}" list skills --target "${t}"
+    if [[ -z "${INSTALL_OUT}" ]]; then ok "list skills is empty for native ${t}"; else ko "list skills is empty for native ${t}" "${INSTALL_OUT}"; fi
+done
+out="$(run_install "${home}" list hooks)"
+assert_contains "${out}" "unknown kind 'hooks' (valid: mcps skills agents commands plugins mods)" "hooks is no longer a selectable kind"
 out="$(run_install "${home}" list widgets)"
-assert_contains "${out}" "unknown kind 'widgets' (valid: mcps skills agents commands plugins mods hooks)" "list rejects an unknown kind"
+assert_contains "${out}" "unknown kind 'widgets' (valid: mcps skills agents commands plugins mods)" "list rejects an unknown kind"
 out="$(run_install "${home}" list mcps --bogus)"
 assert_contains "${out}" "Unknown option for list: --bogus" "list rejects unknown options"
 out="$(run_install "${home}" list-mcps --bogus)"
@@ -35,29 +39,57 @@ echo
 echo "== install.sh --<kind>: parsing =="
 
 home="$(new_home)"
-install_must_succeed "${home}" sync --target claude --intent mcp --mcps ' github , github,vercel'
+install_must_succeed "${home}" sync --target opencode --intent mcp --mcps ' github , github,vercel'
 assert_contains "${INSTALL_OUT}" "MCP servers: github, vercel" "selection drops spaces and duplicates, keeps order"
-merged="$(cat "${home}/project/.mcp.json")"
+merged="$(cat "${home}/project/opencode.json")"
 assert_contains "${merged}" '"vercel"' "deduped selection writes every named server"
 assert_not_contains "${merged}" '"stripe"' "deduped selection writes nothing else"
 
 home="$(new_home)"
-out="$(run_install "${home}" sync --target claude --intent mcp --mcps ",")"
+out="$(run_install "${home}" sync --target opencode --intent mcp --mcps ",")"
 assert_contains "${out}" "--mcps contains an empty value" "empty item rejected"
-out="$(run_install "${home}" sync --target claude --intent mcp --mcps)"
+out="$(run_install "${home}" sync --target opencode --intent mcp --mcps)"
 assert_contains "${out}" "--mcps requires a comma-separated list of MCP servers" "missing value rejected"
-out="$(run_install "${home}" sync --target claude --intent mcp --widgets x)"
+out="$(run_install "${home}" sync --target opencode --intent mcp --widgets x)"
 assert_contains "${out}" "Unknown option: --widgets" "unregistered kind is an unknown option"
 
 home="$(new_home)"
-out="$(run_install "${home}" sync --target claude --intent mcp --mcps bogus)"
+out="$(run_install "${home}" sync --target opencode --intent mcp --mcps bogus)"
 assert_contains "${out}" "unknown MCP server 'bogus'" "unknown name rejected"
 assert_contains "${out}" "list them with: ycc list mcps --target <targets>" "unknown name points at ycc list mcps"
-if [[ ! -e "${home}/project/.mcp.json" ]]; then ok "unknown name writes nothing"; else ko "unknown name writes nothing"; fi
+if [[ ! -e "${home}/project/opencode.json" ]]; then ok "unknown name writes nothing"; else ko "unknown name writes nothing"; fi
 
 home="$(new_home)"
-out="$(run_install "${home}" remove --target claude --intent settings --mcps github)"
+out="$(run_install "${home}" remove --target opencode --intent settings --mcps github)"
 assert_contains "${out}" "--mcps needs the mcp step (sync/remove --intent mcp, install --mcp or --only mcp)" "selector without its step rejected"
+
+echo
+echo "== install.sh: opencode/agents-only selections on native targets =="
+
+# Native-package targets install whole packages: with only native targets the
+# selection is an error before anything runs.
+for args in "--mcps github --intent mcp" "--skills plan --intent skills" "--agents implementor --intent agents" \
+    "--commands clean --intent commands" "--skills plan --with-deps --intent skills" "--skills-home agents --intent base"; do
+    for t in claude codex cursor omp claude,codex; do
+        home="$(new_home)"
+        # shellcheck disable=SC2086  # args split on purpose.
+        if out="$(run_install "${home}" sync --target "${t}" ${args})"; then
+            ko "${t}: ${args%% *} rejected with only native targets"
+        else
+            assert_contains "${out}" "narrow only the opencode and agents targets" "${t}: ${args%% *} rejected with only native targets"
+        fi
+        if [[ ! -s "${home}/claude-calls.log" ]]; then ok "${t}: ${args%% *} rejection runs nothing"; else ko "${t}: ${args%% *} rejection runs nothing"; fi
+    done
+done
+
+# Mixed with opencode: applies there, one notice for the native targets.
+home="$(new_home)"
+install_must_succeed "${home}" sync --target claude,opencode --intent mcp --mcps github
+assert_contains "${INSTALL_OUT}" "--mcps: native-package targets claude install whole packages — skipped there" "mixed run skips native targets with one notice"
+count="$(grep -c "native-package targets" <<< "${INSTALL_OUT}")"
+if [[ "${count}" == "1" ]]; then ok "the notice prints once"; else ko "the notice prints once" "printed ${count} times"; fi
+assert_contains "$(cat "${home}/project/opencode.json")" '"github"' "mixed run narrows opencode"
+assert_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin install ycc-mcp@ycc" "mixed run still installs claude's whole ycc-mcp package"
 
 echo
 echo "== select.sh: extension contract (fake kind) =="
@@ -85,7 +117,7 @@ widgets_run() {
 }
 
 out="$(widgets_run 'run_list_command; echo ---; run_list_command widgets; echo ---; run_list_command widgets --target beta')"
-expected="$(printf '%s\n' mcps skills agents commands plugins mods hooks widgets --- a1 shared b1 --- shared b1)"
+expected="$(printf '%s\n' mcps skills agents commands plugins mods widgets --- a1 shared b1 --- shared b1)"
 if [[ "${out}" == "${expected}" ]]; then ok "list covers a registered kind (union, first-seen, skips targets without the step)"; else ko "list covers a registered kind" "${out}"; fi
 
 out="$(widgets_run 'parse_selection widgets " b1 , shared,b1"; selection_for widgets; has_selection widgets && echo has; has_selection mcps || echo none')"

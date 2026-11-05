@@ -1,11 +1,23 @@
 #!/usr/bin/env bash
-# install.sh tests — cursor: settings, remove, base remove, slices.
+# install.sh tests — cursor: native marketplace base step (stub 'agent' CLI),
+# /plugins hint, automatic legacy cleanup, and the global-only settings step.
 #
 # Runs alone (bash scripts/tests/install/cursor.sh) or from scripts/test-install-sync.sh.
 # shellcheck source=scripts/tests/install/lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-echo "== install.sh sync: cursor =="
+CURSOR_URL="https://github.com/yandy-r/ystack"
+
+# cursor_legacy_dirs_absent <home> — true when no file-copy carrier exists.
+cursor_legacy_dirs_absent() {
+    local d
+    for d in skills agents rules commands hooks; do
+        [[ ! -e "$1/.cursor/${d}" ]] || return 1
+    done
+    [[ ! -e "$1/.cursor/hooks.json" && ! -e "$1/.cursor/mcp.json" ]]
+}
+
+echo "== install.sh sync: cursor settings =="
 
 home="$(new_home)"
 install_must_succeed "${home}" sync --target cursor --intent settings
@@ -18,6 +30,7 @@ if [[ ! -e "${home}/.cursor/cli-config.json" && ! -e "${home}/.config/ycc/manage
 else
     ko "cursor default settings writes nothing" "${out}"
 fi
+assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "agent plugin" "cursor settings-only runs no agent CLI"
 
 install_must_succeed "${home}" sync --target cursor --intent settings --global
 assert_contains "$(cat "${home}/.cursor/cli-config.json")" '"claude-fable-5-1"' "cursor CLI model applied with --global"
@@ -33,244 +46,275 @@ assert_contains "$(cat "${home}/.cursor/cli-config.json")" "${before}" "cursor d
 install_must_succeed "${home}" remove --target cursor --intent settings --global
 assert_not_contains "$(cat "${home}/.cursor/cli-config.json" 2>/dev/null)" '"claude-fable-5-1"' "cursor --global remove drops managed settings"
 
-echo
-
-echo "== install.sh remove: cursor settings and rules =="
-
 home="$(new_home)"
 cat > "${home}/.cursor/cli-config.json" <<'JSON'
 { "privacyMode": 1, "permissions": { "allow": ["Shell(ls)"], "deny": [] } }
 JSON
-install_must_succeed "${home}" sync --target cursor --intent settings,rules --global
-install_must_succeed "${home}" remove --target cursor --intent settings,rules --global
+install_must_succeed "${home}" sync --target cursor --intent settings --global
+install_must_succeed "${home}" remove --target cursor --intent settings --global
 merged="$(cat "${home}/.cursor/cli-config.json")"
 assert_contains "${merged}" '"privacyMode": 1' "cursor remove keeps unmanaged keys"
 assert_contains "${merged}" '"Shell(ls)"' "cursor remove keeps user permission entries"
-assert_contains "${merged}" '"deny": []' "cursor remove keeps required permission keys"
 assert_not_contains "${merged}" '"modelId"' "cursor remove drops managed model"
-if [[ ! -L "${home}/.cursor/CLAUDE.md" ]]; then ok "cursor remove unlinks rules"; else ko "cursor remove unlinks rules"; fi
-
-
-echo "== install.sh remove: cursor base =="
-
-home="$(new_home)"
-for unit in skills agents rules; do
-    src="${REPO_ROOT}/packages/cursor/ycc/${unit}"
-    [[ "${unit}" == "rules" ]] && src="${REPO_ROOT}/packages/cursor/ycc-rules/rules"
-    mkdir -p "${home}/.cursor/${unit}"
-    cp -R "${src}/." "${home}/.cursor/${unit}/"
-done
-mkdir -p "${home}/.cursor/skills/my-own-skill"
-install_must_succeed "${home}" remove --target cursor --intent base
-if [[ -d "${home}/.cursor/skills/my-own-skill" ]]; then ok "cursor base remove keeps user skills"; else ko "cursor base remove keeps user skills"; fi
-leftover="$(find "${home}/.cursor/skills" -mindepth 1 -maxdepth 1 -printf '%f\n')"
-if [[ "${leftover}" == "my-own-skill" ]]; then ok "cursor base remove drops bundle skills"; else ko "cursor base remove drops bundle skills" "${leftover}"; fi
-if [[ ! -e "${home}/.cursor/agents" ]]; then ok "cursor base remove drops emptied agents dir"; else ko "cursor base remove drops emptied agents dir"; fi
-
-
-echo "== install.sh: cursor slices =="
-
-home="$(new_home)"
-HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/.config/ycc/managed-config-state.json" \
-    python3 "${REPO_ROOT}/scripts/install_slices.py" install --target cursor --slice skills >/dev/null
-assert_contains "$(cat "${home}/.cursor/skills/releaser/SKILL.md")" 'disable-model-invocation: true' "cursor slice retains releaser manual invocation policy"
-assert_not_contains "$(cat "${home}/.cursor/skills/init/SKILL.md")" 'disable-model-invocation' "cursor slice keeps init model-invocable"
-
-# Shared-reference paths resolve in an isolated HOME containing spaces, from a foreign cwd.
-home="${SANDBOX_ROOT}/cursor home with spaces"
-foreign="${SANDBOX_ROOT}/foreign cwd"
-mkdir -p "${home}" "${foreign}"
-if (cd "${foreign}" && HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/.config/ycc/managed-config-state.json" \
-    python3 "${REPO_ROOT}/scripts/install_slices.py" install --target cursor --slice skills >/dev/null); then
-    ok "cursor slice installs from foreign cwd with spaced HOME"
-else
-    ko "cursor slice installs from foreign cwd with spaced HOME"
-fi
-if python3 - "${home}" "${REPO_ROOT}" <<'PY'
-from pathlib import Path
-import re
-import subprocess
-import sys
-
-home, repo = map(Path, sys.argv[1:])
-skills = home / ".cursor/skills"
-consumers = (
-    "orchestrate/references/dispatch-playbook.md",
-    "prp-plan/SKILL.md",
-    "prp-pr/SKILL.md",
-    "research-to-issues/SKILL.md",
-)
-count = 0
-for relative in consumers:
-    source = (repo / "packages/cursor/ycc/skills" / relative).read_text()
-    installed = (skills / relative).read_text()
-    assert "${CURSOR_PLUGIN_ROOT}/skills/_shared/references/" not in installed, relative
-    for suffix in re.findall(r"\$\{CURSOR_PLUGIN_ROOT\}/skills/(_shared/references/[\w.-]+\.md)", source):
-        resolved = skills / suffix
-        assert str(resolved) in installed, (relative, resolved)
-        assert resolved.is_file(), resolved
-        count += 1
-assert count >= 9, count
-PY
-then ok "cursor installed shared refs resolve"; else ko "cursor installed shared refs resolve"; fi
-
-# A base-installed raw copy remains ycc-owned when the slice rebases references.
-home="$(new_home)"
-mkdir -p "${home}/.cursor/skills"
-cp -R "${REPO_ROOT}/packages/cursor/ycc/skills/prp-pr" "${home}/.cursor/skills/"
-if HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/.config/ycc/managed-config-state.json" \
-    python3 "${REPO_ROOT}/scripts/install_slices.py" install --target cursor --slice skills >/dev/null; then
-    ok "cursor slice replaces base copy with rebased references"
-else
-    ko "cursor slice replaces base copy with rebased references"
-fi
-assert_contains "$(cat "${home}/.cursor/skills/prp-pr/SKILL.md")" "${home}/.cursor/skills/_shared/references/" "cursor base takeover rebases references"
-
-home="$(new_home)"
-for unit in skills agents rules; do
-    src="${REPO_ROOT}/packages/cursor/ycc/${unit}"
-    [[ "${unit}" == "rules" ]] && src="${REPO_ROOT}/packages/cursor/ycc-rules/rules"
-    mkdir -p "${home}/.cursor/${unit}"
-    cp -R "${src}/." "${home}/.cursor/${unit}/"
-done
-mkdir -p "${home}/.cursor/skills/my-own-skill"
-install_must_succeed "${home}" remove --target cursor --intent skills
-leftover="$(find "${home}/.cursor/skills" -mindepth 1 -maxdepth 1 -printf '%f\n')"
-if [[ "${leftover}" == "my-own-skill" ]]; then ok "cursor skills remove drops only bundle skills"; else ko "cursor skills remove drops only bundle skills" "${leftover}"; fi
-if [[ -n "$(ls -A "${home}/.cursor/agents")" && -n "$(ls -A "${home}/.cursor/rules")" ]]; then ok "cursor skills remove keeps agents + rules"; else ko "cursor skills remove keeps agents + rules"; fi
 
 echo
-echo "== install.sh rules: cursor provisions no global rules files =="
+echo "== install.sh install: cursor native marketplace =="
 
 home="$(new_home)"
-install_must_succeed "${home}" install --target cursor --only rules
+install_must_succeed "${home}" install --target cursor
 out="${INSTALL_OUT}"
-assert_contains "${out}" "Cursor Settings → Rules" "cursor rules prints manual User Rules guidance"
-for f in CLAUDE.md AGENTS.md; do
-    if [[ ! -e "${home}/.cursor/${f}" && ! -L "${home}/.cursor/${f}" ]]; then ok "cursor rules creates no ~/.cursor/${f}"; else ko "cursor rules creates no ~/.cursor/${f}"; fi
-done
+log="$(cat "${home}/claude-calls.log" 2>/dev/null)"
+assert_contains "${log}" "agent plugin marketplace add ${CURSOR_URL}" "cursor install registers the GitHub marketplace"
+assert_contains "${out}" "Cursor rejects filesystem marketplaces" "cursor local mode notes it registers the published catalog"
+assert_contains "${out}" "open /plugins" "cursor install prints the /plugins hint"
+assert_contains "${out}" "select: ycc" "cursor install hint names the ycc package"
+assert_not_contains "${out}" "ycc-mcp" "cursor base hint names only the requested packages"
+if cursor_legacy_dirs_absent "${home}"; then ok "cursor install writes no file-copy carriers"; else ko "cursor install writes no file-copy carriers" "$(find "${home}/.cursor" -mindepth 1 -maxdepth 1)"; fi
 
+# Already registered: the add is skipped.
+home="$(new_home)"
+AGENT_STUB_MARKETPLACES='[{"name":"ycc","source":"https://github.com/yandy-r/ystack"}]' \
+    install_must_succeed "${home}" install --target cursor
+log="$(cat "${home}/claude-calls.log" 2>/dev/null)"
+assert_not_contains "${log}" "agent plugin marketplace add" "cursor install skips an already-registered marketplace"
+assert_contains "${INSTALL_OUT}" "already registered" "cursor install says the marketplace is registered"
+
+# Intents name their native packages; every content intent maps to the one base step.
+home="$(new_home)"
+install_must_succeed "${home}" sync --target cursor --intent skills,rules,mcp,hooks
+out="${INSTALL_OUT}"
+assert_contains "${out}" "select: ycc ycc-rules ycc-mcp ycc-hooks" "cursor intents name ycc, ycc-rules, ycc-mcp and ycc-hooks"
+count="$(grep -c "agent plugin marketplace add" "${home}/claude-calls.log")"
+if [[ "${count}" == "1" ]]; then ok "cursor intents run one marketplace step"; else ko "cursor intents run one marketplace step" "${count}"; fi
+if cursor_legacy_dirs_absent "${home}"; then ok "cursor intents write no file-copy carriers"; else ko "cursor intents write no file-copy carriers"; fi
+
+home="$(new_home)"
+install_must_succeed "${home}" install --target cursor --package ycc-hooks
+assert_contains "${INSTALL_OUT}" "select: ycc-hooks" "cursor --package names that package in the hint"
+assert_contains "$(cat "${home}/claude-calls.log")" "agent plugin marketplace add ${CURSOR_URL}" "cursor --package registers the marketplace"
+
+home="$(new_home)"
+install_must_succeed "${home}" install --target cursor --mode repo
+assert_contains "$(cat "${home}/claude-calls.log")" "agent plugin marketplace add ${CURSOR_URL}" "cursor --mode repo registers the GitHub marketplace"
+assert_not_contains "${INSTALL_OUT}" "Cursor rejects filesystem marketplaces" "cursor --mode repo needs no local-mode note"
+
+home="$(new_home)"
+install_must_succeed "${home}" install --target cursor --dry-run
+assert_contains "${INSTALL_OUT}" "[dry-run] would run: agent plugin marketplace add ${CURSOR_URL}" "cursor dry-run prints the planned command"
+assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "agent plugin marketplace add" "cursor dry-run runs no agent CLI mutation"
+
+echo
+echo "== install.sh install: cursor without the agent CLI =="
+
+home="$(new_home)"
+# Hide 'agent': the stub dir minus agent, then PATH minus any dir holding an agent binary.
+filtered_stub="${SANDBOX_ROOT}/stub-no-agent"
+mkdir -p "${filtered_stub}"
+for f in "${STUB_BIN}"/*; do [[ "$(basename "${f}")" == agent ]] || ln -sf "${f}" "${filtered_stub}/"; done
+system_path=""
+IFS=':' read -r -a path_parts <<< "${PATH}"
+for part in "${path_parts[@]}"; do
+    [[ -x "${part}/agent" ]] && continue
+    system_path+="${system_path:+:}${part}"
+done
+out="$(
+    cd "${home}/project" && HOME="${home}" PATH="${filtered_stub}:${system_path}" \
+        CLAUDE_STUB_LOG="${home}/claude-calls.log" YCC_INSTALL_SKIP_BUILD=1 \
+        YCC_MANAGED_CONFIG_STATE="${home}/.config/ycc/managed-config-state.json" \
+        bash "${INSTALL}" install --target cursor 2>&1
+)" && rc=0 || rc=$?
+if [[ ${rc} -eq 0 ]]; then ok "cursor install without the agent CLI succeeds"; else ko "cursor install without the agent CLI succeeds" "${out}"; fi
+assert_contains "${out}" "Cursor 'agent' CLI not found" "cursor install warns when the agent CLI is missing"
+assert_contains "${out}" "in the Cursor IDE open /plugins" "missing agent CLI warning gives the IDE steps"
+assert_contains "${out}" "${CURSOR_URL}" "missing agent CLI warning names the marketplace URL"
+
+echo
+echo "== install.sh: cursor legacy cleanup =="
+
+# A byte-identical file-copy skill goes; an edited one and a user skill stay.
+home="$(new_home)"
+mkdir -p "${home}/.cursor/skills"
+cp -R "${REPO_ROOT}/packages/cursor/ycc/skills/plan" "${home}/.cursor/skills/"
+cp -R "${REPO_ROOT}/packages/cursor/ycc/skills/clean" "${home}/.cursor/skills/"
+echo "# my edit" >> "${home}/.cursor/skills/clean/SKILL.md"
+mkdir -p "${home}/.cursor/skills/my-own-skill"
+install_must_succeed "${home}" install --target cursor
+if [[ ! -e "${home}/.cursor/skills/plan" ]]; then ok "cursor install retires a byte-identical legacy skill copy"; else ko "cursor install retires a byte-identical legacy skill copy" "${INSTALL_OUT}"; fi
+assert_contains "$(cat "${home}/.cursor/skills/clean/SKILL.md" 2>/dev/null)" "# my edit" "cursor install keeps an edited legacy skill copy"
+if [[ -d "${home}/.cursor/skills/my-own-skill" ]]; then ok "cursor install keeps user skills"; else ko "cursor install keeps user skills"; fi
+assert_contains "${INSTALL_OUT}" "edited or ownership uncertain" "cursor cleanup reports the kept edited copy"
+
+# A dry-run previews the retirement and changes nothing.
+home="$(new_home)"
+mkdir -p "${home}/.cursor/skills"
+cp -R "${REPO_ROOT}/packages/cursor/ycc/skills/plan" "${home}/.cursor/skills/"
+install_must_succeed "${home}" install --target cursor --dry-run
+assert_contains "${INSTALL_OUT}" "would remove ${home}/.cursor/skills/plan" "cursor dry-run previews the legacy retirement"
+if [[ -d "${home}/.cursor/skills/plan" ]]; then ok "cursor dry-run keeps the legacy copy"; else ko "cursor dry-run keeps the legacy copy"; fi
+
+# Old rules links to this checkout go; a foreign file stays.
 home="$(new_home)"
 ln -s "${REPO_ROOT}/ycc/settings/rules/CLAUDE.md" "${home}/.cursor/CLAUDE.md"
-ln -s "${REPO_ROOT}/ycc/settings/rules/AGENTS.md" "${home}/.cursor/AGENTS.md"
-install_must_succeed "${home}" install --target cursor --only rules
-if [[ -L "${home}/.cursor/CLAUDE.md" && -L "${home}/.cursor/AGENTS.md" ]]; then ok "cursor install leaves legacy links alone"; else ko "cursor install leaves legacy links alone"; fi
-install_must_succeed "${home}" remove --target cursor --intent rules
-for f in CLAUDE.md AGENTS.md; do
-    if [[ ! -e "${home}/.cursor/${f}" && ! -L "${home}/.cursor/${f}" ]]; then ok "cursor remove unlinks legacy ~/.cursor/${f}"; else ko "cursor remove unlinks legacy ~/.cursor/${f}"; fi
-done
+echo mine > "${home}/.cursor/AGENTS.md"
+install_must_succeed "${home}" install --target cursor
+if [[ ! -e "${home}/.cursor/CLAUDE.md" && ! -L "${home}/.cursor/CLAUDE.md" ]]; then ok "cursor install retires the legacy rules link"; else ko "cursor install retires the legacy rules link"; fi
+assert_contains "${INSTALL_OUT}" "select: ycc ycc-rules" "cursor hint names ycc-rules after retiring the legacy rules link"
+assert_contains "$(cat "${home}/.cursor/AGENTS.md")" mine "cursor install keeps a user AGENTS.md"
 
-echo "== Cursor carrier ownership boundaries =="
-
-# Commands cannot be installed as dangling references; preflight touches nothing.
+# The old global MCP merge: ycc-written servers go, a user server stays.
 home="$(new_home)"
-out="$(run_install "${home}" sync --target cursor --intent commands 2>&1)" && rc=0 || rc=$?
-if [[ ${rc} -ne 0 ]]; then ok "cursor commands reject missing installed skills"; else ko "cursor commands reject missing installed skills" "${out}"; fi
-assert_contains "${out}" '--only skills,commands' "cursor missing skills names the recovery command"
-if [[ ! -e "${home}/.cursor/commands" && ! -e "${home}/.config/ycc/installed-units.json" ]]; then ok "missing skills preflight writes no carriers or state"; else ko "missing skills preflight writes no carriers or state"; fi
+echo '{"mcpServers":{"mine":{"command":"my-server"}}}' > "${home}/.cursor/mcp.json"
+HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/.config/ycc/managed-config-state.json" \
+    python3 "${REPO_ROOT}/scripts/merge_managed_config.py" --profile cursor-mcp \
+    --source "${REPO_ROOT}/mcp-configs/mcp.json" --destination "${home}/.cursor/mcp.json" --groups mcp >/dev/null \
+    || { ko "cursor legacy fixture: mcp.json"; exit 1; }
+ycc_server="$(python3 -c 'import json,sys; print(next(iter(json.load(open(sys.argv[1]))["mcpServers"])))' "${REPO_ROOT}/mcp-configs/mcp.json")"
+assert_contains "$(cat "${home}/.cursor/mcp.json")" "\"${ycc_server}\"" "fixture: legacy merge wrote a ycc MCP server"
+install_must_succeed "${home}" install --target cursor
+merged="$(cat "${home}/.cursor/mcp.json")"
+assert_not_contains "${merged}" "\"${ycc_server}\"" "cursor install retires the legacy ycc MCP merge"
+assert_contains "${merged}" '"my-server"' "cursor install keeps a user MCP server"
+assert_contains "${INSTALL_OUT}" "select: ycc ycc-mcp" "cursor hint names ycc-mcp after retiring the legacy MCP merge"
 
-# A commands-only refresh must use the explicitly selected consolidated home.
+# A user's own command that mentions ~/.agents/skills is unrecorded: kept, never blocking.
 home="$(new_home)"
-install_must_succeed "${home}" install --target cursor --package ycc --skills-home agents
-install_must_succeed "${home}" sync --target cursor --intent commands --skills-home agents
-assert_contains "$(cat "${home}/.cursor/commands/init.md")" "${home}/.agents/skills/init/SKILL.md" "commands-only refresh honors agents skills home"
-if [[ ! -e "${home}/.cursor/skills" ]]; then ok "commands-only agents refresh creates no native skills"; else ko "commands-only agents refresh creates no native skills"; fi
-
-# One collision must abort the whole slice before other wrappers are installed.
-home="$(new_home)"
-install_must_succeed "${home}" install --target cursor --only skills --skills-home native
 mkdir -p "${home}/.cursor/commands"
-echo mine > "${home}/.cursor/commands/init.md"
-out="$(run_install "${home}" sync --target cursor --intent commands 2>&1)" && rc=0 || rc=$?
-if [[ ${rc} -ne 0 && ! -e "${home}/.cursor/commands/clean.md" ]]; then ok "foreign command collision aborts the whole carrier"; else ko "foreign command collision aborts the whole carrier" "${out}"; fi
-assert_contains "$(cat "${home}/.cursor/commands/init.md")" mine "foreign colliding command survives"
-install_must_succeed "${home}" sync --target cursor --intent commands --force
-echo edited >> "${home}/.cursor/commands/init.md"
-out="$(run_install "${home}" sync --target cursor --intent commands 2>&1)" && rc=0 || rc=$?
-if [[ ${rc} -ne 0 ]]; then ok "locally edited owned command fails closed"; else ko "locally edited owned command fails closed"; fi
-assert_contains "$(cat "${home}/.cursor/commands/init.md")" edited "local command edit survives"
-out="$(run_install "${home}" remove --target cursor --intent commands 2>&1)" && rc=0 || rc=$?
-if [[ ${rc} -ne 0 && -e "${home}/.cursor/commands/clean.md" ]]; then ok "edited command aborts removal before partial deletion"; else ko "edited command aborts removal before partial deletion" "${out}"; fi
-install_must_succeed "${home}" remove --target cursor --intent commands --force
-if [[ ! -e "${home}/.cursor/commands" ]]; then ok "forced command removal cleans owned entries"; else ko "forced command removal cleans owned entries"; fi
+printf 'Run the skill in ~/.agents/skills/plan/SKILL.md\n' > "${home}/.cursor/commands/plan.md"
+ln -s "${home}/.cursor/commands/plan.md" "${home}/.cursor/commands/alias.md"
+install_must_succeed "${home}" install --target cursor
+# shellcheck disable=SC2088  # the literal ~ text the user's command contains.
+assert_contains "$(cat "${home}/.cursor/commands/plan.md")" "~/.agents/skills/plan" "cursor install keeps a user command mentioning ~/.agents/skills"
+if [[ -L "${home}/.cursor/commands/alias.md" ]]; then ok "cursor install keeps a user command symlink"; else ko "cursor install keeps a user command symlink"; fi
+assert_contains "${INSTALL_OUT}" "not recorded as installed by ycc" "cursor cleanup reports the kept user commands"
+assert_not_contains "${INSTALL_OUT}" "cleanup kept every file-copy leftover" "a user command does not stop the cleanup"
 
-# Hook shape and script collisions are checked before settings, script or state.
-for fixture in malformed version collision symlink; do
-    home="$(new_home)"
-    case "${fixture}" in
-        malformed) echo '{' > "${home}/.cursor/hooks.json" ;;
-        version) echo '{"version":2,"hooks":{}}' > "${home}/.cursor/hooks.json" ;;
-        collision)
-            mkdir -p "${home}/.cursor/hooks"
-            echo mine > "${home}/.cursor/hooks/herdr-session-start.sh"
-            ;;
-        symlink)
-            mkdir -p "${home}/foreign-hooks"
-            echo mine > "${home}/foreign-hooks/keep"
-            ln -s "${home}/foreign-hooks" "${home}/.cursor/hooks"
-            ;;
-    esac
-    before="$(find "${home}" -type f -exec sha256sum {} + | sort)"
-    out="$(run_install "${home}" install --target cursor --package ycc-hooks 2>&1)" && rc=0 || rc=$?
-    after="$(find "${home}" -type f -exec sha256sum {} + | sort)"
-    if [[ ${rc} -ne 0 && "${before}" == "${after}" && ! -e "${home}/.cursor/cli-config.json" && ! -e "${home}/.config/ycc/managed-config-state.json" ]]; then ok "cursor hooks ${fixture} preflight fails before writes"; else ko "cursor hooks ${fixture} preflight fails before writes" "${out}"; fi
-done
+echo
+echo "== install.sh remove: cursor =="
 
-# Installed script edits do not authorize overwrite or removal.
 home="$(new_home)"
-install_must_succeed "${home}" install --target cursor --only hooks
-echo '# edited' >> "${home}/.cursor/hooks/herdr-session-start.sh"
-out="$(run_install "${home}" install --target cursor --only hooks 2>&1)" && rc=0 || rc=$?
-if [[ ${rc} -ne 0 ]]; then ok "edited owned hook script fails closed"; else ko "edited owned hook script fails closed"; fi
-assert_contains "$(cat "${home}/.cursor/hooks/herdr-session-start.sh")" '# edited' "hook script edit survives"
+AGENT_STUB_MARKETPLACES='[{"name":"ycc","source":"https://github.com/yandy-r/ystack"}]' \
+    install_must_succeed "${home}" remove --target cursor --intent base
+assert_contains "$(cat "${home}/claude-calls.log")" "agent plugin marketplace remove ycc" "cursor remove drops the registered marketplace"
 
-# Never delete a script when its registration was pre-existing or lost ownership.
-for fixture in preexisting lost-state; do
-    home="$(new_home)"
-    if [[ "${fixture}" == "preexisting" ]]; then
-        python3 - "${home}" <<'PY'
-import json
-import pathlib
-import shlex
-import sys
+# A content intent on remove never drops the marketplace (that would uninstall every package).
+home="$(new_home)"
+AGENT_STUB_MARKETPLACES='[{"name":"ycc","source":"https://github.com/yandy-r/ystack"}]' \
+    install_must_succeed "${home}" remove --target cursor --intent hooks,mcp
+assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "agent plugin marketplace remove" "cursor remove --intent hooks,mcp keeps the marketplace"
+assert_contains "${INSTALL_OUT}" "uninstall ycc-hooks ycc-mcp from Cursor's /plugins" "cursor remove --intent hooks,mcp names the packages to uninstall in /plugins"
+assert_not_contains "${INSTALL_OUT}" "ran no steps" "cursor remove --intent hooks reports the notice as its action"
 
-home = pathlib.Path(sys.argv[1])
-script = home / ".cursor/hooks/herdr-session-start.sh"
-command = f"bash {shlex.quote(str(script))} session"
-(home / ".cursor/hooks.json").write_text(json.dumps({"version": 1, "hooks": {"sessionStart": [{"command": command}]}}))
+home="$(new_home)"
+mkdir -p "${home}/.cursor/agents"
+cp -R "${REPO_ROOT}/packages/cursor/ycc/agents/." "${home}/.cursor/agents/"
+install_must_succeed "${home}" remove --target cursor --intent base
+assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "agent plugin marketplace remove" "cursor remove skips an unregistered marketplace"
+if [[ -z "$(ls -A "${home}/.cursor/agents" 2>/dev/null)" ]]; then ok "cursor remove retires byte-identical legacy agents"; else ko "cursor remove retires byte-identical legacy agents" "$(ls -A "${home}/.cursor/agents")"; fi
+
+echo "== install.sh: cursor legacy carriers retire through install =="
+
+# cursor_snapshot <home> — names, bytes, modes and link text of every entry.
+cursor_snapshot() {
+    python3 - "$1" <<'PY'
+import hashlib, os, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+items = []
+for path in sorted(root.rglob('*')):
+    if path.name == 'claude-calls.log':
+        continue
+    kind = 'link' if path.is_symlink() else 'dir' if path.is_dir() else 'file'
+    content = os.readlink(path).encode() if kind == 'link' else path.read_bytes() if kind == 'file' else b''
+    items.append((str(path.relative_to(root)), kind, path.lstat().st_mode, hashlib.sha256(content).hexdigest()))
+print(repr(items))
 PY
-    fi
-    install_must_succeed "${home}" install --target cursor --only hooks
-    if [[ "${fixture}" == "lost-state" ]]; then
-        rm "${home}/.config/ycc/managed-config-state.json"
-    fi
-    before="$(cat "${home}/.cursor/hooks.json")"
-    out="$(run_install "${home}" remove --target cursor --intent hooks 2>&1)" && rc=0 || rc=$?
-    if [[ ${rc} -ne 0 && -x "${home}/.cursor/hooks/herdr-session-start.sh" && "${before}" == "$(cat "${home}/.cursor/hooks.json")" ]]; then ok "${fixture} registration prevents hook script removal"; else ko "${fixture} registration prevents hook script removal" "${out}"; fi
-    assert_contains "${out}" 'registration still references the hook script' "${fixture} removal explains registration ownership"
-    install_must_succeed "${home}" remove --target cursor --intent hooks --force
-    if [[ ! -e "${home}/.cursor/hooks/herdr-session-start.sh" ]]; then ok "${fixture} forced removal retracts script safely"; else ko "${fixture} forced removal retracts script safely"; fi
+}
+
+# cursor_seed_legacy <home> — what the removed file-copy installer left behind:
+# projected skills, commands wrappers and the sessionStart hook (script plus
+# hooks.json registration), all recorded in the ycc ownership state.
+cursor_seed_legacy() {
+    local home="$1" slice
+    for slice in skills agents commands hooks; do
+        HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/.config/ycc/managed-config-state.json" \
+            YCC_CURSOR_SKILLS_HOME="${home}/.cursor/skills" \
+            python3 "${REPO_ROOT}/scripts/install_slices.py" install --target cursor --slice "${slice}" >/dev/null \
+            || { ko "cursor legacy fixture: ${slice}"; exit 1; }
+    done
+    HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/.config/ycc/managed-config-state.json" \
+        python3 "${REPO_ROOT}/scripts/merge_managed_config.py" --profile cursor-hooks \
+        --source "${REPO_ROOT}/packages/cursor/ycc-hooks/hooks/hooks.json" \
+        --destination "${home}/.cursor/hooks.json" --groups hooks >/dev/null \
+        || { ko "cursor legacy fixture: hooks.json"; exit 1; }
+}
+
+home="$(new_home)"
+cursor_seed_legacy "${home}"
+printf '\nuser edit\n' >> "${home}/.cursor/skills/git-workflow/SKILL.md"
+mkdir -p "${home}/.cursor/skills/mine"
+printf 'mine\n' > "${home}/.cursor/skills/mine/SKILL.md"
+printf 'my independent command\n' > "${home}/.cursor/commands/mine.md"
+python3 - "${home}/.cursor/hooks.json" <<'PY'
+import json, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+data = json.loads(path.read_text())
+data['hooks']['sessionStart'].append({'command': 'echo my-session-hook'})
+path.write_text(json.dumps(data, indent=2) + '\n')
+PY
+before="$(cursor_snapshot "${home}")"
+install_must_succeed "${home}" install --target cursor --dry-run
+assert_contains "${INSTALL_OUT}" "would retire" "cursor dry-run previews the carrier retirement"
+if [[ "$(cursor_snapshot "${home}")" == "${before}" ]]; then ok "cursor dry-run preserves carriers, skills and state"; else ko "cursor dry-run preserves carriers, skills and state"; fi
+install_must_succeed "${home}" install --target cursor
+if [[ ! -e "${home}/.cursor/commands/clean.md" && ! -e "${home}/.cursor/skills/clean" ]]; then ok "cursor install retires owned wrappers and their projected skills"; else ko "cursor install retires owned wrappers and their projected skills" "${INSTALL_OUT}"; fi
+if [[ ! -e "${home}/.cursor/hooks/herdr-session-start.sh" ]]; then ok "cursor install retires the installer hook script"; else ko "cursor install retires the installer hook script"; fi
+assert_not_contains "$(cat "${home}/.cursor/hooks.json")" "herdr-session-start.sh" "cursor install retires the installer sessionStart registration"
+assert_contains "${INSTALL_OUT}" "select: ycc ycc-hooks" "cursor hint names ycc-hooks after retiring the legacy hook"
+assert_contains "$(cat "${home}/.cursor/hooks.json")" "echo my-session-hook" "cursor install keeps a foreign sessionStart command"
+assert_contains "$(cat "${home}/.cursor/commands/mine.md")" "my independent command" "cursor install keeps a foreign command file"
+assert_contains "$(cat "${home}/.cursor/skills/git-workflow/SKILL.md")" "user edit" "cursor recorded names never authorize deleting edits"
+if [[ -d "${home}/.cursor/skills/mine" && -d "${home}/.cursor/skills/_shared" ]]; then ok "cursor keeps foreign skills and _shared while skills remain"; else ko "cursor keeps foreign skills and _shared while skills remain"; fi
+if [[ -z "$(ls -A "${home}/.cursor/agents" 2>/dev/null)" ]]; then ok "cursor install retires projected legacy agents"; else ko "cursor install retires projected legacy agents"; fi
+before="$(cursor_snapshot "${home}")"
+install_must_succeed "${home}" install --target cursor
+if [[ "$(cursor_snapshot "${home}")" == "${before}" ]]; then ok "cursor repeated cleanup is byte-stable"; else ko "cursor repeated cleanup is byte-stable"; fi
+
+# A refusal is reported, removes nothing, and never stops the install or later targets.
+for conflict in edited-command edited-script lost-hook-state malformed-hooks; do
+    home="$(new_home)"
+    cursor_seed_legacy "${home}"
+    case "${conflict}" in
+        edited-command) printf '\nmy edit\n' >> "${home}/.cursor/commands/clean.md" ;;
+        edited-script) printf '\n# my edit\n' >> "${home}/.cursor/hooks/herdr-session-start.sh" ;;
+        lost-hook-state) rm "${home}/.config/ycc/managed-config-state.json" ;;
+        malformed-hooks) printf '{\n' > "${home}/.cursor/hooks.json" ;;
+    esac
+    before="$(cursor_snapshot "${home}")"
+    install_must_succeed "${home}" install --target cursor
+    out="${INSTALL_OUT}"
+    assert_contains "${out}" "Cursor legacy cleanup kept every file-copy leftover" "cursor ${conflict} refusal is reported"
+    assert_contains "${out}" "./install.sh install --target cursor" "cursor ${conflict} explains how to resolve and retry"
+    assert_contains "${out}" "Cursor install complete" "cursor ${conflict} refusal does not stop the install"
+    assert_not_contains "${out}" "migrate" "cursor ${conflict} never points at a migrate command"
+    if [[ "$(cursor_snapshot "${home}")" == "${before}" ]]; then ok "cursor ${conflict} leaves every carrier and skill intact"; else ko "cursor ${conflict} leaves every carrier and skill intact"; fi
 done
 
+# A refused cleanup never skips the targets that run after cursor.
 home="$(new_home)"
-install_must_succeed "${home}" sync --target cursor --intent base
-if [[ ! -e "${home}/.cursor/commands" && ! -e "${home}/.cursor/hooks.json" ]]; then ok "default base installs no optional carriers"; else ko "default base installs no optional carriers"; fi
+cursor_seed_legacy "${home}"
+printf '{\n' > "${home}/.cursor/hooks.json"
+install_must_succeed "${home}" install --target cursor,agents --skills-home native
+assert_contains "${INSTALL_OUT}" "Cursor legacy cleanup kept every file-copy leftover" "cursor refusal is reported in a multi-target run"
+if [[ -d "${home}/.agents/skills" ]]; then ok "cursor refusal still runs the later agents target"; else ko "cursor refusal still runs the later agents target" "${INSTALL_OUT}"; fi
 
-# --hooks <events> narrows claude's hooks config group; cursor's hooks step
-# has no hook-event selection, so it is skipped (warned), never run whole.
+# A symlinked ~/.cursor/skills parent is never traversed.
 home="$(new_home)"
-install_must_succeed "${home}" install --target cursor --only hooks
-cursor_hooks_before="$(cat "${home}/.cursor/hooks.json"; cat "${home}/.cursor/hooks/herdr-session-start.sh")"
-install_must_succeed "${home}" sync --target claude,cursor --intent hooks --hooks WorktreeCreate --global
-assert_contains "${INSTALL_OUT}" "cursor has no hook-event selection — skipping its hooks step" "sync --hooks warns that cursor's hooks step is skipped"
-assert_contains "$(cat "${home}/.claude/settings.json")" '"WorktreeCreate"' "sync --hooks still merges claude's selected event"
-install_must_succeed "${home}" remove --target claude,cursor --intent hooks --hooks WorktreeCreate --global
-assert_contains "${INSTALL_OUT}" "cursor has no hook-event selection — skipping its hooks step" "remove --hooks warns that cursor's hooks step is skipped"
-if [[ -e "${home}/.cursor/hooks/herdr-session-start.sh" && "${cursor_hooks_before}" == "$(cat "${home}/.cursor/hooks.json"; cat "${home}/.cursor/hooks/herdr-session-start.sh")" ]]; then
-    ok "--hooks leaves cursor's hook script and hooks.json entries untouched"
-else
-    ko "--hooks leaves cursor's hook script and hooks.json entries untouched"
-fi
-assert_not_contains "$(cat "${home}/.claude/settings.json" 2>/dev/null)" '"WorktreeCreate"' "remove --hooks still takes claude's selected event"
+mkdir -p "${home}/foreign-skills/init"
+printf 'keep\n' > "${home}/foreign-skills/init/SKILL.md"
+ln -s "${home}/foreign-skills" "${home}/.cursor/skills"
+before="$(cursor_snapshot "${home}")"
+install_must_succeed "${home}" install --target cursor
+if [[ "$(cursor_snapshot "${home}")" == "${before}" ]]; then ok "cursor cleanup never traverses symlinked parents"; else ko "cursor cleanup never traverses symlinked parents"; fi
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then install_tests_finish; fi

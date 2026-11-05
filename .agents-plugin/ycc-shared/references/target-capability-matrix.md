@@ -67,11 +67,11 @@ from installer-managed artifacts and gated work in `ycc/settings/packages.json`.
 `listed: false` packages are not published catalog entries; generated trees and successful spikes
 alone do not make them shipping user install paths. This does not revise the capability verdicts above.
 
-| target   | native, listed today                                                                                                                          | install.sh fallback today                                                                                                                                                                                                                  | unlisted or gated native packages                                                                             |
+| target   | native, listed today                                                                                                                          | install.sh today                                                                                                                                                                                                                           | unlisted or gated native packages                                                                             |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| Claude   | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-hooks@ycc` (2.1.300+), `ycc-all@ycc`; `status-bar@ycc-mods`                                                    | Rules, settings, statusline, MCP, standalone skills/agents; hooks via the native `ycc-hooks` plugin at project scope (global hooks link with `--global`)                                                                                   | `ycc-agents@ycc` in v7.0.0                                                                                    |
-| Cursor   | `ycc`, `ycc-rules`, `ycc-mcp`, `ycc-hooks` via the root `.cursor-plugin/marketplace.json` (interactive `/plugins`); hooks `sessionStart` only | Skills, agents, commands, rules, settings under `~/.cursor/`; optional hooks                                                                                                                                                               | None                                                                                                          |
-| Codex    | `ycc@ycc`, `ycc-mcp@ycc` via the root `.agents/plugins/marketplace.json`                                                                      | Agent TOMLs, `AGENTS.md`, `config.toml`                                                                                                                                                                                                    | `ycc-hooks` excluded (YAN-1149)                                                                               |
+| Claude   | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-hooks@ycc` (2.1.300+), `ycc-all@ycc`; `status-bar@ycc-mods`                                                    | Installs the native plugins via `claude plugin` (`mcp`/`hooks` at project scope by default, user scope with `--global`); rules, settings, statusline                                                                                       | `ycc-agents@ycc` in v7.0.0                                                                                    |
+| Cursor   | `ycc`, `ycc-rules`, `ycc-mcp`, `ycc-hooks` via the root `.cursor-plugin/marketplace.json` (interactive `/plugins`); hooks `sessionStart` only | Registers the marketplace and prints the `/plugins` step; `cli-config.json` settings (`--global`)                                                                                                                                          | None                                                                                                          |
+| Codex    | `ycc@ycc`, `ycc-mcp@ycc` via the root `.agents/plugins/marketplace.json`                                                                      | Installs both via `codex plugin add` (codex 0.160+ required); agent TOMLs, `AGENTS.md`, `config.toml`                                                                                                                                      | `ycc-hooks` excluded (YAN-1149)                                                                               |
 | opencode | None                                                                                                                                          | Skills, agents, commands, shared, `opencode.json`, `AGENTS.md`                                                                                                                                                                             | `@yandy-r/ycc-opencode` npm plugin: experimental, opt-in, unpublished                                         |
 | `agents` | None                                                                                                                                          | Skills and `ycc-shared` copied into `~/.agents/`                                                                                                                                                                                           | None planned                                                                                                  |
 | `omp`    | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-rules@ycc` via the root `.omp-plugin/marketplace.json` (omp `>=18.12.2`)                                       | `install.sh --target omp`: local export (`--mode local`) or the repository catalog (`--mode repo`) installed through `omp plugin` (user or project scope); opt-in `--rules` (`AGENTS.md`) and `--settings` (`config.yml`), user scope only | `ycc-hooks` and `ycc-all` excluded (herdr: `herdr integration install omp`)                                   |
@@ -121,9 +121,10 @@ The recommendation in `docs/research/ystack/recommendation.md` is qualified by
 **COMMANDS:claude**
 Claude Code has no separate ycc command-wrapper layer. Public skills are native slash
 invocations (`/ycc:<name>`); `user-invocable: false` hides a skill from the slash menu.
-The standalone installer's Claude `commands` intent aliases `skills`. It retires only
-legacy wrappers recorded in installer ownership state, and only after a successful
-skills install. Foreign wrappers are never touched.
+Claude `skills`, `agents` and `commands` intents map to the `ycc@ycc` plugin; the
+installer writes no standalone copies. Its legacy cleanup retires only wrappers and
+copies recorded in installer ownership state (or identical to the bundle). Foreign
+wrappers are never touched.
 
 **INVOCATION POLICY**
 `disable-model-invocation: true` is source frontmatter for manual-only skills; it is
@@ -135,11 +136,9 @@ target has no portable key, so it omits the flag and keeps the description.
 **COMMANDS:cursor**
 The native `packages/cursor/ycc/commands/` contains thin commands derived from
 user-invocable skills in `ycc/skills/`; each loads its package-local skill. This is not
-an installed-plugin dispatch proof. The file-copy installer's `commands` intent installs
-owned wrappers into `~/.cursor/commands/` that reference the installed skills, and its
-`hooks` intent is an optional explicit carrier that registers `sessionStart` only.
-Native plugin install is interactive (`/plugins`); the agent CLI has no non-interactive
-`plugin install`.
+an installed-plugin dispatch proof. The installer writes no Cursor command or hook files:
+native plugin install is interactive (`/plugins`), and the agent CLI has no
+non-interactive `plugin install`.
 
 **COMMANDS:codex**
 The Codex customization platform does not support a slash-command layer. Skills are exposed
@@ -214,42 +213,43 @@ file so the committed `ycc/settings/settings.json` is not modified, and the `set
 later merges repo-managed keys while preserving the CLI-written marketplace entry. It also
 removes legacy `local-ycc-plugins` marketplace and `ycc@local-ycc-plugins` entries from
 `~/.claude.json` and `~/.claude/settings.local.json`, deleting `settings.local.json` if that
-leaves it empty. Other steps: `rules` links `~/.claude/CLAUDE.md`; `hooks` (the
-default) enables the native `ycc-hooks@ycc` plugin at project scope, declaring
-the `ycc` marketplace at project scope (repo mode, committed) or local scope
-(local mode) only when no visible declaration supplies it — never repointing an
-existing declaration — while `--global` links `~/.claude/hooks`; `mods`
-registers the `ycc-mods` directory marketplace; and `skills`/`agents`
-install standalone copies into `~/.claude/` (warning about duplicate names if
-`ycc@ycc` is also installed). The `base` step of `remove --target claude`
-uninstalls `ycc@ycc` and the `ycc` marketplace. The `hooks` intent removes
-`ycc-hooks@ycc` at project scope, then removes only installer-written
-marketplace declarations when no other `@ycc` install remains; with
-`--global`, it removes the installer-managed global hooks link.
+leaves it empty. Other steps: `rules` links `~/.claude/CLAUDE.md`; `mcp` and `hooks`
+install the native `ycc-mcp@ycc` and `ycc-hooks@ycc` plugins at project scope (the
+default), declaring the `ycc` marketplace at project scope (repo mode, committed) or
+local scope (local mode) only when no visible declaration supplies it — never
+repointing an existing declaration — or at user scope with `--global`; `mods`
+registers the `ycc-mods` directory marketplace. A successful native install then
+retires proven installer-owned legacy state (standalone `~/.claude/{skills,agents}`
+copies, command wrappers, and — once the add-on is explicitly enabled in
+`~/.claude/settings.json` — the settings hook, `~/.claude/hooks` link and managed MCP
+servers). The `base` step of `remove --target claude` uninstalls `ycc@ycc` and the
+`ycc` marketplace. The `mcp`/`hooks` intents uninstall the plugin at the step's scope;
+at project scope they remove only installer-written marketplace declarations when no
+other `@ycc` install remains.
 
 **INSTALL_PATH:cursor**
 Sources under `ycc/` generate `packages/cursor/ycc/{skills,agents,commands}/`,
 `packages/cursor/ycc-rules/rules/`, `packages/cursor/ycc-mcp/mcp.json`, and
 `packages/cursor/ycc-hooks/hooks/`. Canonical `ycc/settings/cursor/cli-config.json`
 is copied byte-for-byte to `packages/cursor/installer-fallback/config/cli-config.json`.
-The file-copy installer copies skills, agents, and rules into `~/.cursor/`, installs
-owned `commands` wrappers into `~/.cursor/commands/`, and merges the config there. The
-`hooks` step is an optional explicit carrier that installs the `sessionStart` hook only
-(no `WorktreeCreate`) and is not inherited by other selections. All four native packages
-are listed in the generated root `.cursor-plugin/marketplace.json`; native installation is
+`install.sh install --target cursor` runs `agent plugin marketplace add
+https://github.com/yandy-r/ystack` (also in local mode: Cursor rejects filesystem
+marketplaces), prints the `/plugins` step naming the packages for the requested intents,
+and retires proven installer-owned copies an older installer wrote under `~/.cursor/`.
+Its only other step merges `cli-config.json` (`--global`). All four native packages are
+listed in the generated root `.cursor-plugin/marketplace.json`; native installation is
 interactive (`/plugins`). See `docs/internal/cursor-native-packages.md`.
 
 **INSTALL_PATH:codex**
-`install.sh install --target codex` symlinks `~/.codex/plugins/ycc/` to the repo's
-`.codex-plugin/ycc/`, also symlinks `~/.agents/plugins/ycc` to the same bundle,
-rsyncs custom agents to `~/.codex/agents/`, registers `./.agents/plugins/ycc`
-(resolved from the marketplace root, `$HOME`) as the local marketplace source in
-`~/.agents/plugins/marketplace.json`, and installs + enables the plugin with
-`codex plugin add ycc@local-ycc-plugins`, which snapshots it into
-`~/.codex/plugins/cache/local-ycc-plugins/ycc/<version>/`. Codex builds without
-the plugin CLI get the legacy hand-written flat cache instead. Rerun the base
-install step after regenerating the bundle via `./scripts/sync.sh --only codex`
-or after clearing `~/.codex/plugins/cache/`.
+`install.sh install --target codex` syncs custom agents to `~/.codex/agents/`, registers the
+checkout (local mode) or `https://github.com/yandy-r/ystack.git` at `main` (repo mode) as the
+Codex marketplace `ycc` with `codex plugin marketplace add`, and installs + enables
+`ycc@ycc` and `ycc-mcp@ycc` with `codex plugin add`, which snapshots each into
+`~/.codex/plugins/cache/ycc/<package>/<version>/`. The codex CLI 0.160+ is required; there
+is no copy fallback. It then retires proven legacy state (`ycc@local-ycc-plugins`, its links,
+cache and catalog entry, `~/.codex/skills` copies, merged `[mcp_servers]`), keeping every
+`~/.codex/agents/` file. Rerun the base install step after regenerating the bundle via
+`./scripts/sync.sh --only codex` or after clearing `~/.codex/plugins/cache/`.
 
 **INSTALL_PATH:opencode**
 Generated bundle lives at `.opencode-plugin/` (skills, agents, commands, AGENTS.md,
@@ -310,7 +310,7 @@ last matching rule wins. Source: opencode.ai/v2/docs/permissions/.
 Full support. Worktree isolation is **on by default** for the 9 worktree-aware skills; pass
 `--no-worktree` to opt out. The legacy `--worktree` flag is accepted as a silent no-op.
 Harness-managed worktrees exist (`Agent(isolation: "worktree")`, `EnterWorktree`, plus the
-`WorktreeCreate` hook registered in `ycc/settings/settings.json`), but the current ycc
+`WorktreeCreate` hook shipped by the native `ycc-hooks@ycc` plugin), but the current ycc
 single-worktree contract should not use per-agent tool-side isolation for parallel task fan-out.
 Instead, pre-create one feature worktree and point every agent at it via `Working directory:`.
 A Bash fallback (`git worktree add`) is always available. See

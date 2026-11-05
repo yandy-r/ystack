@@ -59,20 +59,18 @@ _ycc() {
     [[ "${sub}" =~ ^(install|sync|remove|list)$ ]] && kinds="$(_ycc_list)"
 
     case "${prev}" in
-        --target) values="claude cursor codex opencode agents omp all"; [[ "${sub}" == migrate ]] && values="claude codex cursor omp all" ;;
+        --target) values="claude cursor codex opencode agents omp all" ;;
         --skills-home) mapfile -t COMPREPLY < <(compgen -W "agents native" -- "${cur}"); return ;;
         --intent) values="base skills agents commands settings rules mcp hooks plugins mods" ;;
-        --package) [[ "${sub}" == "install" ]] && values="ycc ycc-mcp ycc-hooks ycc-rules" ;;
+        --package) [[ "${sub}" == "install" ]] && values="ycc ycc-mcp ycc-hooks ycc-rules ycc-all" ;;
         --only)   values="base dedupe skills agents commands settings rules mcp hooks mods" ;;
         --mode)   mapfile -t COMPREPLY < <(compgen -W "local repo" -- "${cur}"); return ;;
         --shell)  mapfile -t COMPREPLY < <(compgen -W "bash zsh fish" -- "${cur}"); return ;;
-        --dir|--marketplace-source) mapfile -t COMPREPLY < <(compgen -d -- "${cur}"); return ;;
+        --dir) mapfile -t COMPREPLY < <(compgen -d -- "${cur}"); return ;;
         --*)
-            # --<kind> selectors: names from 'ycc list <kind>'. On install,
-            # --hooks is the boolean "also run the hooks step" and takes no value.
+            # --<kind> selectors: names from 'ycc list <kind>'.
             kind="${prev#--}"
-            [[ "${sub}" == install && "${kind}" == hooks ]] && kind=""
-            [[ -n "${kind}" && "${sub}" != list && " ${kinds} " == *" ${kind} "* ]] && values="$(_ycc_list "${kind}")"
+            [[ "${sub}" != list && " ${kinds} " == *" ${kind} "* ]] && values="$(_ycc_list "${kind}")"
             ;;
     esac
 
@@ -91,12 +89,10 @@ _ycc() {
 
     local words selectors=""
     for kind in ${kinds}; do
-        # install already offers --hooks as its boolean step flag.
-        [[ "${sub}" == install && "${kind}" == hooks ]] && continue
         selectors+=" --${kind}"
     done
     if [[ ${_ycc_cword} -eq 1 ]]; then
-        words="install sync remove migrate cli completion list list-mcps"
+        words="install sync remove cli completion list list-mcps"
     else
         case "${sub}" in
             cli)        words="--dir --force --help" ;;
@@ -106,7 +102,6 @@ _ycc() {
             install)    words="--target --package --only --mode --skills-home --settings --rules --mcp --hooks --with-deps --project --global --force --dry-run --help${selectors}" ;;
             sync)       words="--target --intent --mode --skills-home --with-deps --project --global --force --dry-run --help${selectors}" ;;
             remove)     words="--target --only --intent --project --global --force --purge-cache --dry-run --help${selectors}" ;;
-            migrate)    words="--target --apply --marketplace-source --help" ;;
             *)          words="" ;;
         esac
     fi

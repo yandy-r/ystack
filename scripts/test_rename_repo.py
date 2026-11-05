@@ -44,16 +44,15 @@ ALLOWLIST_SPECS: list[tuple[str, int, str, bool, bytes | None]] = [
     (".github/ISSUE_TEMPLATE/config.yml", 0o644, "\n", True, None),
     ("docs/install/codex.md", 0o644, "\n", True, b"# raw \xff\xfe bytes, not UTF-8"),
     ("install.sh", 0o755, "\n", False, None),
-    ("scripts/codex_marketplace.py", 0o755, "\n", True, None),
+    ("scripts/codex_install.py", 0o755, "\r\n", False, None),
     ("scripts/generate_codex_plugin.py", 0o755, "\n", True, None),
     ("scripts/generate_opencode_package.py", 0o644, "\n", True, None),
     ("scripts/test_generate_opencode_package.py", 0o644, "\n", True, None),
     ("docs/install/v6/README.md", 0o644, "\n", True, None),
     ("docs/install/v6/claude.md", 0o644, "\n", True, None),
     ("ycc/skills/_shared/references/target-capability-matrix.md", 0o644, "\n", True, None),
-    ("scripts/test_codex_marketplace.py", 0o644, "\r\n", False, None),
     ("scripts/lib/install/targets/claude.sh", 0o750, "\n", True, None),
-    ("scripts/lib/install/targets/codex.sh", 0o755, "\n", True, None),
+    ("scripts/lib/install/targets/cursor.sh", 0o755, "\n", True, None),
     ("ycc/mods/.claude-plugin/marketplace.json", 0o640, "\n", True, None),
     ("ycc/settings/settings.json", 0o600, "\n", True, None),
 ]
@@ -282,7 +281,7 @@ class ApplyTests(RenameRepoTestCase):
         self.assertIn(b"\r\n", readme)
         self.assertEqual(readme.count(b"\n"), readme.count(b"\r\n"))
         self.assertFalse((root / "install.sh").read_bytes().endswith(b"\n"))
-        self.assertFalse((root / "scripts/test_codex_marketplace.py").read_bytes().endswith(b"\n"))
+        self.assertFalse((root / "scripts/codex_install.py").read_bytes().endswith(b"\n"))
         self.assertIn(b"\xff\xfe", (root / "docs/install/codex.md").read_bytes())
         self.assertTrue(os.access(root / "install.sh", os.X_OK))
 

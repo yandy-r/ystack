@@ -1,12 +1,11 @@
 # shellcheck shell=bash
 # core.sh — shared installer primitives: colors, logging, link/copy helpers,
-# managed-config merge, scope handling and the MCP step.
+# managed-config merge, scope handling and the opencode MCP merge step.
 #
 # Sourced by install.sh (never run directly); inherits its shell options and
-# SCRIPT_DIR, and reads its arg globals (FORCE, SCOPE, COMMAND) and the --mcps
-# selection (select.sh) at call time.
+# SCRIPT_DIR, and reads its arg globals (FORCE, SCOPE, COMMAND, PACKAGE) and
+# the --mcps selection (select.sh) at call time.
 
-MCP_CONFIG_SRC="${SCRIPT_DIR}/mcp-configs/mcp.json"
 CONFIG_MERGE_HELPER="${SCRIPT_DIR}/scripts/merge_managed_config.py"
 
 # Colors ($'...' so escapes are real bytes, not literal \\033)
@@ -197,28 +196,25 @@ remove_settings() {
 }
 
 # plugins_source <target> — echo "<merge profile> <source file>" for the
-# settings file that carries <target>'s plugins (and claude's hooks) config
-# group (legacy codex layout; the native codex route lists through
-# codex_install.py).
+# settings file that carries <target>'s plugins config group (the native
+# codex route lists through codex_install.py instead).
 plugins_source() {
     case "$1" in
         claude)   echo "claude-settings ${SCRIPT_DIR}/ycc/settings/settings.json" ;;
-        codex)    echo "codex-config ${SCRIPT_DIR}/.codex-plugin/config/config.toml" ;;
         opencode) echo "opencode-config ${OPENCODE_PLUGIN_DIR}/opencode.json" ;;
         *) err "plugins_source: unknown target '$1'"; exit 1 ;;
     esac
 }
 
 # config_group_selection <target> <groups> — apply every config-group
-# selector (select.sh SELECTION_GROUP kinds: --plugins, --hooks) to one
+# selector (select.sh SELECTION_GROUP kinds: --plugins) to one
 # settings merge, then map the result onto the settings scope. Sets:
 #   CONFIG_GROUPS          <groups>, minus each narrowed group <target>
 #                          manages none of the selected names for (warns) and
 #                          minus each group the project scope never merges;
 #   CONFIG_GROUP_ENTRIES   [<group>]=<csv> of the names kept per narrowed group;
 #   CONFIG_SELECT          helper arguments narrowing only those groups (one
-#                          --entry-groups g1,g2 --entries <union>; plugin keys
-#                          and hook event names never collide), empty when
+#                          --entry-groups g1,g2 --entries <union>), empty when
 #                          nothing is narrowed, so the other groups in the
 #                          same run always stay whole;
 #   PLUGINS_CATALOG_SELECT the selected opt-in catalog plugins of a target
@@ -432,18 +428,20 @@ run_repo_style_format_modified() {
 # Scope (--project / --global)
 # ---------------------------------------------------------------------------
 # Without an explicit flag, these steps default to project scope and every
-# other step stays global: 'mcp' everywhere; 'hooks' for claude; 'settings'
+# other step stays global: 'mcp' on claude (native ycc-mcp plugin) and
+# opencode (merge); 'hooks' on claude (native ycc-hooks plugin); 'settings'
 # for every target that declares <t>_project_groups (claude, codex, opencode).
-# Package installs keep Claude hooks global alongside their package-wide
-# settings and rules. Targets without <t>_project_groups (cursor, omp) skip
-# their settings step at the default scope with a notice (steps.sh).
+# Package installs keep Claude's mcp and hooks plugins at user scope alongside
+# their package-wide settings and rules. Codex installs ycc-mcp@ycc at user
+# scope only. Targets without <t>_project_groups (cursor, omp) skip their
+# settings step at the default scope with a notice (steps.sh).
 #
 # target_project_groups <target> — csv of the settings-file config groups
 # mergeable at project scope ('' when the target has none). Defining the
 # optional <t>_project_groups hook is what makes 'settings' default to
 # project scope for <target>; a listed group g merges the helper's g-project
 # allowlist group (fail-closed: only the allowlisted rules leave the global
-# group), so the plugins/hooks groups stay global-only here.
+# group), so the plugins group stays global-only here.
 target_project_groups() {
     declare -F "${1}_project_groups" >/dev/null || return 0
     "${1}_project_groups"
@@ -451,7 +449,13 @@ target_project_groups() {
 
 step_supports_project() {
     case "$2" in
-        mcp) return 0 ;;
+        mcp)
+            case "$1" in
+                claude) [[ -z "${PACKAGE:-}" ]] ;;
+                opencode) return 0 ;;
+                *) return 1 ;;
+            esac
+            ;;
         hooks) [[ "$1" == claude && -z "${PACKAGE:-}" ]] ;;
         settings) [[ -z "${PACKAGE:-}" && -n "$(target_project_groups "$1")" ]] ;;
         *) return 1 ;;
@@ -484,46 +488,33 @@ project_root() {
 }
 
 # ---------------------------------------------------------------------------
-# MCP step (every target, project or global scope, merge or remove)
+# MCP merge step (opencode only; claude/codex/cursor ship MCP servers through
+# their native ycc-mcp package)
 # ---------------------------------------------------------------------------
-# The shared merge helper gives every MCP file the same ownership tracking,
-# local-edit protection and atomic writes; state is keyed per destination, so
-# project and global copies never interfere.
+# The shared merge helper gives the MCP file ownership tracking, local-edit
+# protection and atomic writes; state is keyed per destination, so project
+# and global copies never interfere.
 #
 #   target    project                          global
-#   claude    <project>/.mcp.json              ~/.claude.json
-#   cursor    <project>/.cursor/mcp.json       ~/.cursor/mcp.json
-#   codex     <project>/.codex/config.toml     ~/.codex/config.toml
 #   opencode  <project>/opencode.json          ~/.config/opencode/opencode.json
 mcp_destination() {
-    local target="$1"
-    if [[ "$(step_scope "${target}" mcp)" == "project" ]]; then
-        local root
-        root="$(project_root)"
-        case "${target}" in
-            claude)   echo "${root}/.mcp.json" ;;
-            cursor)   echo "${root}/.cursor/mcp.json" ;;
-            codex)    echo "${root}/.codex/config.toml" ;;
-            opencode) echo "${root}/opencode.json" ;;
-        esac
-    else
-        case "${target}" in
-            claude)   echo "${HOME}/.claude.json" ;;
-            cursor)   echo "${HOME}/.cursor/mcp.json" ;;
-            codex)    echo "${HOME}/.codex/config.toml" ;;
-            opencode) echo "${HOME}/.config/opencode/opencode.json" ;;
-        esac
-    fi
+    case "$1" in
+        opencode)
+            if [[ "$(step_scope opencode mcp)" == "project" ]]; then
+                echo "$(project_root)/opencode.json"
+            else
+                echo "${HOME}/.config/opencode/opencode.json"
+            fi
+            ;;
+        *) err "mcp_destination: target '$1' has no MCP merge step"; exit 1 ;;
+    esac
 }
 
-# mcp_source <target> — echo "<merge profile> <source file>" for <target>'s MCP step.
+# mcp_source <target> — echo "<merge profile> <source file>" for <target>'s MCP merge.
 mcp_source() {
     case "$1" in
-        claude)   echo "claude-mcp ${MCP_CONFIG_SRC}" ;;
-        cursor)   echo "cursor-mcp ${MCP_CONFIG_SRC}" ;;
-        codex)    echo "codex-config ${SCRIPT_DIR}/.codex-plugin/config/mcp-servers.json" ;;
         opencode) echo "opencode-config ${OPENCODE_PLUGIN_DIR}/opencode.json" ;;
-        *) err "mcp_source: unknown target '$1'"; exit 1 ;;
+        *) err "mcp_source: target '$1' has no MCP merge step"; exit 1 ;;
     esac
 }
 
@@ -555,7 +546,4 @@ run_mcp_step() {
     fi
     info "Merging MCP servers into ${dest}"
     merge_settings_config "${profile}" "${src}" "${dest}" "mcp" "${select[@]}"
-    if [[ "${target}" == "codex" && "${dest}" != "${HOME}/.codex/config.toml" ]]; then
-        codex_trust_warn "${dest}"
-    fi
 }

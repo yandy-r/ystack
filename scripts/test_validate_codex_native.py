@@ -192,16 +192,6 @@ class CodexMarketplaceSchemaTests(unittest.TestCase):
             before = copy.deepcopy(catalog)
             validator.check_catalog_structure(catalog, self.path)
             self.assertEqual(catalog, before)
-        for mode, path in (("local", "./.agents/plugins/ycc"), ("repo", "")):
-            with self.subTest(mode=mode):
-                entry = marketplace.build_entry(mode, path)
-                self.assertEqual(entry["source"]["source"], "local" if mode == "local" else "git-subdir")
-                validator.check_catalog_structure({"name": "fixture", "plugins": [entry]}, self.path)
-
-    def test_installer_builder_rejects_traversing_source_before_writes(self) -> None:
-        with self.assertRaisesRegex(ValueError, "marketplace root"):
-            marketplace.merge(self.path, "local", "./../escape")
-        self.assertFalse(self.path.exists())
 
     def test_native_gate_checks_structure_before_model_equality(self) -> None:
         self.write_catalog({"name": "ycc", "plugins": [{"name": [], "source": {"source": "github"}}]})
@@ -257,7 +247,7 @@ class CodexMarketplaceSchemaTests(unittest.TestCase):
     def test_repository_validator_and_migration_gate_follow_listing_state(self) -> None:
         for listed in (("ycc", "ycc-mcp"),):
             with self.subTest(listed=listed), tempfile.TemporaryDirectory() as tmp:
-                repo, export = Path(tmp) / "repo", Path(tmp) / "export"
+                repo = Path(tmp) / "repo"
                 model = self.model_with_listed(*listed)
                 with (
                     patch.object(generator, "load_package_model", return_value=model),
@@ -268,15 +258,11 @@ class CodexMarketplaceSchemaTests(unittest.TestCase):
                     self.assertEqual(generator.run_check(repo), 0)
                     validator.validate(repo, native=False)
                     migrate.codex_eligible(repo)
-                    # An explicit external export includes unlisted packages and stays eligible.
-                    generator.generate_native_tree(export)
-                    validator.validate(export, native=True)
-                    migrate.codex_eligible(export, external=True)
 
     def test_partial_listing_is_rejected_and_never_flips_the_repository(self) -> None:
         for listed in (("ycc",), ("ycc-mcp",)):
             with self.subTest(listed=listed), tempfile.TemporaryDirectory() as tmp:
-                repo, export = Path(tmp) / "repo", Path(tmp) / "export"
+                repo = Path(tmp) / "repo"
                 model = self.model_with_listed(*listed)
                 with (
                     patch.object(generator, "load_package_model", return_value=model),
@@ -293,10 +279,6 @@ class CodexMarketplaceSchemaTests(unittest.TestCase):
                         validator.validate(repo, native=False)
                     with self.assertRaisesRegex(ValueError, "native catalog not listed"):
                         migrate.codex_eligible(repo)
-                    # An explicit export stays opt-in and eligible regardless of listing.
-                    generator.generate_native_tree(export)
-                    validator.validate(export, native=True)
-                    migrate.codex_eligible(export, external=True)
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
             unlisted = self.model_with_listed()
@@ -334,25 +316,6 @@ class CodexListedMigrationTransitionTests(unittest.TestCase):
         (self.repo / "ycc").symlink_to(real_root / "ycc")
         self.flipped = False
 
-        real_run = subprocess.run
-
-        def fake_codex(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-            if command[0] != "codex":
-                return real_run(command, **kwargs)  # type: ignore[call-overload]
-            args = command[1:-1]
-            version = generator.native_version(self.listed)
-            rows = [
-                {"pluginId": f"{package}@ycc", "installed": True, "enabled": True, "version": version}
-                for package in migrate.PACKAGES
-            ]
-            if args[:3] == ["plugin", "marketplace", "add"]:
-                payload: dict = {"marketplaceName": "ycc"}
-            elif args[:2] == ["plugin", "list"]:
-                payload = {"available": [], "installed": rows}
-            else:
-                payload = {}
-            return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload), stderr="")
-
         stack = contextlib.ExitStack()
         self.addCleanup(stack.close)
         stack.enter_context(patch.object(migrate, "ROOT", self.repo))
@@ -372,7 +335,6 @@ class CodexListedMigrationTransitionTests(unittest.TestCase):
         stack.enter_context(patch.dict(os.environ, {**isolated, **git_env}, clear=True))
         stack.enter_context(patch.object(migrate, "load_package_model", return_value=self.listed))
         stack.enter_context(patch.object(migrate.Migration, "merge_remove"))
-        stack.enter_context(patch.object(migrate.subprocess, "run", side_effect=fake_codex))
 
     @property
     def skills(self) -> Path:
@@ -434,8 +396,39 @@ class CodexListedMigrationTransitionTests(unittest.TestCase):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.flip_listing()
-            migrate.Migration(apply).codex(self.repo, True)
+            migrate.Migration(apply).codex(removing=True)
         return out.getvalue()
+
+    def install_native(self, *packages: str) -> None:
+        """Leave ``<package>@ycc`` enabled with a Codex-written snapshot, as a native install does."""
+        config = self.home / ".codex/config.toml"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text("".join(f'[plugins."{package}@ycc"]\nenabled = true\n' for package in packages))
+        for package in packages:
+            manifest = self.home / ".codex/plugins/cache/ycc" / package / "1.0.0/.codex-plugin/plugin.json"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({"name": package, "version": "1.0.0"}), encoding="utf-8")
+
+    def test_install_cleanup_retires_legacy_only_once_its_native_replacement_is_enabled(self) -> None:
+        self.install_legacy_plugin()
+        self.flip_listing()
+        cases = (((), True, False), (("ycc-mcp",), True, True), (migrate.PACKAGES, False, True))
+        for installed, legacy_kept, mcp_retired in cases:
+            with self.subTest(installed=installed):
+                migrate.Migration.merge_remove.reset_mock()  # type: ignore[attr-defined]
+                if installed:
+                    shutil.rmtree(self.home / ".codex/plugins/cache/ycc", ignore_errors=True)
+                    self.install_native(*installed)
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    migrate.Migration(True).codex()
+                calls = migrate.Migration.merge_remove.call_args_list  # type: ignore[attr-defined]
+                groups = [call.args[3] for call in calls]
+                self.assertEqual("mcp" in groups, mcp_retired)
+                self.assertEqual("plugins" in groups, not legacy_kept)
+                self.assertEqual((self.home / ".agents/plugins/ycc").is_symlink(), legacy_kept)
+                if legacy_kept:
+                    self.assertIn("legacy ycc@local-ycc-plugins retained", out.getvalue())
 
     def older_release(self, version: str = "5.3.0") -> Path:
         """Return a preflip tree from an older release the current checkout can no longer render."""
@@ -525,7 +518,7 @@ class CodexListedMigrationTransitionTests(unittest.TestCase):
             out = self.migrate_codex()
         self.assertIn(
             f"kept {self.cache / '5.3.0'}: not in this shallow checkout's history; "
-            "run 'git fetch --unshallow' and rerun migrate",
+            "run 'git fetch --unshallow' and rerun the install",
             out,
         )
         self.assertTrue((self.cache / "5.3.0/.codex-plugin/plugin.json").is_file())
