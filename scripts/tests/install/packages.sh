@@ -149,6 +149,18 @@ home="$(new_home)"
 out="$(run_install "${home}" install --target opencode,agents --package ycc 2>&1)" && rc=0 || rc=$?
 if [[ ${rc} -ne 0 ]]; then ok "--package with only unsupported targets fails"; else ko "--package with only unsupported targets fails"; fi
 
+# The opencode npm package installs through --package: one plugins entry.
+home="$(new_home)"
+install_must_succeed "${home}" install --target opencode --package "@yandy-r/ycc-opencode"
+assert_contains "$(cat "${home}/.config/opencode/opencode.json" 2>/dev/null)" "file://${REPO_ROOT}/packages/opencode/ycc-opencode" "--package @yandy-r/ycc-opencode writes the local plugins entry"
+assert_contains "${INSTALL_OUT}" "opencode install complete" "--package @yandy-r/ycc-opencode runs the opencode base step"
+if [[ ! -e "${home}/.config/opencode/skills" && ! -e "${home}/project/opencode.json" ]]; then ok "--package @yandy-r/ycc-opencode copies no files and writes no settings"; else ko "--package @yandy-r/ycc-opencode copies no files and writes no settings"; fi
+
+home="$(new_home)"
+install_must_succeed "${home}" install --target all --package "@yandy-r/ycc-opencode"
+assert_contains "$(cat "${home}/.config/opencode/opencode.json" 2>/dev/null)" "ycc-opencode" "--package @yandy-r/ycc-opencode --target all installs on opencode"
+assert_contains "${INSTALL_OUT}" "skipping target 'claude'" "--package @yandy-r/ycc-opencode --target all skips the other targets"
+
 # --intent keeps working after --package support (representative regressions).
 home="$(new_home)"
 install_must_succeed "${home}" sync --target claude --intent settings
@@ -190,8 +202,8 @@ assert_package_rejected "ycc-all on codex" "package 'ycc-all' is not available f
 assert_package_rejected "ycc-rules on claude" "package 'ycc-rules' is not available for target 'claude'" install --target claude --package ycc-rules
 assert_package_rejected "unknown package" "unknown package 'bogus'" install --target claude --package bogus
 assert_package_rejected "installer-fallback" "installer-fallback is an internal modeling key" install --target claude --package installer-fallback
-assert_package_rejected "ycc-agents" "package 'ycc-agents' is deferred, excluded, opt-in, or not a native package" install --target claude --package ycc-agents
-assert_package_rejected "npm opencode package" "package '@yandy-r/ycc-opencode' is deferred, excluded, opt-in, or not a native package" install --target opencode --package "@yandy-r/ycc-opencode"
+assert_package_rejected "ycc-agents" "package 'ycc-agents' is deferred, excluded, opt-in, or not an installable package" install --target claude --package ycc-agents
+assert_package_rejected "npm opencode package on claude" "package '@yandy-r/ycc-opencode' is not available for target 'claude'" install --target claude --package "@yandy-r/ycc-opencode"
 assert_package_rejected "valid plus invalid package" "unknown package 'bogus'" install --target claude --package ycc,bogus
 assert_package_rejected "valid target plus unsupported explicit target" "package 'ycc' is not available for target 'opencode'" install --target claude,opencode --package ycc
 assert_package_rejected "multi-target unsupported hooks" "package 'ycc-hooks'" install --target claude,codex --package ycc-hooks
@@ -202,12 +214,12 @@ assert_package_rejected "--package with --only" "--package cannot be combined wi
 for flag in --settings --rules --mcp --hooks; do
     assert_package_rejected "--package with ${flag}" "--package cannot be combined with --intent, --only, --settings, --rules, --mcp, or --hooks" install --target claude --package ycc "${flag}"
 done
-assert_package_rejected "--package with --mcps on claude" "narrow only the opencode and agents targets" install --target claude --package ycc-mcp --mcps github
+assert_package_rejected "--package with --skills on claude" "narrow only the agents target" install --target claude --package ycc-mcp --skills plan
 assert_package_rejected "sync --package" "--package is only supported by the 'install' subcommand" sync --target claude --intent settings --package ycc
 assert_package_rejected "remove --package" "--package is only supported by the 'install' subcommand" remove --target claude --only base --package ycc
 assert_package_rejected "cli --package" "--package is only supported by the 'install' subcommand" cli --package ycc
 assert_package_rejected "completion --package" "--package is only supported by the 'install' subcommand" completion --shell bash --package ycc
-assert_package_rejected "list-mcps --package" "--package is only supported by the 'install' subcommand" list-mcps --package ycc
+assert_package_rejected "list --package" "--package is only supported by the 'install' subcommand" list skills --package ycc
 
 # Package runs keep settings global even though unscoped settings default to the project.
 for target in claude codex cursor; do

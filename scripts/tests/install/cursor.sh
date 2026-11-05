@@ -304,7 +304,7 @@ done
 home="$(new_home)"
 cursor_seed_legacy "${home}"
 printf '{\n' > "${home}/.cursor/hooks.json"
-install_must_succeed "${home}" install --target cursor,agents --skills-home native
+install_must_succeed "${home}" install --target cursor,agents
 assert_contains "${INSTALL_OUT}" "Cursor legacy cleanup kept every file-copy leftover" "cursor refusal is reported in a multi-target run"
 if [[ -d "${home}/.agents/skills" ]]; then ok "cursor refusal still runs the later agents target"; else ko "cursor refusal still runs the later agents target" "${INSTALL_OUT}"; fi
 

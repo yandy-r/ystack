@@ -2,7 +2,7 @@
 # codex.sh — the Codex target: implements the per-target contract that install.sh
 # dispatches through (see scripts/lib/install/steps.sh):
 #   codex_valid_steps, codex_intent_steps <intent>, codex_config_groups,
-#   codex_supports_repo_mode, codex_reads_agents_skills, sync_codex_target, remove_codex_target
+#   codex_supports_repo_mode, sync_codex_target, remove_codex_target
 # plus the optional project-scope hooks: codex_project_groups (settings),
 # codex_settings_global_dest, codex_config_file.
 #
@@ -70,9 +70,6 @@ codex_config_file() {
 }
 
 codex_supports_repo_mode() { return 0; }
-
-# Codex skills come only from the native ycc@ycc plugin; nothing to consolidate.
-codex_reads_agents_skills() { return 1; }
 
 # ---------------------------------------------------------------------------
 # Codex plugin CLI (Codex >= 0.160 ships 'codex plugin')

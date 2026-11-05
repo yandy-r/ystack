@@ -15,7 +15,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import NoReturn, Protocol, TypeVar
 
-HELPER_NAMES = frozenset({"_shared", "shared", "ycc-shared"})
+HELPER_NAMES = frozenset({"_shared", "ycc-shared"})
 KINDS = ("skills", "agents")
 
 

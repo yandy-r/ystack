@@ -60,10 +60,9 @@ _ycc() {
 
     case "${prev}" in
         --target) values="claude cursor codex opencode agents omp all" ;;
-        --skills-home) mapfile -t COMPREPLY < <(compgen -W "agents native" -- "${cur}"); return ;;
         --intent) values="base skills agents commands settings rules mcp hooks plugins mods" ;;
         --package) [[ "${sub}" == "install" ]] && values="ycc ycc-mcp ycc-hooks ycc-rules ycc-all" ;;
-        --only)   values="base dedupe skills agents commands settings rules mcp hooks mods" ;;
+        --only)   values="base dedupe skills agents settings rules mcp hooks mods" ;;
         --mode)   mapfile -t COMPREPLY < <(compgen -W "local repo" -- "${cur}"); return ;;
         --shell)  mapfile -t COMPREPLY < <(compgen -W "bash zsh fish" -- "${cur}"); return ;;
         --dir) mapfile -t COMPREPLY < <(compgen -d -- "${cur}"); return ;;
@@ -92,15 +91,14 @@ _ycc() {
         selectors+=" --${kind}"
     done
     if [[ ${_ycc_cword} -eq 1 ]]; then
-        words="install sync remove cli completion list list-mcps"
+        words="install sync remove cli completion list"
     else
         case "${sub}" in
             cli)        words="--dir --force --help" ;;
             completion) words="--shell --install --force --help" ;;
             list)       words="--target --help"; [[ ${_ycc_cword} -eq 2 ]] && words+=" ${kinds}" ;;
-            list-mcps)  words="--target --help" ;;
-            install)    words="--target --package --only --mode --skills-home --settings --rules --mcp --hooks --with-deps --project --global --force --dry-run --help${selectors}" ;;
-            sync)       words="--target --intent --mode --skills-home --with-deps --project --global --force --dry-run --help${selectors}" ;;
+            install)    words="--target --package --only --mode --settings --rules --mcp --hooks --with-deps --project --global --force --dry-run --help${selectors}" ;;
+            sync)       words="--target --intent --mode --with-deps --project --global --force --dry-run --help${selectors}" ;;
             remove)     words="--target --only --intent --project --global --force --purge-cache --dry-run --help${selectors}" ;;
             *)          words="" ;;
         esac

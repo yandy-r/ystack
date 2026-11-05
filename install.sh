@@ -36,17 +36,17 @@ Usage: $(basename "$0") <command> [options]
 
 Commands:
   install     Initial setup: base step plus opt-in steps (flags below).
-              $(basename "$0") install --target <targets> [--mode <mode>] [--settings] [--rules] [--mcp] [--hooks] [--only <steps>] [--package <ids>] [--plugins <names>] [--mods <names>] [--mcps <servers>] [--skills <names>] [--agents <names>] [--commands <names>] [--with-deps] [--project|--global] [--force] [--dry-run]
+              $(basename "$0") install --target <targets> [--mode <mode>] [--settings] [--rules] [--mcp] [--hooks] [--only <steps>] [--package <ids>] [--plugins <names>] [--mods <names>] [--skills <names>] [--with-deps] [--project|--global] [--force] [--dry-run]
   sync        Sync what you name, nothing else.
-              $(basename "$0") sync --target <targets> --intent <intents> [--plugins <names>] [--mods <names>] [--mcps <servers>] [--skills <names>] [--agents <names>] [--commands <names>] [--with-deps] [--mode <mode>] [--project|--global] [--force] [--dry-run]
+              $(basename "$0") sync --target <targets> --intent <intents> [--plugins <names>] [--mods <names>] [--skills <names>] [--with-deps] [--mode <mode>] [--project|--global] [--force] [--dry-run]
   remove      Strip installer-managed config and native installs.
-              $(basename "$0") remove --target <targets> (--only <steps> | --intent <intents>) [--plugins <names>] [--mods <names>] [--mcps <servers>] [--skills <names>] [--agents <names>] [--commands <names>] [--project|--global] [--force] [--purge-cache] [--dry-run]
+              $(basename "$0") remove --target <targets> (--only <steps> | --intent <intents>) [--plugins <names>] [--mods <names>] [--skills <names>] [--project|--global] [--force] [--purge-cache] [--dry-run]
   cli         Put this installer on PATH as '${CLI_NAME}'.
               $(basename "$0") cli [--dir <dir>] [--force]
   completion  Print or install shell completion.
               $(basename "$0") completion [--shell bash|zsh|fish] [--install [--force]]
   list        Print the selectable kinds, or the names a kind takes (for --<kind>).
-              $(basename "$0") list [<kind>] [--target <targets>]   (e.g. list mcps, list skills, list agents, list commands, list plugins, list mods; list-mcps is an alias)
+              $(basename "$0") list [<kind>] [--target <targets>]   (e.g. list skills, list plugins, list mods)
 
 A command is required; a bare '$(basename "$0") install --target ...' is rejected.
 
@@ -54,12 +54,14 @@ Install ycc into an AI coding tool.
 
 Native packages: claude, codex, cursor and omp install ycc only through
 their own plugin CLIs (the ycc marketplace and its packages ycc, ycc-mcp,
-ycc-hooks, ycc-rules). opencode and agents have no native route; the
-installer copies their bundles and merges their config. After a successful
-native install (and on remove), the installer automatically retires the
-legacy copies and config an older ycc installer wrote for that target —
-only entries it can prove it owns (recorded hash, ownership record or a
-byte-identical copy); your own files are never touched.
+ycc-hooks, ycc-rules). opencode installs it as the npm plugin
+@yandy-r/ycc-opencode: the base step writes one 'plugins' entry into
+~/.config/opencode/opencode.json. The agents target has no native route;
+the installer copies its skills. After a successful native install (and on
+remove), the installer automatically retires the legacy copies and config
+an older ycc installer wrote for that target — only entries it can prove it
+owns (recorded hash, ownership record or a byte-identical copy); your own
+files are never touched.
 
 Command on PATH ('cli' / 'completion' subcommands):
   cli         Symlink this install.sh as '${CLI_NAME}' into the first of
@@ -84,36 +86,33 @@ step-flag form used for first-time setup.
 
   $(basename "$0") sync --target claude --intent base,mcp,hooks
   $(basename "$0") sync --target all --intent settings,rules --global
-  $(basename "$0") sync --target claude,opencode --intent mcp
-  $(basename "$0") sync --target opencode --intent mcp --mcps github,linear
+  $(basename "$0") sync --target opencode --intent base,settings,rules
+  $(basename "$0") sync --target opencode --intent base --mode repo
   $(basename "$0") sync --target claude --intent mods --mods status-bar
   $(basename "$0") sync --target codex --intent agents
   $(basename "$0") sync --target cursor --intent base,rules,mcp
-  $(basename "$0") sync --target opencode --intent skills,commands --skills clean --commands clean
-  $(basename "$0") sync --target opencode --intent skills,agents --skills code-review --agents implementor --with-deps
+  $(basename "$0") sync --target agents --intent skills --skills clean
+  $(basename "$0") sync --target agents --intent skills --skills code-review --with-deps
   $(basename "$0") sync --target opencode --intent plugins --plugins oh-my-opencode-slim
 
 Intents (valid: base, skills, agents, commands, settings, rules, mcp, hooks,
 plugins, mods):
   base      Install the target's ycc package or bundle (claude/codex: the
             ycc plugin from the ycc marketplace; cursor: register the ycc
-            marketplace; omp: the native ycc packages; opencode/agents: the
-            copied bundle).
-  skills    claude/codex/cursor: part of the ycc package (maps to base).
-            opencode: standalone skills in its skills dir; agents: the whole
-            ~/.agents/skills target.
-  agents    claude/cursor: part of the ycc package (maps to base). codex:
-            custom agents in ~/.codex/agents (no native carrier). opencode:
-            standalone agents in its agents dir.
-  commands  claude/cursor: part of the ycc package (maps to base). opencode:
-            one thin generated command per public skill.
+            marketplace; omp: the native ycc packages; opencode: the
+            @yandy-r/ycc-opencode plugins entry; agents: the copied skills).
+  skills    claude/codex/cursor/opencode: part of the ycc package (maps to
+            base). agents: the whole ~/.agents/skills target.
+  agents    claude/cursor/opencode: part of the ycc package (maps to base).
+            codex: custom agents in ~/.codex/agents (no native carrier).
+  commands  claude/cursor/opencode: part of the ycc package (maps to base;
+            opencode commands are /ycc:<skill>).
 
-  opencode/agents slices (skills/agents/commands) need no plugin. Each entry
-  is copied with plugin-root paths and 'ycc:' prefixes rewritten so it works
-  on its own; only entries ycc installed (or identical copies) are ever
-  replaced or removed, so your own skills/agents in those dirs are left alone
-  (--force overrides). Destinations:
-    opencode  ~/.config/opencode/{skills,agents,commands}/<name> (+ shared/)
+  agents/codex slices need no plugin. Each entry is copied with plugin-root
+  paths and 'ycc:' prefixes rewritten so it works on its own; only entries
+  ycc installed (or identical copies) are ever replaced or removed, so your
+  own skills/agents in those dirs are left alone (--force overrides).
+  Destinations:
     codex     ~/.codex/agents/<name>.toml (custom agents; always the full set)
   The agents target ships ycc skills ONLY, once, into the cross-tool dir:
     agents    ~/.agents/skills/<name> (+ ~/.agents/ycc-shared/), read by Zed,
@@ -126,7 +125,7 @@ plugins, mods):
             ycc-rules package (maps to base).
   mcp       claude: 'claude plugin install ycc-mcp@ycc'. codex: 'codex plugin
             add ycc-mcp@ycc' (user scope). cursor: the ycc-mcp package (maps
-            to base). opencode: merge MCP server definitions.
+            to base). opencode: part of @yandy-r/ycc-opencode (maps to base).
   hooks     claude: 'claude plugin install ycc-hooks@ycc'. cursor: the
             ycc-hooks package (maps to base).
   plugins   Merge plugin enablement and marketplace entries. Add 'base' too
@@ -146,9 +145,10 @@ plugins, mods):
               commands, hooks, mods → no-op
     cursor    base, skills, agents, commands, rules, mcp, hooks → base
               settings→settings   plugins, mods → no-op
-    opencode  base→base  skills→skills  agents→agents  commands→commands
-              settings→settings  rules→rules  mcp→mcp
-              plugins → settings (opencode.json)  hooks, mods → no-op
+    opencode  base, skills, agents, commands, mcp → base  settings→settings
+              rules→rules  plugins → settings (opencode.json)  hooks, mods → no-op
+              (on remove, skills/agents/commands/mcp print a notice and
+              remove nothing; remove --intent base takes back the package)
     agents    base→base  skills→skills  everything else → no-op
               (both install ~/.agents/skills + ycc-shared/, the whole target;
               only the skills step is narrowed by --skills)
@@ -163,7 +163,7 @@ Remove ('remove' subcommand):
   Undoes what the selected steps installed, for every target and intent (same
   intent → step mapping as 'sync'). Requires --only or --intent; rejects
   --mode. Only installer-owned things go:
-    settings/plugins/mcp (opencode)  managed config keys; keys you added are
+    settings/plugins            managed config keys; keys you added are
                                 never touched, a managed value you edited is
                                 kept with a warning unless --force. A config
                                 file left empty is deleted.
@@ -181,8 +181,10 @@ Remove ('remove' subcommand):
                                 the custom agents ycc installed; cursor:
                                 'agent plugin marketplace remove ycc' (the
                                 packages themselves are removed in
-                                /plugins); opencode: the bundle entries from
-                                the synced dirs; omp: first, with the
+                                /plugins); opencode: the
+                                @yandy-r/ycc-opencode plugins entry ycc wrote
+                                (another ycc-opencode entry needs --force);
+                                omp: first, with the
                                 profile's last recorded install (also via
                                 --intent base/plugins), the dedupe
                                 skills.ignoredSkills entries; then the
@@ -191,18 +193,20 @@ Remove ('remove' subcommand):
                                 nothing ycc-owned or foreign needs them, and
                                 at --project the empty .omp/plugins files
                                 and dirs ycc's project install created.
-                                claude, codex and cursor then retire the
-                                legacy copies an older installer wrote.
-    skills / agents / commands  opencode/agents/codex agents: the standalone
-                                entries ycc installed (or that are still
-                                identical to the bundle); never your own.
+                                claude, codex, cursor and opencode then
+                                retire the legacy copies an older installer
+                                wrote.
+    skills / agents / commands  agents/codex agents: the standalone entries
+                                ycc installed (or that are still identical
+                                to the bundle); never your own. opencode:
+                                a notice only (they ship in the package).
     mods (claude)               uninstall each mod + the ycc-mods marketplace.
 
   $(basename "$0") remove --target claude --only mcp            # project scope
-  $(basename "$0") remove --target claude,opencode --intent mcp --global
+  $(basename "$0") remove --target claude --intent mcp --global
   $(basename "$0") remove --target codex --intent settings,rules  # project settings
   $(basename "$0") remove --target all --intent base,settings,rules,hooks,plugins,mods
-  $(basename "$0") remove --target opencode --intent agents,commands
+  $(basename "$0") remove --target opencode --intent base        # the plugins entry + legacy cleanup
   $(basename "$0") remove --target opencode --intent plugins --plugins oh-my-opencode-slim --purge-cache
   $(basename "$0") remove --target all --only settings --dry-run  # preview, change nothing
   $(basename "$0") remove --target omp --only base --dry-run    # preview the omp uninstall
@@ -212,7 +216,7 @@ Remove ('remove' subcommand):
 
 Scope (--project | --global, mutually exclusive):
   Without a flag, steps that support project scope use it (claude mcp and
-  hooks; opencode mcp; settings on claude, codex and opencode) and all others
+  hooks; settings on claude, codex and opencode) and all others
   stay global; cursor and omp settings are skipped with a notice (their
   --project is an error). --project with a step lacking project support is
   an error. The project is the git toplevel of the current directory (else
@@ -227,7 +231,6 @@ Scope (--project | --global, mutually exclusive):
     target    mcp --project (default)         mcp --global
     claude    claude plugin install           claude plugin install
               ycc-mcp@ycc --scope project     ycc-mcp@ycc --scope user
-    opencode  <project>/opencode.json         ~/.config/opencode/opencode.json
     codex     none (--project is an error)    codex plugin add ycc-mcp@ycc
     cursor    the ycc-mcp package, picked in /plugins (base step)
 
@@ -279,10 +282,12 @@ Options:
                                 marketplace; codex runs 'codex plugin
                                 marketplace add <checkout>' and installs
                                 ycc@ycc and ycc-mcp@ycc from it; omp exports
-                                this checkout's packages; opencode/agents copy
-                                the bundles. cursor registers the published
-                                GitHub catalog either way (Cursor rejects
-                                filesystem marketplaces).
+                                this checkout's packages; opencode writes a
+                                file:///<checkout>/packages/opencode/ycc-opencode
+                                plugins entry; agents copies its skills.
+                                cursor registers the published GitHub catalog
+                                either way (Cursor rejects filesystem
+                                marketplaces).
                         repo  — register the upstream github repo
                                 yandy-r/ystack as the marketplace source:
                                 claude adds the github slug via the CLI;
@@ -292,11 +297,12 @@ Options:
                                 generation and custom-agent sync; cursor
                                 registers https://github.com/yandy-r/ystack;
                                 omp registers https://github.com/yandy-r/ystack.git
-                                and installs its listed packages from it.
-                                opencode and agents REJECT --mode repo (they
-                                have no remote-source concept). With
-                                --target all + --mode repo, they are skipped
-                                with a warning.
+                                and installs its listed packages from it;
+                                opencode writes @yandy-r/ycc-opencode@<version>
+                                (the published lockstep release). agents
+                                REJECTS --mode repo (no remote-source
+                                concept); --target all + --mode repo skips
+                                it with a warning.
   --settings          Additive: MERGE repo-managed keys into per-machine config
                       files while preserving local model choices, tokens,
                       marketplace entries written by the CLI, trusted-project
@@ -333,8 +339,9 @@ Options:
                         cursor   — the ycc-rules package (base step)
   --mcp               Additive: also run the target's 'mcp' step (claude:
                       ycc-mcp@ycc plugin; codex: ycc-mcp@ycc plugin, user
-                      scope; opencode: merge). Scope follows --project
-                      (default) / --global.
+                      scope). Scope follows --project (default) / --global.
+                      opencode has no mcp step: its MCP servers ship in
+                      @yandy-r/ycc-opencode.
   --hooks             install only: additive, also run the target's 'hooks'
                       step (claude: the ycc-hooks@ycc plugin, project scope
                       by default, user scope with --global; Claude Code >=
@@ -373,54 +380,27 @@ Options:
                       in ~/.claude/settings.json enabledPlugins.
                       Names: '$(basename "$0") list mods'
 
-  opencode / agents selections. The native-package targets (claude, codex,
-  cursor, omp) install whole packages, so --mcps, --skills, --agents,
-  --commands, --with-deps and --skills-home do not apply to them: with only
-  native targets selected they are an error; with --target all (or another
-  mix) they apply to opencode/agents and the native targets skip them with
-  one notice.
-  --mcps <servers>    Comma-separated MCP servers to merge (or remove) instead
-                      of every managed one; requires the opencode mcp step.
-                      Servers not named are left untouched. A name opencode
-                      does not manage is an error. Names: '$(basename "$0") list mcps'
-                      (shell completion offers them).
-  --skills <names>    Comma-separated skills: the standalone skills step installs
-                      (or removes) only these instead of every skill; requires
-                      the skills step (--intent skills / --only skills). Other
-                      installed skills are left in place (narrowing, never
-                      pruning); shared helpers (shared/, ycc-shared/) always
-                      ship with them. 'base' is never filtered. After a
+  agents selections. The native-package targets (claude, codex, cursor, omp,
+  opencode) install whole packages, so --skills and --with-deps do not apply
+  to them: with only native targets selected they are an error; with
+  --target all (or another mix) they apply to the agents target and the
+  native targets skip them with one notice.
+  --skills <names>    Comma-separated skills: the agents target's skills step
+                      installs (or removes) only these instead of every skill;
+                      requires the skills step (--intent skills / --only
+                      skills). Other installed skills are left in place
+                      (narrowing, never pruning); ~/.agents/ycc-shared/ always
+                      ships with them. 'base' is never filtered. After a
                       selective install, missing ycc:<name> dependencies are
                       reported (warn only). Names: '$(basename "$0") list skills'
-  --agents <names>    Same for opencode's standalone agents step (--intent
-                      agents / --only agents); names are file stems. The
-                      agents target has no agents step: next to opencode it
-                      skips --agents; on its own it is rejected.
-                      Names: '$(basename "$0") list agents'
-  --commands <names>  Same for opencode's commands step (--intent commands /
-                      --only commands): installs (or removes) only the named
-                      command files, never pruning. Each command loads its
-                      skill; opencode warns when that skill is missing.
-                      Names: '$(basename "$0") list commands'
-  --with-deps         install / sync only, with --skills or --agents: per
-                      target, also select the ycc:<name> dependencies of the
-                      selected skills/agents (transitively) that the target
-                      ships. Extends only kinds that already have a selection
-                      and whose step runs; skips dependencies available from
-                      elsewhere (your own entries) unless ycc owns them.
-                      Prints '<target>: --with-deps adds ...'.
-  --skills-home <dir> Resolve duplicate skills when ycc skills would land in
-                      opencode's own skills dir and ~/.agents/skills (opencode
-                      reads both):
-                        agents — skills once in ~/.agents/skills (agents
-                                 target); opencode keeps only its non-skill
-                                 pieces (agents, commands, config).
-                        native — keep opencode's own skills (duplicates
-                                 possible). Without the flag, an interactive
-                                 prompt offers the choice (non-TTY: warn and
-                                 proceed as requested).
+  --with-deps         install / sync only, with --skills: also select the
+                      ycc:<name> dependencies of the selected skills
+                      (transitively) that the agents target ships; skips
+                      dependencies available from elsewhere (your own
+                      entries) unless ycc owns them.
+                      Prints 'agents: --with-deps adds ...'.
 
-  --project           Scope-capable steps (claude mcp and hooks; opencode mcp;
+  --project           Scope-capable steps (claude mcp and hooks;
                       settings on claude, codex and opencode) write into the
                       current project. Default when neither flag is given
                       (except package installs, whose mcp, hooks and settings
@@ -444,19 +424,20 @@ Options:
                       of each catalog plugin removed from opencode.json.
   --dry-run           install / sync / remove: preview without writing any
                       config, file, plugin install or ownership state. Each
-                      target previews the steps it can (settings, rules,
-                      opencode mcp; claude mcp/hooks plugin calls; cursor
-                      base; remove-only base on claude/codex/opencode; every
-                      omp step), including the legacy cleanup it would run.
-                      Steps without a preview say so and skip.
+                      target previews the steps it can (settings, rules;
+                      claude mcp/hooks plugin calls; cursor base; opencode
+                      base, which skips the local package build;
+                      remove-only base on claude/codex; every omp step),
+                      including the legacy cleanup it would run. Steps
+                      without a preview say so and skip.
   --only <steps>      Exclusive: run only the comma-separated steps
                       (e.g. --only settings, --only rules,settings).
                       Overrides defaults and --settings/--rules/--mcp/--hooks.
                       A skills/agents/commands step a target has no home for
                       is skipped with a notice (e.g. commands on codex); with
                       --target all, so is any step another target accepts
-                      (e.g. --only mcp skips agents). A step no target has
-                      is still an error.
+                      (e.g. --only mcp skips opencode and agents). A step no
+                      target has is still an error.
   --intent <intents>  'sync' / 'remove' subcommands only. Comma-separated intents (see
                       above). Cannot be combined with --only or the additive
                       --settings/--rules/--mcp flags.
@@ -465,7 +446,7 @@ Options:
                       codex: ycc, ycc-mcp; cursor: ycc, ycc-rules, ycc-mcp,
                       ycc-hooks; omp: ycc, ycc-mcp, ycc-rules (ycc-hooks
                       excluded: herdr reporting is 'herdr integration install
-                      omp').
+                      omp'); opencode: @yandy-r/ycc-opencode.
                       Each package maps onto the target's native route:
                         claude  ycc → base (ycc@ycc), ycc-mcp → mcp
                                 (ycc-mcp@ycc), ycc-hooks → hooks
@@ -478,9 +459,12 @@ Options:
                                 marketplace; the /plugins hint names the
                                 packages)
                         omp     each package → one 'omp plugin install'
+                        opencode @yandy-r/ycc-opencode → base (the
+                                plugins entry)
                       claude and codex also add their installer-fallback
-                      settings and rules (cursor: settings); omp never (its
-                      --settings and --rules stay opt-in). No catalog
+                      settings and rules (cursor: settings); omp and
+                      opencode never (their --settings and --rules stay
+                      opt-in). No catalog
                       entries are ever created. A package unavailable for a
                       target fails before any writes; --target all warns and
                       skips that target.
@@ -570,24 +554,35 @@ Target steps:
                       into ~/.cursor/cli-config.json (main CLI model
                       preference). Cursor's project .cursor/cli.json carries
                       permissions only.
-  opencode  base | skills | agents | commands | settings | rules | mcp
-            base:     generate + validate + format + rsync skills/agents/commands
-                      into ~/.config/opencode/.
-            skills:   generate + install each skill into skills/ (+ shared/).
-            agents:   generate + install each agent into agents/.
-            commands: generate + install each command into commands/.
+  opencode  base | settings | rules
+            base:     local mode: generate + validate + format
+                      packages/opencode/ycc-opencode. Then merge ONE plugins
+                      entry into ~/.config/opencode/opencode.json (always
+                      global): file:///<checkout>/packages/opencode/ycc-opencode
+                      (local) or @yandy-r/ycc-opencode@<version> (repo). Any
+                      older ycc-opencode entry (another version, @latest, a
+                      bare name, an npm: alias, another file:// checkout) is
+                      replaced in place, keeping its options; other plugins
+                      items are untouched. Then retires the legacy file copy
+                      (once the entry loads the package): byte-identical
+                      ~/.config/opencode/{skills,agents,commands,shared,
+                      ycc-sensitive-guard} entries, owned mcp.servers and the
+                      owned "./ycc-sensitive-guard" plugins item. Restart
+                      opencode (>= 2.0.30); commands are /ycc:<skill>.
+                      remove: takes back only the entry ycc wrote (or the
+                      exact entry this checkout would write; --force for
+                      any other ycc-opencode entry), then the same cleanup.
             settings: MERGE managed keys from .opencode-plugin/opencode.json
                       into <project>/opencode.json (default) or
                       ~/.config/opencode/opencode.json (--global). Local model
                       choices, provider credentials and unknown keys are
                       preserved; the 'plugins' intent maps here too (bundle
                       plugins --global only; catalog plugins either scope).
-            mcp:      merge mcp.servers from .opencode-plugin/opencode.json into
-                      <project>/opencode.json or ~/.config/opencode/opencode.json.
             rules:    symlink .opencode-plugin/AGENTS.md into
                       ~/.config/opencode/ (generator-produced from
                       ycc/settings/rules/CLAUDE.md — the same user-global
-                      ruleset as every other target).
+                      ruleset as every other target). The package skips its
+                      own copy when the request already carries it.
   agents    base | skills (both run the same thing)
             base/skills:  generate + validate the .agents-plugin bundle, then
                       install each skill into ~/.agents/skills/ (+ shared
@@ -640,11 +635,10 @@ Examples:
   $(basename "$0") install --target cursor                         # register the ycc marketplace + /plugins hint
   $(basename "$0") install --target cursor --rules --mcp --hooks   # same; the hint adds ycc-rules, ycc-mcp, ycc-hooks
   $(basename "$0") install --target cursor --only settings --global  # ~/.cursor/cli-config.json
-  $(basename "$0") install --target opencode                       # base only
+  $(basename "$0") install --target opencode                       # the @yandy-r/ycc-opencode plugins entry (this checkout)
+  $(basename "$0") install --target opencode --mode repo           # pin the published @yandy-r/ycc-opencode@<version>
   $(basename "$0") install --target opencode --settings --rules    # base + merge opencode.json + link AGENTS.md
-  $(basename "$0") install --target opencode --only skills,agents  # just skills + agents
   $(basename "$0") install --target agents                         # ycc skills → ~/.agents/skills
-  $(basename "$0") install --target opencode --skills-home agents  # skills shared via ~/.agents/skills
   $(basename "$0") install --target all --settings --rules --mcp   # project settings (cursor/omp skip)
   $(basename "$0") install --target all --settings --rules --global  # new machine: user-global settings
   $(basename "$0") install --target claude,codex --only rules      # rules for two targets
@@ -656,8 +650,8 @@ Examples:
   $(basename "$0") install --target codex  --mode repo             # add the git marketplace at ref main
                                                                      # and install ycc@ycc + ycc-mcp@ycc;
                                                                      # skip local generation/agents-sync
-  $(basename "$0") install --target all    --mode repo             # claude, cursor, codex (+ omp) in repo
-                                                                     # mode; opencode/agents are skipped
+  $(basename "$0") install --target all    --mode repo             # claude, cursor, codex, opencode (+ omp)
+                                                                     # in repo mode; agents is skipped
   $(basename "$0") install --target claude --mode repo --settings --rules
 
   # OMP (oh-my-pi >= 18.12.2; native packages through 'omp plugin'):
@@ -678,7 +672,6 @@ TARGET=""
 TARGETS=()
 MODE="local"
 MODE_SET=0
-SKILLS_HOME=""
 COMMAND=""
 MCP=0
 SETTINGS=0
@@ -699,7 +692,7 @@ SCOPE=""
 export DRY_RUN=0
 
 case "${1:-}" in
-    cli|completion|list|list-mcps)
+    cli|completion|list)
         for arg in "$@"; do
             if [[ "${arg}" == "--package" || "${arg}" == --package=* ]]; then
                 err "--package is only supported by the 'install' subcommand"
@@ -710,7 +703,6 @@ case "${1:-}" in
             cli)        shift; run_cli_command "$@"; exit 0 ;;
             completion) shift; run_completion_command "$@"; exit 0 ;;
             list)       shift; run_list_command "$@"; exit 0 ;;
-            list-mcps)  shift; LIST_COMMAND_LABEL=list-mcps run_list_command mcps "$@"; exit 0 ;;
         esac
         ;;
 esac
@@ -766,15 +758,6 @@ while [[ $# -gt 0 ]]; do
             IFS=',' read -r -a ONLY_STEPS <<< "$2"
             if [[ ${#ONLY_STEPS[@]} -eq 0 ]]; then
                 err "--only requires at least one step"
-                exit 1
-            fi
-            shift 2
-            ;;
-        --skills-home)
-            [[ $# -lt 2 ]] && { err "--skills-home requires an argument (agents|native)"; exit 1; }
-            SKILLS_HOME="$2"
-            if [[ ! "${SKILLS_HOME}" =~ ^(agents|native)$ ]]; then
-                err "Invalid --skills-home: ${SKILLS_HOME} (supported: agents, native)"
                 exit 1
             fi
             shift 2
@@ -861,8 +844,8 @@ if [[ "${WITH_DEPS}" == "1" ]]; then
         err "--with-deps is only valid with install or sync"
         exit 1
     fi
-    if ! has_selection skills && ! has_selection agents; then
-        err "--with-deps needs --skills or --agents"
+    if ! has_selection skills; then
+        err "--with-deps needs --skills"
         exit 1
     fi
 fi
@@ -930,16 +913,14 @@ if [[ ${#ONLY_STEPS[@]} -gt 0 ]]; then
 fi
 
 resolve_targets "${TARGET}"
-# Before any target preflight: opencode/agents-only selections never reach a native target.
+# Before any target preflight: agents-only selections never reach a native target.
 preflight_native_selections
 if [[ -n "${PACKAGE}" ]]; then
     [[ "${TARGET}" == "all" ]] && PACKAGE_ALL_TARGETS_REQUESTED=1
     package_preflight_targets
-    resolve_skills_home
     order_targets
     run_package_targets
 else
-    resolve_skills_home
     order_targets
     preflight_targets
     action="sync"

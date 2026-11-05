@@ -64,8 +64,8 @@ Cursor has two steps, `base` and `settings`:
 
 `install --package` maps every Cursor package to the `base` step (the hint
 names the selected packages) plus the `settings` fallback. The selection flags
-(`--skills`, `--agents`, `--commands`, `--mcps`, `--with-deps`,
-`--skills-home`) do not apply to Cursor.
+(`--skills`, `--with-deps`) narrow only the `agents` target and do not apply to
+Cursor.
 
 ## Settings
 

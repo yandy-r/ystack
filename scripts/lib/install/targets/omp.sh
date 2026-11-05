@@ -2,7 +2,7 @@
 # omp.sh — the OMP (oh-my-pi) target: implements the per-target contract that install.sh
 # dispatches through (see scripts/lib/install/steps.sh):
 #   omp_valid_steps, omp_intent_steps <intent>, omp_config_groups,
-#   omp_supports_repo_mode, omp_reads_agents_skills, sync_omp_target, remove_omp_target
+#   omp_supports_repo_mode, sync_omp_target, remove_omp_target
 # plus the optional hooks the generic shell calls when they exist:
 #   omp_preflight, omp_in_all, omp_all_skip_reason, omp_repo_mode_hint, omp_project_steps,
 #   omp_dry_run_steps, omp_settings_scope_note, omp_settings_global_dest
@@ -62,10 +62,6 @@ omp_settings_global_dest() { echo "<agentDir>/config.yml"; }
 omp_supports_repo_mode() {
     python3 "${OMP_INSTALL_HELPER}" listed >/dev/null 2>&1
 }
-
-# OMP reads ~/.agents/skills too, but the native package cannot shed its skills,
-# so skills consolidation cannot apply; the dedupe step hides ycc's own copies.
-omp_reads_agents_skills() { return 1; }
 
 # omp_project_steps — steps that honour --project (a project-scope install).
 # settings and rules stay user scope only: ycc never writes .omp/config.yml,

@@ -9,7 +9,7 @@
 - Artifact store
 - How to Update This Document
 
-As of 2026-11-04
+As of 2026-11-05
 
 This file is the authoritative source for which ycc bundle capabilities are supported on each
 deployment target. Downstream scripts parse the table below; read the Parser Grammar section
@@ -62,7 +62,7 @@ Follow these rules exactly or the parser will misread cells:
 
 ## Native vs install.sh Fallback
 
-Packaging status as of v6.0.0 (2026-10-18). This descriptive companion separates shipping native packages
+Packaging status as of v6.3.0 (2026-11-05). This descriptive companion separates shipping native packages
 from installer-managed artifacts and gated work in `ycc/settings/packages.json`.
 `listed: false` packages are not published catalog entries; generated trees and successful spikes
 alone do not make them shipping user install paths. This does not revise the capability verdicts above.
@@ -72,7 +72,7 @@ alone do not make them shipping user install paths. This does not revise the cap
 | Claude   | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-hooks@ycc` (2.1.300+), `ycc-all@ycc`; `status-bar@ycc-mods`                                                    | Installs the native plugins via `claude plugin` (`mcp`/`hooks` at project scope by default, user scope with `--global`); rules, settings, statusline                                                                                       | `ycc-agents@ycc` in v7.0.0                                                                                    |
 | Cursor   | `ycc`, `ycc-rules`, `ycc-mcp`, `ycc-hooks` via the root `.cursor-plugin/marketplace.json` (interactive `/plugins`); hooks `sessionStart` only | Registers the marketplace and prints the `/plugins` step; `cli-config.json` settings (`--global`)                                                                                                                                          | None                                                                                                          |
 | Codex    | `ycc@ycc`, `ycc-mcp@ycc` via the root `.agents/plugins/marketplace.json`                                                                      | Installs both via `codex plugin add` (codex 0.160+ required); agent TOMLs, `AGENTS.md`, `config.toml`                                                                                                                                      | `ycc-hooks` excluded (YAN-1149)                                                                               |
-| opencode | None                                                                                                                                          | Skills, agents, commands, shared, `opencode.json`, `AGENTS.md`                                                                                                                                                                             | `@yandy-r/ycc-opencode` npm plugin: experimental, opt-in, unpublished                                         |
+| opencode | `@yandy-r/ycc-opencode` npm V2 plugin (opencode `>=2.0.30`), not catalog-listed                                                               | Writes its `plugins` entry (local: `file://` checkout; repo: pinned release), retires the old file copy; `opencode.json` settings, `AGENTS.md` link                                                                                        | None                                                                                                          |
 | `agents` | None                                                                                                                                          | Skills and `ycc-shared` copied into `~/.agents/`                                                                                                                                                                                           | None planned                                                                                                  |
 | `omp`    | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-rules@ycc` via the root `.omp-plugin/marketplace.json` (omp `>=18.12.2`)                                       | `install.sh --target omp`: local export (`--mode local`) or the repository catalog (`--mode repo`) installed through `omp plugin` (user or project scope); opt-in `--rules` (`AGENTS.md`) and `--settings` (`config.yml`), user scope only | `ycc-hooks` and `ycc-all` excluded (herdr: `herdr integration install omp`)                                   |
 | `pi`     | None                                                                                                                                          | None                                                                                                                                                                                                                                       | `ycc`, `ycc-mcp`, `ycc-rules` deferred to v6.3.0 (ADR 0003, pi `>=1.2.0`); `ycc-hooks` and `ycc-all` excluded |
@@ -96,8 +96,8 @@ The recommendation in `docs/research/ystack/recommendation.md` is qualified by
   generates the native packages with a tested Cursor floor of 3.24.12, listed in the root marketplace.
   Native hooks are limited to `sessionStart`; do not infer `WorktreeCreate` or other Claude hook parity.
 - `opencode-config-hook.md`: V2 registrations and context-hook instructions were verified on
-  v2.0.29, not the V1 config-hook approach. The experimental npm path still needs CI publishing;
-  `install.sh` file copy remains primary.
+  v2.0.29, not the V1 config-hook approach. Since YAN-1973 the `@yandy-r/ycc-opencode` npm
+  plugin is the only opencode install route; `install.sh` writes its `plugins` entry.
 - `omp-runtime-contract.md`: tested on omp 18.12.2 (supported floor `>=18.12.2`). OMP gets a
   dedicated generated `.omp-plugin/` tree; shell hooks, `hooks.json`, and `WorktreeCreate` never
   run, and `ycc-all` is omitted because OMP ignores plugin dependencies. See ADR 0002. The
@@ -252,9 +252,14 @@ cache and catalog entry, `~/.codex/skills` copies, merged `[mcp_servers]`), keep
 `./scripts/sync.sh --only codex` or after clearing `~/.codex/plugins/cache/`.
 
 **INSTALL_PATH:opencode**
-Generated bundle lives at `.opencode-plugin/` (skills, agents, commands, AGENTS.md,
-opencode.json). Consumed by opencode from `~/.config/opencode/` (global) or `.opencode/`
-(project-local) after `install.sh install --target opencode` rsyncs the files.
+The generator writes `.opencode-plugin/` (skills, agents, commands, shared, AGENTS.md,
+opencode.json) and, from it, the npm package `packages/opencode/ycc-opencode`
+(`@yandy-r/ycc-opencode`). `install.sh install --target opencode` merges one `plugins` entry
+into `~/.config/opencode/opencode.json`: `file:///<checkout>/packages/opencode/ycc-opencode` in
+local mode, `@yandy-r/ycc-opencode@<version>` in repo mode. Older ycc-opencode entries are
+replaced in place; the base step then retires the old file copy (byte-identical units,
+owned `mcp.servers`, the owned `./ycc-sensitive-guard` item). `opencode.json` settings and the
+`AGENTS.md` link stay on the installer (`--settings`, `--rules`).
 
 **SKILLS:opencode**
 Native support at `.opencode/skills/<name>/SKILL.md` with strict YAML frontmatter

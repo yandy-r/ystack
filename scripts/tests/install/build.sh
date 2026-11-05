@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # install.sh tests — bundle build: every target that installs a locally
-# generated bundle (codex, opencode, agents, omp) regenerates, validates and
+# generated bundle (codex, opencode's npm package, agents, omp) regenerates, validates and
 # formats it before syncing, and YCC_INSTALL_SKIP_BUILD=1 installs the
 # committed bundle instead. cursor builds nothing: it registers the published
 # marketplace.
@@ -12,7 +12,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 # Generator/validator passes a native base install runs, per target.
 declare -A BUILD_PASSES=(
     [codex]="skills plugin"
-    [opencode]="skills agents commands plugin"
+    [opencode]="package"
     [agents]="skills"
     [omp]="skills agents commands packages"
 )
@@ -25,6 +25,11 @@ codex_bundle_landed() {
 # cursor_marketplace_landed <home> — the (stubbed) agent CLI registered the marketplace.
 cursor_marketplace_landed() {
     grep -q "agent plugin marketplace add" "$1/claude-calls.log" 2>/dev/null
+}
+
+# opencode_package_landed <home> — the base step wrote the file:// plugins entry.
+opencode_package_landed() {
+    grep -q "file://${REPO_ROOT}/packages/opencode/ycc-opencode" "$1/.config/opencode/opencode.json" 2>/dev/null
 }
 
 # omp_bundle_landed <home> — the native OMP install (fake omp) ran from the export.
@@ -47,7 +52,7 @@ done
 assert_contains "${out}" "Running scripts/style.sh format --modified" "build formats modified repository files"
 assert_not_contains "${out}" "Skipping" "real build skips nothing"
 assert_not_contains "${out}" "generate-cursor-" "cursor builds no bundle"
-if [[ -f "${home}/.config/opencode/skills/backport/SKILL.md" && -f "${home}/.agents/skills/backport/SKILL.md" ]] \
+if [[ -f "${home}/.agents/skills/backport/SKILL.md" ]] && opencode_package_landed "${home}" \
     && codex_bundle_landed "${home}" && omp_bundle_landed "${home}" && cursor_marketplace_landed "${home}"; then
     ok "built bundles land in every target"
 else
@@ -68,7 +73,7 @@ for target in codex opencode agents omp; do
 done
 assert_contains "${out}" "Skipping repository formatting" "skip-build skips the repo style pass"
 assert_not_contains "${out}" "Running " "skip-build runs no build script"
-if [[ -f "${home}/.config/opencode/skills/backport/SKILL.md" && -f "${home}/.agents/skills/backport/SKILL.md" ]] \
+if [[ -f "${home}/.agents/skills/backport/SKILL.md" ]] && opencode_package_landed "${home}" \
     && codex_bundle_landed "${home}" && omp_bundle_landed "${home}" && cursor_marketplace_landed "${home}"; then
     ok "skip-build still syncs every target"
 else

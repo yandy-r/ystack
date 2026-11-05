@@ -43,7 +43,14 @@ from install_slices import (
 from install_slices import (
     state_path as slice_state_path,
 )
-from merge_managed_config import PROFILES, load_state, remove_hook_commands
+from merge_managed_config import (
+    ADDED_ITEMS_KEY,
+    PROFILES,
+    load_json_config,
+    load_state,
+    remove_hook_commands,
+    value_hash,
+)
 from package_model import load_package_model
 from validate_codex_native import check_catalog, check_package
 
@@ -53,6 +60,10 @@ PACKAGES = MIGRATION_PACKAGES
 # historical data: install_migrate.py is deliberately not in rename_repo.ALLOWLIST_FILES.
 PRE_RENAME_REPO_URL = "https://github.com/yandy-r/claude-plugins.git"
 REPO_URL = "https://github.com/yandy-r/ystack.git"
+# File-copy units the retired opencode installer mirrored into ~/.config/opencode (shared/ after
+# skills so retained skills keep their helpers), and the guard plugins item it merged.
+OPENCODE_UNITS = ("skills", "agents", "commands", "shared", "ycc-sensitive-guard")
+GUARD_PLUGIN = "./ycc-sensitive-guard"
 
 
 def legacy_catalog_entries() -> list[dict[str, Any]]:
@@ -188,6 +199,70 @@ def git_tree_id(path: Path, algorithm: str) -> str | None:
         return None
     root = tree(path)
     return root.hex() if root is not None else None
+
+
+class OpencodeHistory(NamedTuple):
+    """Committed `.opencode-plugin/<unit>/<entry>` object ids, as ``<kind>:<id>`` per ``<unit>/<entry>``."""
+
+    algorithm: str
+    ids: dict[str, frozenset[str]]
+
+
+def _object_kind(mode: str) -> str:
+    return {"040000": "tree", "120000": "link"}.get(mode, "blob")
+
+
+def object_id(path: Path, algorithm: str) -> str | None:
+    """``<kind>:<git object id>`` of a file, symlink or directory, without writing objects."""
+
+    def blob(body: bytes) -> str:
+        return hashlib.new(algorithm, f"blob {len(body)}".encode() + b"\0" + body).hexdigest()
+
+    if path.is_symlink():
+        return f"link:{blob(os.fsencode(os.readlink(path)))}"
+    if path.is_file():
+        return f"blob:{blob(path.read_bytes())}"
+    tree = git_tree_id(path, algorithm)
+    return f"tree:{tree}" if tree is not None else None
+
+
+@functools.cache
+def opencode_history(root: Path) -> OpencodeHistory | None:
+    """Every object the file-copy units held at `.opencode-plugin/<unit>/<entry>` in HEAD history.
+
+    The retired installer mirrored those entries verbatim (rsync -a), so an untouched copy of
+    any earlier release equals one of them. Read-only; None when git or history is unavailable.
+    """
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    paths = [f".opencode-plugin/{unit}" for unit in OPENCODE_UNITS]
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(root), *args], check=True, capture_output=True, text=True, env=env
+        ).stdout
+
+    try:
+        if Path(git("rev-parse", "--show-toplevel").strip()).resolve() != root.resolve():
+            return None
+        algorithm = git("rev-parse", "--show-object-format").strip()
+        raw = git("log", "--raw", "-t", "-r", "--no-abbrev", "--no-renames", "--format=", "--", *paths)
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    if algorithm not in {"sha1", "sha256"}:
+        return None
+    null = "0" * (40 if algorithm == "sha1" else 64)
+    ids: dict[str, set[str]] = {}
+    for line in raw.splitlines():
+        meta, _, name = line.partition("\t")
+        fields = meta.lstrip(":").split()
+        parts = name.split("/")
+        if len(fields) < 4 or len(parts) != 3:
+            continue
+        key = f"{parts[1]}/{parts[2]}"
+        for mode, oid in ((fields[0], fields[2]), (fields[1], fields[3])):
+            if oid != null:
+                ids.setdefault(key, set()).add(f"{_object_kind(mode)}:{oid}")
+    return OpencodeHistory(algorithm, {key: frozenset(value) for key, value in ids.items()})
 
 
 class ReleasedTrees(NamedTuple):
@@ -590,6 +665,150 @@ class Migration:
                 run(label, command, False)
         self.cursor_retired.update(retiring)
 
+    def opencode(self, *, removing: bool = False) -> None:
+        """Retire the file-copy opencode install the @yandy-r/ycc-opencode npm plugin replaces.
+
+        After an install the plugins entry must already load the package (``removing``,
+        from 'install.sh remove --intent base', drops that proof). An entry under
+        ~/.config/opencode/{skills,agents,commands,shared,ycc-sensitive-guard} goes only
+        when it is byte-identical to the committed .opencode-plugin source (current or
+        any version in this checkout's history); the merged mcp.servers entries and the
+        "./ycc-sensitive-guard" plugins item go only with merge-state ownership proof.
+        Edited and foreign entries are kept and reported.
+        """
+        from opencode_package import loads_package
+
+        config_dir = self.home / ".config/opencode"
+        config = config_dir / "opencode.json"
+        if config_dir.is_symlink() or not safe_parent(config_dir / "entry"):
+            print(f"[!!] kept {config_dir}: symlinked configuration directory (no opencode cleanup)")
+            return
+        # A dry run previews as if the base step had written the entry it only previewed.
+        if not removing and self.apply and not loads_package(config):
+            print(f"[!!] opencode file-copy install retained: {config} does not load @yandy-r/ycc-opencode")
+            return
+        self.opencode_config(config)
+        self.opencode_units(config_dir, config)
+        print("opencode legacy cleanup complete (global scope only).")
+
+    def opencode_config(self, config: Path) -> None:
+        """Take back the ycc-written mcp.servers entries and the "./ycc-sensitive-guard" plugins item."""
+        if not config.exists() and not config.is_symlink():
+            return
+        state = load_state().get(f"opencode-config:{config}", {})
+        if not isinstance(state, dict):
+            return
+        with tempfile.TemporaryDirectory(prefix="ycc-migrate-") as tmp:
+            if any(key.startswith("/mcp/servers/") for key in state):
+                # Ownership comes from the recorded leaf hashes alone: an edited server stays.
+                empty = Path(tmp) / "mcp.json"
+                empty.write_text("{}\n", encoding="utf-8")
+                self.merge_remove("opencode-config", empty, config, "mcp")
+            if GUARD_PLUGIN in self.opencode_owned_plugins(state):
+                guard = Path(tmp) / "plugins.json"
+                guard.write_text(json.dumps({"plugins": [GUARD_PLUGIN]}) + "\n", encoding="utf-8")
+                self.merge_remove("opencode-config", guard, config, "plugins", "--entries", GUARD_PLUGIN)
+
+    @staticmethod
+    def opencode_owned_plugins(state: dict[str, Any]) -> set[str]:
+        """The "./ycc-sensitive-guard" plugins item when the merge engine recorded appending it (by hash)."""
+        entry = state.get("/plugins", {})
+        owned = entry.get(ADDED_ITEMS_KEY, []) if isinstance(entry, dict) else []
+        return {GUARD_PLUGIN} if isinstance(owned, list) and value_hash(GUARD_PLUGIN) in owned else set()
+
+    def opencode_guard_loaded(self, config: Path) -> bool:
+        """True when opencode.json still loads "./ycc-sensitive-guard" after this run's removal."""
+        # Unparseable config counts as still loading the guard (keep the directory).
+        try:
+            raw = config.read_text(encoding="utf-8")
+            data = load_json_config(raw, config, {"format": "json", "jsonc": True}) if raw.strip() else {}
+        except FileNotFoundError:
+            return False
+        except (OSError, ValueError):
+            return True
+        plugins = data.get("plugins", []) if isinstance(data, dict) else []
+        specs = {p if isinstance(p, str) else p.get("package") for p in plugins if isinstance(p, (str, dict))}
+        if GUARD_PLUGIN not in {s.rstrip("/") for s in specs if isinstance(s, str)}:
+            return False
+        if self.apply:
+            return True
+        # Dry run: the entry goes when the merge engine recorded writing it (and it is unedited).
+        state = load_state().get(f"opencode-config:{config}", {})
+        return not (isinstance(state, dict) and GUARD_PLUGIN in self.opencode_owned_plugins(state))
+
+    def opencode_units(self, config_dir: Path, config: Path) -> None:
+        """Remove byte-identical file-copy unit entries; keep shared/ and the guard while still needed."""
+        bundle = ROOT / ".opencode-plugin"
+        history = opencode_history(ROOT)
+        if history is None:
+            print(f"[!!] {ROOT}: git history unavailable; only copies of the current bundle can be proven owned")
+        retired: dict[str, set[str]] = {}
+        retained_skills = False
+        for unit in OPENCODE_UNITS:
+            dest = config_dir / unit
+            if dest.is_symlink() or (dest.exists() and not dest.is_dir()):
+                print(f"[!!] kept {dest}: {'symlinked unit directory' if dest.is_symlink() else 'not a directory'}")
+                # Skills kept as they are may still source shared/ helpers.
+                retained_skills = retained_skills or unit == "skills"
+                continue
+            if not dest.is_dir():
+                continue
+            source = bundle / unit
+            if source.exists():
+                trusted_source(source, ROOT)
+                reject_escaping_symlinks(source)
+            if unit == "shared" and retained_skills:
+                print(f"[!!] kept {dest}: retained skills may depend on it")
+                continue
+            if unit == "ycc-sensitive-guard" and self.opencode_guard_loaded(config):
+                print(f"[!!] kept {dest}: {config} still loads ./{unit}")
+                continue
+            gone: set[str] = set()
+            for entry in sorted(dest.iterdir()):
+                if self.opencode_entry(entry, source / entry.name, history, f"{unit}/{entry.name}"):
+                    gone.add(entry.name)
+                elif unit == "skills":
+                    retained_skills = True
+            retired[str(dest)] = gone
+            if self.apply and not any(dest.iterdir()):
+                dest.rmdir()
+        if self.apply and any(retired.values()):
+            state_file = slice_state_path()
+            state = load_slice_state(state_file)
+            hashes: dict[str, str] = {}
+            if state_file.is_file():
+                raw = json.loads(state_file.read_text(encoding="utf-8")).get("sha256", {})
+                hashes = raw if isinstance(raw, dict) else {}
+            changed = False
+            for key, gone in retired.items():
+                if key in state:
+                    state[key] = [name for name in state[key] if name not in gone]
+                    changed = True
+            if changed:
+                save_slice_state(state_file, state, hashes)
+
+    def opencode_entry(self, entry: Path, source: Path, history: OpencodeHistory | None, key: str) -> bool:
+        """Remove one unit entry when it equals the current source or a committed version of it."""
+        if not entry.exists() and not entry.is_symlink():
+            return False
+        if not safe_parent(entry):
+            print(f"[!!] kept {entry}: symlinked parent directory")
+            return False
+        ours = source.exists() and identical(entry, source)
+        if not ours and history is not None:
+            ours = object_id(entry, history.algorithm) in history.ids.get(key, frozenset())
+        if not ours:
+            known = source.exists() or (history is not None and key in history.ids)
+            print(f"[!!] kept {entry}: {'edited or ownership uncertain' if known else 'not shipped by ycc'}")
+            return False
+        print(f"[ok] {'remove' if self.apply else 'would remove'} {entry}")
+        if self.apply:
+            if entry.is_dir() and not entry.is_symlink():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+        return True
+
     def cursor(self) -> None:
         """Retire the file-copy Cursor install: carriers first, then byte-identical unit copies.
 
@@ -893,7 +1112,7 @@ def main() -> int:
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
     args = parser.parse_args()
     targets = args.targets.split(",")
-    if not targets or any(target not in {"claude", "codex", "cursor", "omp"} for target in targets):
+    if not targets or any(target not in {"claude", "codex", "cursor", "omp", "opencode"} for target in targets):
         print("[err] unsupported cleanup targets", file=sys.stderr)
         return 1
     apply = not args.dry_run
@@ -919,8 +1138,8 @@ def main() -> int:
         for target in targets:
             if target == "codex":
                 migration.codex(removing=args.removing)
-            elif target == "claude":
-                migration.claude(removing=args.removing)
+            elif target in ("claude", "opencode"):
+                getattr(migration, target)(removing=args.removing)
             else:
                 getattr(migration, target)()
         return 0

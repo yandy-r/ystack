@@ -1,10 +1,10 @@
 # shellcheck shell=bash
 # core.sh — shared installer primitives: colors, logging, link/copy helpers,
-# managed-config merge, scope handling and the opencode MCP merge step.
+# the managed-config merge and scope handling.
 #
 # Sourced by install.sh (never run directly); inherits its shell options and
-# SCRIPT_DIR, and reads its arg globals (FORCE, SCOPE, COMMAND, PACKAGE) and
-# the --mcps selection (select.sh) at call time.
+# SCRIPT_DIR, and reads its arg globals (FORCE, SCOPE, COMMAND, PACKAGE) at
+# call time.
 
 CONFIG_MERGE_HELPER="${SCRIPT_DIR}/scripts/merge_managed_config.py"
 
@@ -428,13 +428,13 @@ run_repo_style_format_modified() {
 # Scope (--project / --global)
 # ---------------------------------------------------------------------------
 # Without an explicit flag, these steps default to project scope and every
-# other step stays global: 'mcp' on claude (native ycc-mcp plugin) and
-# opencode (merge); 'hooks' on claude (native ycc-hooks plugin); 'settings'
-# for every target that declares <t>_project_groups (claude, codex, opencode).
-# Package installs keep Claude's mcp and hooks plugins at user scope alongside
-# their package-wide settings and rules. Codex installs ycc-mcp@ycc at user
-# scope only. Targets without <t>_project_groups (cursor, omp) skip their
-# settings step at the default scope with a notice (steps.sh).
+# other step stays global: 'mcp' and 'hooks' on claude (native ycc-mcp and
+# ycc-hooks plugins); 'settings' for every target that declares
+# <t>_project_groups (claude, codex, opencode). Package installs keep Claude's
+# mcp and hooks plugins at user scope alongside their package-wide settings
+# and rules. Codex installs ycc-mcp@ycc at user scope only. Targets without
+# <t>_project_groups (cursor, omp) skip their settings step at the default
+# scope with a notice (steps.sh).
 #
 # target_project_groups <target> — csv of the settings-file config groups
 # mergeable at project scope ('' when the target has none). Defining the
@@ -449,13 +449,7 @@ target_project_groups() {
 
 step_supports_project() {
     case "$2" in
-        mcp)
-            case "$1" in
-                claude) [[ -z "${PACKAGE:-}" ]] ;;
-                opencode) return 0 ;;
-                *) return 1 ;;
-            esac
-            ;;
+        mcp) [[ "$1" == claude && -z "${PACKAGE:-}" ]] ;;
         hooks) [[ "$1" == claude && -z "${PACKAGE:-}" ]] ;;
         settings) [[ -z "${PACKAGE:-}" && -n "$(target_project_groups "$1")" ]] ;;
         *) return 1 ;;
@@ -485,65 +479,4 @@ step_scope() {
 # project_root — git toplevel of $PWD, else $PWD itself.
 project_root() {
     git rev-parse --show-toplevel 2>/dev/null || pwd
-}
-
-# ---------------------------------------------------------------------------
-# MCP merge step (opencode only; claude/codex/cursor ship MCP servers through
-# their native ycc-mcp package)
-# ---------------------------------------------------------------------------
-# The shared merge helper gives the MCP file ownership tracking, local-edit
-# protection and atomic writes; state is keyed per destination, so project
-# and global copies never interfere.
-#
-#   target    project                          global
-#   opencode  <project>/opencode.json          ~/.config/opencode/opencode.json
-mcp_destination() {
-    case "$1" in
-        opencode)
-            if [[ "$(step_scope opencode mcp)" == "project" ]]; then
-                echo "$(project_root)/opencode.json"
-            else
-                echo "${HOME}/.config/opencode/opencode.json"
-            fi
-            ;;
-        *) err "mcp_destination: target '$1' has no MCP merge step"; exit 1 ;;
-    esac
-}
-
-# mcp_source <target> — echo "<merge profile> <source file>" for <target>'s MCP merge.
-mcp_source() {
-    case "$1" in
-        opencode) echo "opencode-config ${OPENCODE_PLUGIN_DIR}/opencode.json" ;;
-        *) err "mcp_source: target '$1' has no MCP merge step"; exit 1 ;;
-    esac
-}
-
-# run_mcp_step <target> — merge (or, for 'remove', strip) managed MCP servers;
-# with --mcps, only the selected servers (others are left untouched).
-run_mcp_step() {
-    local target="$1" profile src dest
-    read -r profile src <<< "$(mcp_source "${target}")"
-    dest="$(mcp_destination "${target}")"
-
-    local -a select=()
-    if has_selection mcps; then
-        local selection
-        selection="$(selection_for_target mcps "${target}")"
-        if [[ -z "${selection}" ]]; then
-            selection="$(selection_for mcps)"
-            warn "none of the selected MCP servers (${selection//,/ }) is managed for ${target} — skipping"
-            return 0
-        fi
-        select=(--entries "${selection}")
-        info "MCP servers: ${selection//,/, }"
-    fi
-
-    # shellcheck disable=SC2153  # COMMAND is install.sh's subcommand global.
-    if [[ "${COMMAND}" == "remove" ]]; then
-        info "Removing managed MCP servers from ${dest}"
-        merge_settings_config "${profile}" "${src}" "${dest}" "mcp" --remove "${select[@]}"
-        return 0
-    fi
-    info "Merging MCP servers into ${dest}"
-    merge_settings_config "${profile}" "${src}" "${dest}" "mcp" "${select[@]}"
 }

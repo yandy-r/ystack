@@ -1,16 +1,15 @@
 # shellcheck shell=bash
 # select.sh — item selection: --<kind> <names> narrows a step to the named
-# items (--mcps for opencode's mcp step, --skills / --agents / --commands for
-# the opencode / agents standalone slices, --mods for the claude mods step,
-# --plugins for the settings step's plugins config group), and
-# 'list [<kind>]' prints them. --with-deps (install/sync) extends a
-# --skills / --agents selection per target with its ycc:<name> dependencies
-# the target ships (expand_with_deps, called by run_target).
+# items (--skills for the agents target's skills slice, --mods for the claude
+# mods step, --plugins for the settings step's plugins config group), and
+# 'list [<kind>]' prints them. --with-deps (install/sync) extends a --skills
+# selection with its ycc:<name> dependencies the target ships
+# (expand_with_deps, called by run_target).
 #
-# Native-package targets (claude, codex, cursor, omp) install whole packages,
-# so NATIVE_UNSELECTABLE_KINDS cannot narrow them: preflight_native_selections
-# rejects such a selection when only native targets run, and skips those
-# targets with one notice otherwise.
+# Native-package targets (claude, codex, cursor, omp, opencode) install whole
+# packages, so NATIVE_UNSELECTABLE_KINDS cannot narrow them:
+# preflight_native_selections rejects such a selection when only native
+# targets run, and skips those targets with one notice otherwise.
 #
 # Adding a kind: append it to SELECTABLE_KINDS, add its registry rows below
 # and define a '<kind>_names <target>' adapter (names the repo ships for
@@ -24,18 +23,15 @@
 # config_groups_for_target from steps.sh, and PACKAGE / INTENTS / CLI_NAME at
 # call time.
 
-SELECTABLE_KINDS=(mcps skills agents commands plugins mods)
-declare -gA SELECTION_STEP=([mcps]=mcp [skills]=skills [agents]=agents [commands]=commands [plugins]=settings [mods]=mods)
-declare -gA SELECTION_NOUN=([mcps]="MCP server" [skills]=skill [agents]=agent [commands]=command [plugins]=plugin [mods]=mod)
-declare -gA SELECTION_NOUNS=([mcps]="MCP servers" [skills]=skills [agents]=agents [commands]=commands [plugins]=plugins [mods]=mods)
-# Kinds (plus --with-deps) that narrow only the opencode / agents targets.
-NATIVE_UNSELECTABLE_KINDS=(mcps skills agents commands)
-NATIVE_TARGETS=(claude codex cursor omp)
+SELECTABLE_KINDS=(skills plugins mods)
+declare -gA SELECTION_STEP=([skills]=skills [plugins]=settings [mods]=mods)
+declare -gA SELECTION_NOUN=([skills]=skill [plugins]=plugin [mods]=mod)
+declare -gA SELECTION_NOUNS=([skills]=skills [plugins]=plugins [mods]=mods)
+# Kinds (plus --with-deps) that narrow only the agents target.
+NATIVE_UNSELECTABLE_KINDS=(skills)
+NATIVE_TARGETS=(claude codex cursor omp opencode)
 declare -gA SELECTION_STEP_HINT=(
-    [mcps]="sync/remove --intent mcp, install --mcp or --only mcp"
-    [skills]="it narrows the standalone skills slice; use --intent skills or --only skills"
-    [agents]="it narrows the standalone agents slice; use --intent agents or --only agents"
-    [commands]="it narrows the standalone commands slice; use --intent commands or --only commands"
+    [skills]="it narrows the agents target's skills slice; use --intent skills or --only skills"
     [plugins]="it narrows the plugins config group; use --intent plugins, or install --only settings"
     [mods]="claude only; use --intent mods or --only mods"
 )
@@ -44,16 +40,6 @@ declare -gA SELECTION_STEP_HINT=(
 declare -gA SELECTION_GROUP=([plugins]=plugins)
 # SELECTION[<kind>] — the names given with --<kind>, comma-separated.
 declare -gA SELECTION=()
-
-# mcps_names <target> — MCP servers the repo manages for <target>'s MCP
-# merge step (opencode only; native targets ship the whole ycc-mcp package).
-mcps_names() {
-    [[ "$1" == opencode ]] || return 0
-    local profile src
-    read -r profile src <<< "$(mcp_source "$1")"
-    python3 "${CONFIG_MERGE_HELPER}" --profile "${profile}" --source "${src}" \
-        --destination /dev/null --groups mcp --list-entries
-}
 
 # plugins_names <target> — the plugin entries <target>'s plugins config group
 # manages: claude/codex 'name@marketplace' keys, opencode package names
@@ -82,27 +68,16 @@ mods_names() {
     mods_plugin_names
 }
 
-# skills_names <target> / agents_names <target> — the selectable entries of
-# <target>'s standalone skills / agents slice (helper entries such as _shared
-# are never listed; file entries by stem). Empty for native-package targets.
+# skills_names <target> — the selectable entries of <target>'s standalone
+# skills slice (helper entries such as ycc-shared are never listed). Empty for
+# native-package targets.
 skills_names() {
     native_target "$1" && return 0
     python3 "${SLICE_HELPER}" list --target "$1" --slice skills
 }
 
-agents_names() {
-    native_target "$1" && return 0
-    python3 "${SLICE_HELPER}" list --target "$1" --slice agents
-}
-
-# commands_names <target> — the commands <target>'s commands step installs.
-commands_names() {
-    native_target "$1" && return 0
-    python3 "${SLICE_HELPER}" list --target "$1" --slice commands
-}
-
 # native_target <target> — true for a native-package target (claude, codex,
-# cursor, omp), which no NATIVE_UNSELECTABLE_KINDS selection narrows.
+# cursor, omp, opencode), which no NATIVE_UNSELECTABLE_KINDS selection narrows.
 native_target() {
     [[ " ${NATIVE_TARGETS[*]} " == *" $1 "* ]]
 }
@@ -116,13 +91,12 @@ native_selection_flags() {
         has_selection "${kind}" && flags+=("--${kind}")
     done
     [[ "${WITH_DEPS:-0}" == "1" ]] && flags+=(--with-deps)
-    [[ -n "${SKILLS_HOME:-}" ]] && flags+=(--skills-home)
     echo "${flags[*]:-}"
 }
 
-# preflight_native_selections — the flags above apply to opencode and agents
-# only. With only native targets selected they are an error; next to
-# opencode/agents, the native targets skip them with one notice.
+# preflight_native_selections — the flags above apply to the agents target
+# only. With only native targets selected they are an error; next to agents,
+# the native targets skip them with one notice.
 preflight_native_selections() {
     local flags target
     flags="$(native_selection_flags)"
@@ -133,8 +107,8 @@ preflight_native_selections() {
     done
     [[ ${#native[@]} -gt 0 ]] || return 0
     if [[ ${#other[@]} -eq 0 ]]; then
-        err "${flags// /, } narrow only the opencode and agents targets; ${native[*]// /, } install whole native packages"
-        err "  drop ${flags// /, }, or add --target opencode / agents."
+        err "${flags// /, } narrow only the agents target; ${native[*]// /, } install whole native packages"
+        err "  drop ${flags// /, }, or add --target agents."
         exit 1
     fi
     local joined="${native[*]}"
@@ -195,24 +169,19 @@ kind_step_selected() {
     target_merges_group "$2" "${SELECTION_GROUP[$1]}"
 }
 
-# expand_with_deps <target> — under --with-deps, extend <target>'s --skills /
-# --agents selection with the ycc:<name> dependencies of its selected names
-# that <target> ships and lacks (or that ycc owns): install_slices.py closure.
-# Only a kind with a selection whose step runs is extended. Skills
-# consolidated into ~/.agents/skills are not this target's to install, so they
-# keep warning. Native-package targets have no slices. Called by run_target,
-# which restores the selection after.
+# expand_with_deps <target> — under --with-deps, extend <target>'s --skills
+# selection with the ycc:<name> dependencies of its selected skills that
+# <target> ships and lacks (or that ycc owns): install_slices.py closure. Only
+# runs when the skills step does. Native-package targets have no slices.
+# Called by run_target, which restores the selection after.
 expand_with_deps() {
     [[ "${WITH_DEPS:-0}" == "1" ]] || return 0
     local target="$1" kind names line added name
     native_target "${target}" && return 0
+    has_selection skills && step_enabled skills || return 0
     local -a seeds=()
-    for kind in skills agents; do
-        if ! has_selection "${kind}" || ! step_enabled "${kind}"; then continue; fi
-        [[ "${kind}" == skills ]] && skills_consolidated "${target}" && continue
-        names="$(selection_for_target "${kind}" "${target}")"
-        [[ -n "${names}" ]] && seeds+=("--${kind}" "${names}")
-    done
+    names="$(selection_for_target skills "${target}")"
+    [[ -n "${names}" ]] && seeds+=(--skills "${names}")
     [[ ${#seeds[@]} -gt 0 ]] || return 0
     local output
     output="$(python3 "${SLICE_HELPER}" closure --target "${target}" "${seeds[@]}")" \
@@ -310,10 +279,9 @@ preflight_selections() {
 # run_list_command [<kind>] [--target <targets>] — no kind: print the
 # selectable kinds; else the <kind> names the repo ships for the targets
 # (default all) whose valid steps include the kind's step, first-seen order,
-# one per line. Shell completion reads both. LIST_COMMAND_LABEL names the
-# command in errors (the list-mcps alias sets it; its kind is fixed).
+# one per line. Shell completion reads both.
 run_list_command() {
-    local kind="" target_csv="all" label="${LIST_COMMAND_LABEL:-list}"
+    local kind="" target_csv="all"
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --target)
@@ -322,11 +290,10 @@ run_list_command() {
                 shift 2
                 ;;
             --help|-h) usage; exit 0 ;;
-            -*) err "Unknown option for ${label}: $1"; exit 1 ;;
+            -*) err "Unknown option for list: $1"; exit 1 ;;
             *)
                 if [[ -n "${kind}" ]]; then
-                    [[ "${label}" == list ]] && err "list takes one kind (got '${kind}' and '$1')"
-                    [[ "${label}" == list ]] || err "Unknown option for ${label}: $1"
+                    err "list takes one kind (got '${kind}' and '$1')"
                     exit 1
                 fi
                 kind="$1"

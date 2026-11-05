@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Opt-in isolated-host smoke for the ycc sensitive-file guard (YAN-1026, YAN-1260, YAN-1261).
 
-Installs the generated file-copy bundle (agents, the ycc-sensitive-guard unit, and the generated
-`plugins` entry) into a disposable OpenCode V2 config root, writes a synthetic
+Installs the generated guard unit standalone (agents, the ycc-sensitive-guard unit, and a
+`./ycc-sensitive-guard` `plugins` entry; the shape the retired file-copy install loaded) into a
+disposable OpenCode V2 config root, writes a synthetic
 canary into secret-bearing fixture files, and drives real tool calls through a
 loopback fake provider. Every provider request body is recorded; the canary
 must never appear in one for a restricted specialist, while ordinary work and
@@ -37,7 +38,7 @@ from typing import Any
 
 from opencode_config_hook_checks import check, snapshot
 from opencode_config_hook_spike import Api, Scenario, run_env
-from opencode_sensitive_policy import load_policy
+from opencode_sensitive_policy import GUARD_PLUGIN_SPEC, load_policy
 
 GUARD_ID = "yandy-r.ycc-sensitive-guard"
 PACKAGE_ID = "yandy-r.ycc-opencode"
@@ -711,9 +712,9 @@ def main() -> None:
         ).stdout.strip()
         check("OpenCode V2 binary", True, version.startswith("opencode v2."))
         summary["opencode"] = version
-        bundle_config = json.loads((repo / ".opencode-plugin/opencode.json").read_text(encoding="utf-8"))
-        guard_entries = [p for p in bundle_config["plugins"] if isinstance(p, str) and p.startswith("./")]
-        check("bundle config declares the guard plugin", ["./ycc-sensitive-guard"], guard_entries)
+        # The bundle config no longer names the guard (the npm package carries it);
+        # the standalone scenarios load the unit through its own local entry.
+        guard_entries = [GUARD_PLUGIN_SPEC]
         results = scenario(
             lab,
             binary,

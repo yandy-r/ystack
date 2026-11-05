@@ -2,8 +2,7 @@
 
 After a selective install, the canonical sources of the selected entries are
 scanned for ``ycc:<name>`` references so missing skills and agents can be
-reported per target (warn only). Selected commands that load a same-named
-skill warn when that skill is not available on the target.
+reported per target (warn only).
 
 ``closure`` (``install_slices.py closure``, behind ``install.sh --with-deps``)
 walks the same references from a selection and names the units to add to it.
@@ -32,7 +31,7 @@ DISPATCHED_AGENTS = frozenset(
     }
 )
 # Targets whose skills also resolve from the cross-tool ~/.agents/skills.
-AGENTS_SKILLS_READERS = frozenset({"codex", "opencode", "cursor"})
+AGENTS_SKILLS_READERS = frozenset({"codex", "cursor"})
 
 Ref = tuple[str, bool]  # (referenced name, written as '/ycc:<name>')
 
@@ -47,20 +46,13 @@ def print_dependency_warnings(
 ) -> None:
     """After a clean selective install of ``kind`` on ``args.target``, print its dependency warnings.
 
-    Plain (non-strict) commands get paired-skill warnings instead; a strict
-    carrier (cursor) already failed closed on a missing skill.
+    Commands get none: the only command slice is a strict carrier (cursor) that
+    already failed closed on a missing skill.
     """
-    if conflicts or args.action != "install" or args.entries is None:
+    if conflicts or args.action != "install" or args.entries is None or kind == "commands":
         return
     dests = {k: specs[(args.target, k)][0].dest for k in KINDS if (args.target, k) in specs}
-    selected = parse_entries(args.entries)
-    if kind == "commands":
-        if "skills" in dests and not any(unit.strict for unit in specs.get((args.target, kind), ())):
-            lines = paired_skill_warnings(ctx.home, args.target, selected, ctx.state, dests)
-        else:
-            lines = []
-    else:
-        lines = dependency_warnings(repo_root, ctx.home, args.target, kind, selected, ctx.state, dests)
+    lines = dependency_warnings(repo_root, ctx.home, args.target, kind, parse_entries(args.entries), ctx.state, dests)
     for line in lines:
         print(line)
 
@@ -197,22 +189,6 @@ def dependency_warnings(
             f" but not installed — add it: ycc sync --target {target} --intent {ref_kind} --{ref_kind} {ref_name}"
         )
     return lines
-
-
-def paired_skill_warnings(
-    home: Path, target: str, selected: Iterable[str], state: Mapping[str, list[str]], dests: Mapping[str, str]
-) -> list[str]:
-    """Warn lines for selected commands whose same-named skill is not available on the target.
-
-    Every command loads the skill of its own name. Never installs it, never fails the run.
-    """
-    avail = Availability(home, target, state, dests)
-    return [
-        f"[!!]  {target}: command '{name}' needs skill '{name}', not installed"
-        f" — add it: ycc sync --target {target} --intent skills --skills {name}"
-        for name in sorted(set(selected))
-        if not avail.has("skills", name)
-    ]
 
 
 def closure(

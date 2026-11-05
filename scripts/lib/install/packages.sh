@@ -2,7 +2,8 @@
 # packages.sh — package planning ('install --package'): expands the package
 # model closure into per-target installer steps (claude/codex: the native
 # base, mcp and hooks plugin installs; cursor: the marketplace step; omp: its
-# native packages) and drives the per-target sync functions through the
+# native packages; opencode: the @yandy-r/ycc-opencode plugins entry) and
+# drives the per-target sync functions through the
 # exclusive-steps machinery.
 #
 # Sourced by install.sh (never run directly); reads PACKAGE, TARGETS, MODE
@@ -17,10 +18,6 @@ PACKAGE_STEPS=()
 
 # package_steps_csv <target> — the planner's comma-separated steps for <target>.
 package_steps_csv() {
-    if [[ "$1" == "agents" && "${AGENTS_AUTO_ADDED:-0}" == "1" ]]; then
-        printf '%s' skills
-        return 0
-    fi
     local i
     for ((i = 0; i < ${#PACKAGE_TARGETS[@]}; i++)); do
         if [[ "${PACKAGE_TARGETS[i]}" == "$1" ]]; then

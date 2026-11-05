@@ -63,7 +63,6 @@ def test_rejections() -> None:
         ("unknown", "claude", "unknown package"),
         ("installer-fallback", "claude", "internal modeling key"),
         ("ycc-agents", "claude", "deferred"),
-        ("@yandy-r/ycc-opencode", "opencode", "opt-in"),
         ("ycc", "opencode", "not available"),
         ("ycc", "agents", "not available"),
         ("ycc-hooks", "codex", "excluded"),

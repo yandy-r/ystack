@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the experimental opt-in opencode npm package (YAN-1143 / GitHub #318).
+"""Generate the opencode npm package @yandy-r/ycc-opencode (YAN-1143 / GitHub #318; YAN-1973).
 
 Model-driven, mirroring generate_claude_packages.py / generate_cursor_packages.py:
 the package row (@yandy-r/ycc-opencode, runtime opencode, mechanism npm, status
@@ -46,7 +46,9 @@ follow the same namespace.
 
 Spike YAN-1125 (opencode v2.0.29) fixes the API shapes; the floor is v2.0.30,
 the runtime the package is exercised on. See the adapter template for the exact
-contract and the coexistence semantics with the primary file-copy install.
+contract. ``install.sh --target opencode`` installs ycc only through this package
+(its base step writes the `plugins` entry); the .opencode-plugin/ bundle is
+generator input, never copied into ~/.config/opencode.
 """
 
 from __future__ import annotations
@@ -526,15 +528,15 @@ def package_manifest(package: Package, model: PackageModel) -> dict[str, Any]:
         "name": package.key,
         "version": native_version(model),
         "description": (
-            "Experimental opt-in OpenCode V2 plugin registering the ycc bundle (skills, agents, "
-            "commands, MCP servers, and session instructions) through its setup hook. The "
-            "file-copy install remains the primary path."
+            "OpenCode V2 plugin registering the ycc bundle (skills, agents, ycc:<skill> commands, "
+            "MCP servers, the sensitive-file guard and session instructions) through its setup hook. "
+            "install.sh --target opencode installs it."
         ),
         "type": "module",
         "main": "./index.js",
         "exports": {".": "./index.js"},
         "files": files,
-        "keywords": ["opencode-plugin", "opencode", "experimental", "ycc"],
+        "keywords": ["opencode-plugin", "opencode", "ycc"],
         "author": {"name": author["name"]},
         "license": "MIT",
         "engines": {"opencode": f">={MIN_OPENCODE_VERSION}"},
@@ -552,15 +554,19 @@ def package_manifest(package: Package, model: PackageModel) -> dict[str, Any]:
 def readme_payload(package: Package, model: PackageModel) -> Payload:
     text = f"""# {package.key}
 
-Experimental, opt-in [OpenCode](https://opencode.ai) V2 plugin carrying the ycc bundle
-(version {native_version(model)}). It is unlisted and never the default install: the
-`install.sh --target opencode` file copy remains the primary path.
+OpenCode V2 plugin carrying the ycc bundle (version {native_version(model)}). It is how ycc installs
+into [OpenCode](https://opencode.ai): `install.sh install --target opencode` writes the `plugins` entry
+below into `~/.config/opencode/opencode.json` for you.
 
 Requires OpenCode `>={MIN_OPENCODE_VERSION}` (V2 plugin API; V1 hook plugins are not supported).
 
 ## Enable
 
-Add the package to the V2 `plugins` array in your own `opencode.json`, pinned to an exact release:
+`./install.sh install --target opencode` registers this checkout's package as a directory entry
+(`"file:///abs/path/to/{package_root(package).as_posix()}"`, not the `index.js` file);
+`--mode repo` registers the published release instead. Either replaces any earlier
+`{package.key}` entry in place. By hand, add the package to the V2 `plugins` array of your own
+`opencode.json`, pinned to an exact release:
 
 ```json
 {{ "plugins": ["{package.key}@{native_version(model)}"] }}
@@ -568,10 +574,7 @@ Add the package to the V2 `plugins` array in your own `opencode.json`, pinned to
 
 Pin the version instead of using the bare name. Right after a release, the registry can briefly serve
 stale `latest` metadata, and early placeholder versions of this package (`0.0.0-*`) were never
-loadable plugins. Bump the pin when you upgrade.
-
-A local checkout loads with a directory entry (`"file:///abs/path/to/{package_root(package).as_posix()}"`),
-not the `index.js` file.
+loadable plugins. Bump the pin when you upgrade (`install.sh install --target opencode --mode repo` does).
 
 ## What it registers
 
@@ -586,7 +589,7 @@ not the `index.js` file.
 - **MCP servers**: plain data from `mcp-configs/mcp.json`; `{{env:VAR}}` placeholders resolve from the
   environment at setup time.
 - **Instructions**: `AGENTS.md` pushed through the session `context` hook.
-- **Sensitive-file guard** (`ycc-sensitive-guard/`, the same plugin the file-copy install loads): for the
+- **Sensitive-file guard** (`ycc-sensitive-guard/`): for the
   restricted specialists in its `policy.json` it checks tool calls against the sensitive-file policy,
   filters search results, and provides their only search tools (`ycc_grep`/`ycc_glob`, shown to them as
   `grep`/`glob`) after checking the caller's own permissions.
@@ -596,14 +599,19 @@ not the `index.js` file.
   never loosens or re-prompts a decision. Shell interpreters and build tools in their allowlists still run
   project code, which the guard does not bound.
 
-## Coexistence with the file-copy install
+## Coexistence with local config
 
-Skills, agents, and MCP servers are registered under their source ids. OpenCode applies file-copy config
-(`~/.config/opencode`) after user plugins, so a same-id file-copy skill, agent, or command replaces (agents:
-field-blends over) the package definition; the package's `editor.get` skip only sees registrations loaded
-before it, and MCP config servers genuinely win. Package commands are always `ycc:<skill>` and never collide
-with the bare file-copy `/<skill>` commands or host built-ins such as `/init`. The context hook does not push
-instructions already present in the request.
+Skills, agents, and MCP servers are registered under their source ids, in id-keyed registries. OpenCode
+applies config (`~/.config/opencode`, the project's `.opencode/`) after user plugins, so a same-id
+skill, agent, or command there replaces (agents: field-blends over) the package definition; the package's
+`editor.get` skip only sees registrations loaded before it, and MCP config servers genuinely win. Package
+commands are always `ycc:<skill>` and never collide with bare `/<skill>` commands or host built-ins such as
+`/init`. The context hook does not push instructions already present in the request, so the global
+`AGENTS.md` that `install.sh --target opencode --rules` links is not injected twice.
+
+`install.sh install --target opencode` retires the copies an older ycc installer mirrored into
+`~/.config/opencode/{{skills,agents,commands,shared,ycc-sensitive-guard}}` (byte-identical ones only), so a
+stale copy cannot shadow the package.
 Provider and variant settings (`providers`) are user configuration and are not carried by this package.
 """
     return Payload(text.encode("utf-8"))

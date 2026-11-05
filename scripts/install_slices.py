@@ -65,18 +65,12 @@ SPECS: dict[tuple[str, str], tuple[Unit, ...]] = {
         Unit(".codex-plugin/ycc/skills", ".codex/skills", extra={"_shared": ".codex-plugin/ycc/shared"}),
     ),
     ("codex", "agents"): (Unit(".codex-plugin/agents", ".codex/agents"),),
-    ("opencode", "skills"): (
-        Unit(".opencode-plugin/skills", ".config/opencode/skills"),
-        Unit(".opencode-plugin", ".config/opencode", only=("shared",)),
-    ),
     # Cross-tool ~/.agents/skills (skills only). The shared helpers sit beside
     # skills/ as ~/.agents/ycc-shared; ~/.agents/plugins (Codex) is never listed.
     ("agents", "skills"): (
         Unit(".agents-plugin/skills", ".agents/skills"),
         Unit(".agents-plugin", ".agents", only=("ycc-shared",)),
     ),
-    ("opencode", "agents"): (Unit(".opencode-plugin/agents", ".config/opencode/agents"),),
-    ("opencode", "commands"): (Unit(".opencode-plugin/commands", ".config/opencode/commands"),),
 }
 
 

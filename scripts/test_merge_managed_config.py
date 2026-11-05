@@ -482,19 +482,10 @@ class MergeHelperTestCase(MergeBase):
 
         self.assertEqual(json.loads(destination.read_text())["experimental"]["subagent_depth"], 3)
 
-    def test_opencode_mcp_servers_merge_under_servers_key(self) -> None:
-        source = REPO_ROOT / ".opencode-plugin" / "opencode.json"
-        destination = self.tmp / "opencode.json"
-        self.write_json(destination, {"mcp": {"servers": {"private": {"type": "remote", "url": "https://internal"}}}})
-
-        self.run_merge("opencode-config", source, destination, "mcp")
-
-        servers = json.loads(destination.read_text())["mcp"]["servers"]
-        self.assertIn("private", servers)
-        self.assertIn("github", servers)
-
     def test_opencode_accepts_jsonc_destination(self) -> None:
-        source = REPO_ROOT / ".opencode-plugin" / "opencode.json"
+        source = self.write_json(
+            self.tmp / "src.json", {"mcp": {"servers": {"github": {"type": "remote", "url": "u"}}}}
+        )
         destination = self.tmp / "opencode.json"
         destination.write_text(
             '{\n  // mine\n  "mcp": {\n    "servers": {\n'
@@ -1807,40 +1798,6 @@ class GithubMcpMigrationTestCase(MergeBase):
         self.sync("claude-mcp", source, dest, extra=("--entries", "linear"))
         self.assertEqual(self.load(dest)["mcpServers"]["github"], self.NPM)
         self.assertIn("linear", self.load(dest)["mcpServers"])
-
-    def test_opencode_array_command_migrates(self) -> None:
-        source = self.write_json(
-            self.tmp / "src.json",
-            {
-                "mcp": {
-                    "servers": {
-                        "github": {
-                            "type": "local",
-                            "command": [self.BRIDGE["command"], *self.BRIDGE["args"]],
-                        }
-                    }
-                }
-            },
-        )
-        dest = self.write_json(
-            self.tmp / "dest.json",
-            {
-                "mcp": {
-                    "servers": {
-                        "github": {
-                            "type": "local",
-                            "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
-                            "environment": {"GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_API_TOKEN}", "KEEP": "1"},
-                        }
-                    }
-                }
-            },
-        )
-        self.sync("opencode-config", source, dest)
-        self.assertEqual(
-            self.load(dest)["mcp"]["servers"]["github"],
-            {"type": "local", "command": [self.BRIDGE["command"], *self.BRIDGE["args"]], "environment": {"KEEP": "1"}},
-        )
 
     def test_codex_toml_remote_migrates_and_keeps_tools(self) -> None:
         source = self.tmp / "src.toml"

@@ -50,7 +50,7 @@ class SelectionTest(unittest.TestCase):
         self.assertFalse(any(name.endswith((".toml", ".md")) for name in codex_agents))
         self.assertEqual(codex_agents, sorted(codex_agents))
         self.assertIn("implementor", self.listed("claude", "agents"))
-        for target in ("claude", "cursor", "codex", "opencode", "agents"):
+        for target in ("claude", "cursor", "codex", "agents"):
             skills = self.listed(target, "skills")
             self.assertIn("code-review", skills, target)
             self.assertFalse({"_shared", "shared", "ycc-shared"} & set(skills), target)
@@ -73,12 +73,12 @@ class SelectionTest(unittest.TestCase):
         self.assertEqual(self.units()[str(skills)], before)
 
     def test_selective_install_ships_helpers_and_merges_state(self) -> None:
-        rc, _, _ = self.run_cli("install", "--target", "opencode", "--slice", "skills", "--entries", "code-review")
+        rc, _, _ = self.run_cli("install", "--target", "agents", "--slice", "skills", "--entries", "code-review")
         self.assertEqual(rc, 0)
-        skills = self.home / ".config/opencode/skills"
+        skills = self.home / ".agents/skills"
         self.assertEqual(sorted(p.name for p in skills.iterdir()), ["code-review"])
-        self.assertTrue((self.home / ".config/opencode/shared").is_dir())
-        rc, _, _ = self.run_cli("install", "--target", "opencode", "--slice", "skills", "--entries", "quick-review")
+        self.assertTrue((self.home / ".agents/ycc-shared").is_dir())
+        rc, _, _ = self.run_cli("install", "--target", "agents", "--slice", "skills", "--entries", "quick-review")
         self.assertEqual(rc, 0)
         self.assertEqual(self.units()[str(skills)], ["code-review", "quick-review"])
 
@@ -187,21 +187,14 @@ class SelectionTest(unittest.TestCase):
 
     def test_remove_keeps_helpers_beside_untracked_base_mirror(self) -> None:
         # 'base' rsyncs the whole bundle and records nothing in state.
-        for src, dest in (
-            ("packages/cursor/ycc/skills", ".cursor/skills"),
-            (".opencode-plugin/skills", ".config/opencode/skills"),
-            (".opencode-plugin/shared", ".config/opencode/shared"),
-        ):
-            shutil.copytree(install_slices.REPO_ROOT / src, self.home / dest, symlinks=True)
-        for target, skills, helper in (
-            ("cursor", ".cursor/skills", ".cursor/skills/_shared"),
-            ("opencode", ".config/opencode/skills", ".config/opencode/shared"),
-        ):
-            args = ("remove", "--target", target, "--slice", "skills", "--entries", "go-patterns")
-            self.assertEqual(self.run_cli(*args)[0], 0, target)
-            self.assertFalse((self.home / skills / "go-patterns").exists(), target)
-            self.assertTrue((self.home / helper).is_dir(), f"{target} keeps its shared helpers")
-            self.assertTrue((self.home / skills / "code-review").is_dir(), target)
+        shutil.copytree(
+            install_slices.REPO_ROOT / "packages/cursor/ycc/skills", self.home / ".cursor/skills", symlinks=True
+        )
+        args = ("remove", "--target", "cursor", "--slice", "skills", "--entries", "go-patterns")
+        self.assertEqual(self.run_cli(*args)[0], 0)
+        self.assertFalse((self.home / ".cursor/skills/go-patterns").exists())
+        self.assertTrue((self.home / ".cursor/skills/_shared").is_dir(), "cursor keeps its shared helpers")
+        self.assertTrue((self.home / ".cursor/skills/code-review").is_dir())
 
     def test_dependency_warning_counts_same_run_selection(self) -> None:
         args = ("install", "--target", "claude", "--slice", "skills", "--entries", "plan")
@@ -229,10 +222,9 @@ class SelectionTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, 2)
 
     def test_list_commands_per_target(self) -> None:
-        opencode = self.listed("opencode", "commands")
-        self.assertIn("clean", opencode)
-        self.assertFalse(any(name.endswith(".md") for name in opencode))
-        self.assertEqual(self.listed("cursor", "commands"), opencode)
+        cursor = self.listed("cursor", "commands")
+        self.assertIn("clean", cursor)
+        self.assertFalse(any(name.endswith(".md") for name in cursor))
         self.assertEqual(self.listed("codex", "commands"), [])
 
     def test_cursor_strict_pick_install_and_remove(self) -> None:
@@ -292,33 +284,6 @@ class SelectionTest(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in legacy.iterdir()), ["go-patterns.md", "plan.md"])
         self.assertEqual(self.units()[str(legacy)], ["plan.md"])
 
-    def test_paired_skill_warning(self) -> None:
-        args = ("install", "--target", "opencode", "--slice", "commands", "--entries", "clean")
-        warning = (
-            "[!!]  opencode: command 'clean' needs skill 'clean', not installed"
-            " — add it: ycc sync --target opencode --intent skills --skills clean"
-        )
-        rc, out, _ = self.run_cli(*args)
-        self.assertEqual(rc, 0)
-        self.assertIn(warning, out)
-        self.assertEqual([p.name for p in (self.home / ".config/opencode/commands").iterdir()], ["clean.md"])
-        with patch.dict(os.environ, {"YCC_PENDING_SKILLS": "clean"}):
-            self.assertNotIn("needs skill", self.run_cli(*args)[1], "same-run skills count")
-        with patch.dict(os.environ, {"YCC_PENDING_SKILLS": "*"}):
-            self.assertNotIn("needs skill", self.run_cli(*args)[1], "same-run full skills slice counts")
-        shared = self.home / ".agents/skills/clean"
-        shared.mkdir(parents=True)
-        self.assertNotIn("needs skill", self.run_cli(*args)[1], "~/.agents/skills counts")
-        shutil.rmtree(shared)
-        mirror = self.home / ".config/opencode/skills/clean"
-        shutil.copytree(install_slices.REPO_ROOT / ".opencode-plugin/skills/clean", mirror)
-        self.assertNotIn("needs skill", self.run_cli(*args)[1], "a base mirror counts")
-        shutil.rmtree(mirror)
-        self.assertIn(warning, self.run_cli(*args)[1])
-        skills = ("install", "--target", "opencode", "--slice", "skills", "--entries", "clean")
-        self.assertEqual(self.run_cli(*skills)[0], 0)
-        self.assertNotIn("needs skill", self.run_cli(*args)[1], "a standalone skill counts")
-
     def test_dependency_warning_fires_and_clears(self) -> None:
         args = ("install", "--target", "claude", "--slice", "skills", "--entries", "code-review")
         rc, out, _ = self.run_cli(*args)
@@ -346,10 +311,10 @@ class SelectionTest(unittest.TestCase):
         self.assertNotIn("[!!]", out)
 
     def test_dispatched_only_agent_warning(self) -> None:
-        args = ("install", "--target", "opencode", "--slice", "agents", "--entries", "review-fixer")
+        args = ("install", "--target", "codex", "--slice", "agents", "--entries", "review-fixer")
         rc, out, _ = self.run_cli(*args)
         self.assertEqual(rc, 0)
-        self.assertIn("[!!]  opencode: agent 'review-fixer' is dispatched only by ", out)
+        self.assertIn("[!!]  codex: agent 'review-fixer' is dispatched only by ", out)
         self.assertIn("review-fix", out)
         skills = self.home / ".agents/skills/review-fix"
         skills.mkdir(parents=True)

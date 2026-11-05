@@ -1,54 +1,38 @@
 #!/usr/bin/env bash
 # Verifies that every ~/.config/opencode/<root>/... reference (or its
-# ${HOME}/$HOME spelling) inside
-# the .opencode-plugin/ bundle is either:
-#   (a) installable: <root> is in OPENCODE_BUNDLE_UNITS
-#       (scripts/lib/install/targets/opencode.sh) AND
-#       the backing file exists under .opencode-plugin/<root>/...
-#   (b) intentionally not bundle-shipped (a user-global or runtime path
-#       on the explicit allowlist).
+# ${HOME}/$HOME spelling) inside the .opencode-plugin/ bundle is either:
+#   (a) a packaged unit: <root> is one of the units the npm package
+#       generator (scripts/generate_opencode_package.py) re-roots onto the
+#       package AND the backing file exists under .opencode-plugin/<root>/...
+#   (b) intentionally not shipped (a user-global or runtime path on the
+#       explicit allowlist).
 #
-# This is the regression guard for bugs where the generator emits a
-# reference but the install step never copies the backing dir, or vice
-# versa. Run after the other validate-opencode-*.sh scripts so structural
-# problems surface first.
+# The bundle is the generator input of @yandy-r/ycc-opencode (install.sh
+# --target opencode installs that package), so a dangling reference here is a
+# dangling reference in the package. Run after the other
+# validate-opencode-*.sh scripts so structural problems surface first.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BUNDLE_ROOT="${REPO_ROOT}/.opencode-plugin"
-INSTALL_SCRIPT="${REPO_ROOT}/scripts/lib/install/targets/opencode.sh"
+# Units the package generator ships from the bundle (PACKAGE_UNITS plus the
+# guard directory it copies verbatim).
+PACKAGED_UNITS="skills agents commands shared ycc-sensitive-guard"
 
 if [[ ! -d "${BUNDLE_ROOT}" ]]; then
     echo "validate-opencode-install-coverage: ${BUNDLE_ROOT} not found" >&2
     exit 1
 fi
-if [[ ! -f "${INSTALL_SCRIPT}" ]]; then
-    echo "validate-opencode-install-coverage: ${INSTALL_SCRIPT} not found" >&2
-    exit 1
-fi
 
 echo "== Install-coverage check (~/.config/opencode/... references) =="
-python3 - "${BUNDLE_ROOT}" "${INSTALL_SCRIPT}" <<'PY'
+python3 - "${BUNDLE_ROOT}" "${PACKAGED_UNITS}" <<'PY'
 import json
 import re
 import sys
 from pathlib import Path
 
 bundle_root = Path(sys.argv[1])
-install_script = Path(sys.argv[2])
-
-# Single source of truth: OPENCODE_BUNDLE_UNITS in the opencode target lib
-# (the full list is what 'base' rsyncs; sync and remove both read it).
-text = install_script.read_text(encoding="utf-8")
-match = re.search(r"^OPENCODE_BUNDLE_UNITS=\(([a-z_ -]+)\)$", text, re.M)
-if not match:
-    print(
-        f"FAIL: could not find OPENCODE_BUNDLE_UNITS=(...) in {install_script} — "
-        "validator cannot determine what the installer actually copies.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-MANAGED_UNITS = set(match.group(1).split())
+MANAGED_UNITS = set(sys.argv[2].split())
 
 # Roots intentionally NOT bundle-shipped: user-global directories that
 # the user maintains outside the plugin, or runtime/state paths the
@@ -116,8 +100,8 @@ failed = False
 if unknown_roots:
     failed = True
     print(
-        "FAIL: bundle references roots that are neither in "
-        "OPENCODE_BUNDLE_UNITS nor on the allowlist:",
+        "FAIL: bundle references roots that are neither packaged units "
+        "nor on the allowlist:",
         file=sys.stderr,
     )
     for root, src in sorted(unknown_roots.items()):
@@ -127,10 +111,9 @@ if unknown_roots:
             file=sys.stderr,
         )
     print(
-        "  Fix: either add the dir to OPENCODE_BUNDLE_UNITS in "
-        "scripts/lib/install/targets/opencode.sh "
-        "(if the plugin should ship it) or add it to ALLOWLIST_ROOTS / "
-        "ALLOWLIST_FILES in this validator (if it is user-global).",
+        "  Fix: either add the dir to the package generator (and PACKAGED_UNITS "
+        "in this validator) if the package should ship it, or add it to "
+        "ALLOWLIST_ROOTS / ALLOWLIST_FILES in this validator (if it is user-global).",
         file=sys.stderr,
     )
 
@@ -152,30 +135,28 @@ if missing_targets:
         file=sys.stderr,
     )
 
-# Every bundle directory must be a unit 'base' mirrors, and every local
-# `./<dir>` plugins entry in opencode.json must name one (OpenCode resolves it
-# from ~/.config/opencode and only logs a warning when it is missing).
+# Every bundle directory must be a packaged unit. The settings step merges the
+# bundle's opencode.json `plugins` into the user's config, and the installer
+# ships no local plugin directories any more (the package carries the guard),
+# so a local `./<dir>` entry would point at nothing.
 unshipped_dirs = sorted(
     path.name for path in bundle_root.iterdir() if path.is_dir() and path.name not in MANAGED_UNITS
 )
 if unshipped_dirs:
     failed = True
     print(
-        "FAIL: .opencode-plugin/ directories missing from OPENCODE_BUNDLE_UNITS: " + ", ".join(unshipped_dirs),
+        "FAIL: .opencode-plugin/ directories the package does not ship: " + ", ".join(unshipped_dirs),
         file=sys.stderr,
     )
 
 config = json.loads((bundle_root / "opencode.json").read_text(encoding="utf-8"))
 for entry in config.get("plugins", []):
     spec = entry if isinstance(entry, str) else entry.get("package") if isinstance(entry, dict) else None
-    if not isinstance(spec, str) or not spec.startswith("./"):
-        continue
-    name = spec[2:].rstrip("/")
-    if "/" in name or name not in MANAGED_UNITS or not (bundle_root / name).is_dir():
+    if isinstance(spec, str) and spec.startswith(("./", "../", "/", "file:")):
         failed = True
         print(
-            f"FAIL: opencode.json plugins entry {spec!r} must name a top-level bundle unit "
-            "listed in OPENCODE_BUNDLE_UNITS with a backing .opencode-plugin/ directory",
+            f"FAIL: opencode.json plugins entry {spec!r} is a local path; the installer ships no "
+            "plugin directories (the @yandy-r/ycc-opencode package carries the guard)",
             file=sys.stderr,
         )
 

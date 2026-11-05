@@ -39,7 +39,6 @@ calls="$(grep ' plugin ' "${home}/claude-calls.log" 2>/dev/null)"
 install_must_succeed "${home}" remove --target all --only mcp --dry-run
 out="${INSTALL_OUT}"
 assert_contains "${out}" "would remove" "remove --dry-run lists what it would remove"
-assert_contains "${out}" "${home}/project/opencode.json" "remove --dry-run previews the opencode merge"
 assert_contains "${out}" "ycc-mcp@ycc" "remove --dry-run previews the claude ycc-mcp uninstall"
 assert_home_unchanged "${home}" "${before}" "remove --dry-run"
 if [[ "$(grep ' plugin ' "${home}/claude-calls.log" 2>/dev/null)" == "${calls}" ]]; then ok "remove --dry-run runs no plugin CLI"; else ko "remove --dry-run runs no plugin CLI"; fi
@@ -52,7 +51,7 @@ before="$(tree_digest "${home}")"
 install_must_succeed "${home}" sync --target claude,opencode --intent mcp --global --dry-run
 out="${INSTALL_OUT}"
 assert_contains "${out}" "would run: claude plugin install ycc-mcp@ycc --scope user" "sync --dry-run previews the claude ycc-mcp install"
-assert_contains "${out}" "would set" "sync --dry-run previews the opencode merge"
+assert_contains "${out}" "would add the @yandy-r/ycc-opencode plugins entry" "sync --dry-run previews the opencode package entry"
 assert_home_unchanged "${home}" "${before}" "sync --dry-run"
 assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin" "sync --dry-run runs no plugin CLI"
 
@@ -70,7 +69,8 @@ install_must_succeed "${home}" sync --target codex,opencode,cursor,agents --inte
 out="${INSTALL_OUT}"
 assert_contains "${out}" "cursor: settings have no project scope" "cursor default settings dry-run explains the project-scope skip"
 assert_not_contains "${out}" "dry-run: cursor settings step has no preview" "skipped cursor settings does not also report a missing preview"
-for pair in "codex base" "opencode skills" "agents skills"; do
+assert_contains "${out}" "would add the @yandy-r/ycc-opencode plugins entry" "sync --dry-run previews opencode skills as the package entry"
+for pair in "codex base" "agents skills"; do
     assert_contains "${out}" "dry-run: ${pair% *} ${pair#* } step has no preview" "sync --dry-run skips ${pair}"
 done
 assert_contains "${out}" "would run: agent plugin marketplace add" "sync --dry-run previews the cursor marketplace step"
@@ -180,14 +180,7 @@ for target in claude cursor codex opencode; do
     else
         assert_contains "${INSTALL_OUT}" "would remove" "${target} base previews owned entries"
         if [[ "${target}" == opencode ]]; then
-            mirror="${home}/.config/opencode"
-            units="skills agents commands shared"
-            for unit in ${units}; do
-                for entry in "${mirror}/${unit}"/* "${mirror}/${unit}"/.[!.]*; do
-                    [[ -e "${entry}" || -L "${entry}" ]] || continue
-                    assert_contains "${INSTALL_OUT}" "would remove ${entry}" "${target} previews ${unit}/$(basename "${entry}")"
-                done
-            done
+            assert_contains "${INSTALL_OUT}" "would remove the file://${REPO_ROOT}/packages/opencode/ycc-opencode plugins entry" "opencode base previews the package entry removal"
         fi
     fi
     assert_home_unchanged "${home}" "${before}" "${target} base removal preview"
@@ -219,18 +212,17 @@ assert_contains "${INSTALL_OUT}" "would unlink ${home}/.claude/CLAUDE.md" "combi
 assert_contains "${INSTALL_OUT}" "would run: claude plugin uninstall ycc-hooks@ycc --scope project" "combined Claude removal lists project hooks removal"
 assert_home_unchanged "${home}" "${before}" "exact Claude removal preview"
 
-# Settings can also carry opt-in plugin companions and the guard directory.
+# Settings can also carry opt-in plugin companions.
 home="$(new_home)"
 before="$(tree_digest "${home}")"
 install_must_succeed "${home}" sync --target opencode --intent plugins --plugins oh-my-opencode-slim --global --dry-run
 assert_contains "${INSTALL_OUT}" "would copy" "catalog preview lists companion copy"
 assert_home_unchanged "${home}" "${before}" "catalog sync preview"
-install_must_succeed "${home}" sync --target opencode --intent plugins --plugins ./ycc-sensitive-guard,oh-my-opencode-slim --global
+install_must_succeed "${home}" sync --target opencode --intent plugins --plugins oh-my-opencode-slim --global
 before="$(tree_digest "${home}")"
 install_must_succeed "${home}" remove --target opencode --intent plugins --global --dry-run
 assert_contains "${INSTALL_OUT}" "would remove ${home}/.config/opencode/oh-my-opencode-slim.json" "catalog removal previews companion"
-assert_contains "${INSTALL_OUT}" "would remove ${home}/.config/opencode/ycc-sensitive-guard/index.js" "bundle removal previews guard tree"
-assert_home_unchanged "${home}" "${before}" "catalog and guard removal preview"
+assert_home_unchanged "${home}" "${before}" "catalog removal preview"
 
 echo
 echo "== install.sh --target all --only <step>: targets without the step sit it out =="
@@ -238,7 +230,8 @@ echo "== install.sh --target all --only <step>: targets without the step sit it 
 home="$(new_home)"
 install_must_succeed "${home}" install --target all --only mcp
 assert_contains "${INSTALL_OUT}" "step 'mcp' is not supported by target 'agents' — skipping" "--target all --only mcp skips agents"
-if [[ -f "${home}/project/opencode.json" ]]; then ok "--target all --only mcp still runs mcp elsewhere"; else ko "--target all --only mcp still runs mcp elsewhere"; fi
+assert_contains "${INSTALL_OUT}" "step 'mcp' is not supported by target 'opencode' — skipping" "--target all --only mcp skips opencode (MCP ships in its package)"
+assert_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "plugin install ycc-mcp@ycc" "--target all --only mcp still runs mcp elsewhere"
 if out="$(run_install "${home}" install --target agents --only mcp)"; then
     ko "an explicit target still rejects a step it lacks"
 else

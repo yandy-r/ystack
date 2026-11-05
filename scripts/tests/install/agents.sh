@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # install.sh tests — agents: ~/.agents/skills install/remove, foreign entries
-# survive, plugins/ untouched, duplicate hint, --skills-home choice.
+# survive, plugins/ untouched, OMP dedupe hint, opencode leaves ~/.agents alone.
 #
 # Runs alone (bash scripts/tests/install/agents.sh) or from scripts/test-install-sync.sh.
 # shellcheck source=scripts/tests/install/lib.sh
@@ -40,13 +40,13 @@ if [[ -f "${home}/.agents/skills/my-own/SKILL.md" ]]; then ok "agents remove kee
 if [[ -f "${home}/.agents/plugins/ycc/plugin.json" ]]; then ok "agents remove leaves ~/.agents/plugins untouched"; else ko "agents remove leaves ~/.agents/plugins untouched"; fi
 
 echo
-echo "== install.sh install: agents duplicate hint =="
+echo "== install.sh install: agents prints no stale duplicate hint =="
 
 home="$(new_home)"
 mkdir -p "${home}/.config/opencode/skills/backport"
 install_must_succeed "${home}" install --target agents
 out="${INSTALL_OUT}"
-assert_contains "${out}" "may list them twice" "agents install warns when opencode native skills already hold ycc entries"
+assert_not_contains "${out}" "may list them twice" "agents install no longer warns about opencode native skills"
 assert_not_contains "${out}" "OMP also loads these skills" "agents install prints no OMP hint when omp ycc is not installed"
 
 echo
@@ -58,59 +58,19 @@ install_must_succeed "${home}" install --target agents
 assert_contains "${INSTALL_OUT}" "[!!] OMP also loads these skills; run ./install.sh install --target omp --only dedupe to hide the ~/.agents copies in OMP" "agents after omp prints W5"
 
 echo
-echo "== install.sh: --skills-home agents consolidates shared skills =="
-
-home="$(new_home)"
-install_must_succeed "${home}" install --target opencode --only base --skills-home agents
-if [[ -f "${home}/.agents/skills/backport/SKILL.md" ]]; then ok "consolidated: skills land in ~/.agents/skills"; else ko "consolidated: skills land in ~/.agents/skills"; fi
-if [[ ! -d "${home}/.config/opencode/skills" ]]; then ok "consolidated: no skills under ~/.config/opencode"; else ko "consolidated: no skills under ~/.config/opencode"; fi
-if [[ ! -d "${home}/.config/opencode/shared" ]]; then ok "consolidated: no shared/ under ~/.config/opencode"; else ko "consolidated: no shared/ under ~/.config/opencode"; fi
-if [[ -d "${home}/.config/opencode/agents" && -d "${home}/.config/opencode/commands" ]]; then
-    ok "consolidated: opencode keeps its agents + commands"
-else
-    ko "consolidated: opencode keeps its agents + commands" "$(ls "${home}/.config/opencode" 2>/dev/null)"
-fi
-
-echo
-echo "== install.sh: --skills-home native keeps per-tool skills =="
-
-home="$(new_home)"
-install_must_succeed "${home}" install --target opencode --only base --skills-home native
-out="${INSTALL_OUT}"
-if [[ -d "${home}/.config/opencode/skills" ]]; then ok "native: opencode skills land in ~/.config/opencode/skills"; else ko "native: opencode skills land in ~/.config/opencode/skills"; fi
-if [[ ! -e "${home}/.agents/skills" ]]; then ok "native: nothing under ~/.agents/skills"; else ko "native: nothing under ~/.agents/skills"; fi
-assert_not_contains "${out}" "Recommended:" "native: no consolidation prompt text"
-
-echo
-echo "== install.sh: non-TTY overlap warning =="
+echo "== install.sh: agents and opencode no longer overlap =="
 
 home="$(new_home)"
 install_must_succeed "${home}" install --target agents,opencode --only base
 out="${INSTALL_OUT}"
-assert_contains "${out}" "opencode will duplicate the ycc skills in ~/.agents/skills" "non-TTY overlap warning names opencode"
-assert_contains "${out}" "pass --skills-home agents to consolidate" "non-TTY overlap warning suggests --skills-home agents"
-
-echo
-echo "== install.sh: native-package targets stay out of the overlap check =="
+assert_not_contains "${out}" "duplicate" "agents + opencode prints no overlap warning"
+assert_not_contains "${out}" "--skills-home" "no --skills-home suggestion"
+if [[ -f "${home}/.agents/skills/backport/SKILL.md" ]]; then ok "agents skills still land in ~/.agents/skills"; else ko "agents skills still land in ~/.agents/skills"; fi
+if [[ ! -e "${home}/.config/opencode/skills" ]]; then ok "opencode copies no skills"; else ko "opencode copies no skills"; fi
 
 home="$(new_home)"
-install_must_succeed "${home}" install --target agents,cursor,codex --only base
-assert_not_contains "${INSTALL_OUT}" "duplicate" "native-package targets ship no skill copies to overlap"
-
-echo
-echo "== contract: every target declares ~/.agents/skills readership =="
-
-(
-    source_install_libs
-    for t in "${ALL_TARGETS[@]}"; do
-        declare -F "${t}_reads_agents_skills" >/dev/null || { echo "missing ${t}_reads_agents_skills"; continue; }
-        if [[ "${t}" != agents ]] && "${t}_reads_agents_skills"; then
-            declare -F "${t}_native_skills_dirs" >/dev/null || echo "missing ${t}_native_skills_dirs"
-        fi
-    done
-) > "${SANDBOX_ROOT}/contract.out" 2>&1
-contract="$(cat "${SANDBOX_ROOT}/contract.out")"
-if [[ -z "${contract}" ]]; then ok "every target declares reads_agents_skills (+ native_skills_dirs)"; else ko "every target declares reads_agents_skills (+ native_skills_dirs)" "${contract}"; fi
+out="$(run_install "${home}" install --target opencode --only base --skills-home agents)"
+assert_contains "${out}" "Unknown option: --skills-home" "--skills-home is gone"
 
 echo
 echo "== harness: installer failures surface with their own diagnostic =="
