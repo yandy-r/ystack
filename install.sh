@@ -191,8 +191,8 @@ Remove ('remove' subcommand):
                                 nothing ycc-owned or foreign needs them, and
                                 at --project the empty .omp/plugins files
                                 and dirs ycc's project install created.
-                                claude, codex, cursor and omp then retire
-                                the legacy copies an older installer wrote.
+                                claude, codex and cursor then retire the
+                                legacy copies an older installer wrote.
     skills / agents / commands  opencode/agents/codex agents: the standalone
                                 entries ycc installed (or that are still
                                 identical to the bundle); never your own.

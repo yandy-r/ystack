@@ -29,7 +29,20 @@ cursor_valid_steps() { echo "base,settings"; }
 cursor_dry_run_steps() { cursor_valid_steps; }
 
 # cursor_intent_steps <intent> — steps <intent> maps to; empty means no-op.
+# On install/sync every content intent runs the one marketplace step (the
+# /plugins hint names its package). On remove only 'base' drops the
+# marketplace: removing it uninstalls every ycc package, so a content intent
+# just says which package to uninstall in /plugins and removes nothing.
 cursor_intent_steps() {
+    if [[ "${COMMAND:-}" == "remove" ]]; then
+        case "$1" in
+            base) echo "base" ;;
+            settings) echo "settings" ;;
+            # remove_cursor_target prints which package to uninstall in /plugins.
+            *) echo "" ;;
+        esac
+        return 0
+    fi
     case "$1" in
         # Every ycc component ships as a native package: one marketplace step.
         base|skills|agents|commands|rules|mcp|hooks) echo "base" ;;
@@ -38,6 +51,25 @@ cursor_intent_steps() {
         plugins|mods) echo "" ;;
         *) echo "" ;;
     esac
+}
+
+# cursor_remove_package_notices — on remove, one notice naming the native
+# packages the requested content intents map to (uninstalled in /plugins).
+cursor_remove_package_notices() {
+    local intent package
+    local -a packages=()
+    for intent in "${INTENTS[@]:-}"; do
+        case "${intent}" in
+            skills|agents|commands) package="ycc" ;;
+            rules) package="ycc-rules" ;;
+            mcp) package="ycc-mcp" ;;
+            hooks) package="ycc-hooks" ;;
+            *) continue ;;
+        esac
+        [[ " ${packages[*]:-} " == *" ${package} "* ]] || packages+=("${package}")
+    done
+    [[ ${#packages[@]} -gt 0 ]] || return 0
+    info "cursor: uninstall ${packages[*]} from Cursor's /plugins; this removes nothing (remove --intent base drops the whole ycc marketplace)"
 }
 
 # cursor_config_groups — default managed config groups for cli-config.json.
@@ -197,7 +229,9 @@ sync_cursor_target() {
 remove_cursor_target() {
     validate_only_steps "cursor"
     command -v python3 >/dev/null 2>&1 || { err "python3 is required but not found"; exit 1; }
-    local ran=0
+    local ran=0 notice
+    notice="$(cursor_remove_package_notices)"
+    [[ -n "${notice}" ]] && { printf '%s\n' "${notice}"; ran=1; }
     if step_enabled settings; then
         printf '\n%sCursor: remove managed CLI settings%s\n' "${BOLD}" "${NC}"
         remove_settings "cursor-cli" "${CURSOR_CLI_CONFIG_SRC}" "${HOME}/.cursor/cli-config.json" "settings"

@@ -196,6 +196,14 @@ AGENT_STUB_MARKETPLACES='[{"name":"ycc","source":"https://github.com/yandy-r/yst
     install_must_succeed "${home}" remove --target cursor --intent base
 assert_contains "$(cat "${home}/claude-calls.log")" "agent plugin marketplace remove ycc" "cursor remove drops the registered marketplace"
 
+# A content intent on remove never drops the marketplace (that would uninstall every package).
+home="$(new_home)"
+AGENT_STUB_MARKETPLACES='[{"name":"ycc","source":"https://github.com/yandy-r/ystack"}]' \
+    install_must_succeed "${home}" remove --target cursor --intent hooks,mcp
+assert_not_contains "$(cat "${home}/claude-calls.log" 2>/dev/null)" "agent plugin marketplace remove" "cursor remove --intent hooks,mcp keeps the marketplace"
+assert_contains "${INSTALL_OUT}" "uninstall ycc-hooks ycc-mcp from Cursor's /plugins" "cursor remove --intent hooks,mcp names the packages to uninstall in /plugins"
+assert_not_contains "${INSTALL_OUT}" "ran no steps" "cursor remove --intent hooks reports the notice as its action"
+
 home="$(new_home)"
 mkdir -p "${home}/.cursor/agents"
 cp -R "${REPO_ROOT}/packages/cursor/ycc/agents/." "${home}/.cursor/agents/"

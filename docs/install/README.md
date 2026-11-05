@@ -68,7 +68,8 @@ project scope. Cursor and OMP settings, and Codex MCP, are global only. See
 Older ycc releases installed Claude, Codex, Cursor and OMP through copied files,
 merged MCP and hook config, and links. A successful native install on those
 targets retires that legacy state automatically, in the same `install` or
-`sync` run; `remove` runs the same cleanup. There is no separate command to run.
+`sync` run; `remove` of the `base` step runs the same cleanup on Claude, Codex
+and Cursor. There is no separate command to run.
 
 The cleanup removes only entries it can prove the installer wrote: a recorded
 ownership hash, an entry recorded in `~/.config/ycc/installed-units.json`, a
@@ -96,8 +97,9 @@ so install `ycc-hooks@ycc` at user scope (`--global`) to retire the legacy
 global hook.
 
 On Codex, the cleanup runs only when this checkout carries an eligible native
-`ycc` catalog; otherwise the run stops with `Codex native gate failed: …` and
-changes nothing. A shallow clone that lacks the commit of an older snapshot
+`ycc` catalog; otherwise it prints `Codex native gate failed: …`, leaves the
+legacy files intact, and the installer warns `legacy cleanup skipped` without
+failing the run. A shallow clone that lacks the commit of an older snapshot
 keeps that snapshot and prints `git fetch --unshallow`.
 
 ### `ycc` Command On PATH
@@ -551,8 +553,9 @@ taken back:
 | `skills`, `agents`, `commands` | opencode, agents, and Codex custom agents: the standalone entries ycc recorded (or that are still identical to the bundle). Never your own entries without `--force`.                                                                                                                                                                                                                                                             |
 | `mods` (claude)                | Uninstalls each mod and the `ycc-mods` marketplace. With `--mods`, only the named mods; the marketplace stays while another ycc mod is still listed in `enabledPlugins`.                                                                                                                                                                                                                                                          |
 
-- `remove` on the `base` step of claude, codex, cursor and omp also runs the
-  [legacy cleanup](#automatic-legacy-cleanup) for that target.
+- `remove` on the `base` step of claude, codex and cursor also runs the
+  [legacy cleanup](#automatic-legacy-cleanup) for that target (omp retires its
+  legacy state on install, before the native packages go in).
 - A managed value you edited is kept with a warning; `--force` removes it.
 - `--purge-cache` is valid only with `remove`. It deletes the
   `${XDG_CACHE_HOME:-~/.cache}/opencode` `npm/`, `packages/` and `node_modules/`

@@ -597,9 +597,9 @@ except `~/.agents`. Widening it changes what wins:
 - **Claude skills outrank ycc.** With `claude`, `*` or `all`, standalone
   skills in `~/.claude/skills` load at priority 80, above the OMP package, so
   they take the bare names and the package copy shows as `ycc/<name>` (W4).
-  Remove the Claude copies with
-  `./install.sh remove --target claude --intent skills`, or drop `claude`
-  from `enabledProviders`. ycc writes nothing for this case.
+  Retire the ycc-owned Claude copies with
+  `./install.sh sync --target claude --intent base` (its legacy cleanup), or
+  drop `claude` from `enabledProviders`. ycc writes nothing for this case.
 - **Codex and opencode aliases.** `codex/<name>` and `opencode/<name>`
   aliases appear; `dedupe` hides the ones ycc installed. opencode commands
   also load under their bare names next to `/ycc:<skill>`.
