@@ -297,7 +297,7 @@ def remove(path: Path, force: bool, dry_run: bool) -> int:
     for item in plugins:
         if not is_ycc_package(item):
             kept.append(item)
-        elif value_hash(item) in owned or item in exact or force:
+        elif value_hash(item) in owned or (isinstance(item, str) and item in exact) or force:
             taken.append(item)
         else:
             kept.append(item)

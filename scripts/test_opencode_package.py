@@ -147,6 +147,16 @@ class PackageEntryTest(unittest.TestCase):
         self.assertEqual(self.run_cli("remove", "--force")[0], 0)
         self.assertFalse(self.dest.exists())
 
+    def test_remove_keeps_an_unowned_object_entry_without_force(self) -> None:
+        item = {"package": "@yandy-r/ycc-opencode@6.3.0", "options": {"x": 1}}
+        self.dest.write_text(json.dumps({"plugins": [item]}), encoding="utf-8")
+        rc, out = self.run_cli("remove")
+        self.assertEqual(rc, 0)
+        self.assertIn("not written by ycc", out)
+        self.assertEqual(self.plugins(), [item])
+        self.assertEqual(self.run_cli("remove", "--force")[0], 0)
+        self.assertFalse(self.dest.exists())
+
     def test_dry_run_writes_nothing(self) -> None:
         rc, out = self.run_cli("sync", "--dry-run")
         self.assertEqual(rc, 0)
