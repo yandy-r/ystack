@@ -170,7 +170,15 @@ cp -R "${REPO_ROOT}/.opencode-plugin/skills/plan" "${oc}/skills/plan"
 printf '\nmy edit\n' >> "${oc}/skills/plan/SKILL.md"
 cp "${REPO_ROOT}/.opencode-plugin/agents/implementor.md" "${oc}/agents/implementor.md"
 # Owned MCP servers: merged by the old installer (recorded state); one foreign server.
-git -C "${REPO_ROOT}" show HEAD:.opencode-plugin/opencode.json > "${home}/old-opencode.json"
+# The fixture is the newest committed bundle config that still shipped an mcp block.
+old_rev=""
+for rev in $(git -C "${REPO_ROOT}" log --format=%H -- .opencode-plugin/opencode.json); do
+    if git -C "${REPO_ROOT}" show "${rev}:.opencode-plugin/opencode.json" | grep -q '"mcp"'; then
+        old_rev="${rev}"
+        break
+    fi
+done
+git -C "${REPO_ROOT}" show "${old_rev}:.opencode-plugin/opencode.json" > "${home}/old-opencode.json"
 HOME="${home}" YCC_MANAGED_CONFIG_STATE="${home}/.config/ycc/managed-config-state.json" \
     python3 "${REPO_ROOT}/scripts/merge_managed_config.py" --profile opencode-config \
     --source "${home}/old-opencode.json" --destination "${oc}/opencode.json" --groups mcp >/dev/null
