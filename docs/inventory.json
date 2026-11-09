@@ -81,6 +81,10 @@
       "description": "Initializes project AI-agent docs and workspace conventions. Use when generating agent rules docs, adding GitHub templates, or bootstrapping project rules."
     },
     {
+      "name": "mcp-parity",
+      "description": "Researches a repo and creates or syncs a Linear project, milestones, and prioritized issues for one-to-one MCP parity with the app. Use when planning an MCP server for an API or app, or when re-syncing MCP issues after new features."
+    },
+    {
       "name": "orchestrate",
       "description": "Coordinates specialized agents in dependency-resolved batches. Use when delegating a complex task, splitting independent implementation work, or coordinating multiple specialists."
     },
@@ -277,6 +281,10 @@
     {
       "name": "init",
       "description": "Initializes project AI-agent docs and workspace conventions. Use when generating agent rules docs, adding GitHub templates, or bootstrapping project rules."
+    },
+    {
+      "name": "mcp-parity",
+      "description": "Researches a repo and creates or syncs a Linear project, milestones, and prioritized issues for one-to-one MCP parity with the app. Use when planning an MCP server for an API or app, or when re-syncing MCP issues after new features."
     },
     {
       "name": "orchestrate",
@@ -618,8 +626,8 @@
     }
   ],
   "counts": {
-    "skills": 49,
-    "commands": 49,
+    "skills": 50,
+    "commands": 50,
     "agents": 55
   }
 }

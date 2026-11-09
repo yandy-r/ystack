@@ -256,6 +256,8 @@ run_target() {
             "${REPO_ROOT}/scripts/validate-artifact-store.sh" || fail "validate-artifact-store.sh"
             echo "== validate: Linear key collection regressions =="
             "${REPO_ROOT}/scripts/test-collect-linear-keys.sh" || fail "test-collect-linear-keys.sh"
+            echo "== validate: mcp-parity scripts =="
+            python3 "${REPO_ROOT}/scripts/test_mcp_parity_diff.py" || fail "test_mcp_parity_diff.py"
             echo "== validate: implementation plan scripts =="
             "${REPO_ROOT}/scripts/test-implement-plan-scripts.sh" || fail "test-implement-plan-scripts.sh"
             echo "== validate: artifact body regressions =="

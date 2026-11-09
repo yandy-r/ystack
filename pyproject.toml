@@ -67,4 +67,6 @@ files = [
   "scripts/slice_deps.py",
   "scripts/slice_carriers.py",
   "scripts/test_install_slices_select.py",
+  "ycc/skills/mcp-parity/scripts/capability_diff.py",
+  "scripts/test_mcp_parity_diff.py",
 ]
