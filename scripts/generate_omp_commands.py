@@ -139,6 +139,7 @@ OMP_BUILTIN_COMMANDS: frozenset[str] = frozenset(
         "tools",
         "trace",
         "tree",
+        "unpin",
         "usage",
         "vibe",
         "worktree",
