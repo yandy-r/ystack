@@ -6,14 +6,14 @@
     "name": "yandy-r"
   },
   "metadata": {
-    "version": "6.3.1",
+    "version": "6.4.0",
     "repository": "https://github.com/yandy-r/ystack"
   },
   "plugins": [
     {
       "name": "ycc",
       "description": "Yandy's Claude Code plugin bundle: planning, implementation, git workflow, research, docs, orchestration, and project utilities — all under the ycc: namespace.",
-      "version": "6.3.1",
+      "version": "6.4.0",
       "author": {
         "name": "yandy-r"
       },
@@ -22,7 +22,7 @@
     {
       "name": "ycc-mcp",
       "description": "MCP server connections for the ycc skills and agents.",
-      "version": "6.3.1",
+      "version": "6.4.0",
       "author": {
         "name": "yandy-r"
       },
@@ -31,7 +31,7 @@
     {
       "name": "ycc-hooks",
       "description": "Lifecycle hooks for ycc.",
-      "version": "6.3.1",
+      "version": "6.4.0",
       "author": {
         "name": "yandy-r"
       },
@@ -40,7 +40,7 @@
     {
       "name": "ycc-all",
       "description": "Installs ycc, ycc-mcp, and ycc-hooks together.",
-      "version": "6.3.1",
+      "version": "6.4.0",
       "author": {
         "name": "yandy-r"
       },
