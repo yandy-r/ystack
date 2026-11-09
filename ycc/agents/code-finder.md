@@ -7,7 +7,7 @@ tools:
   - Glob
   - WebFetch
   - WebSearch
-model: sonnet
+model: haiku
 color: yellow
 ---
 

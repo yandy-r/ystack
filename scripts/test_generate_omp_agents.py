@@ -276,7 +276,7 @@ class FailureTest(FixtureTestCase):
         self.assert_fails(text, "tools")
 
     def test_unknown_model(self) -> None:
-        for value in ("haiku", "'@slow'", "true"):
+        for value in ("unmapped-alias", "'@slow'", "true"):
             with self.subTest(value=value):
                 self.assert_fails(DEMO_AGENT.replace("model: opus", f"model: {value}"), "model")
 
@@ -298,7 +298,7 @@ class FailureTest(FixtureTestCase):
         self.assert_fails(DEMO_AGENT.replace("description: Demo agent used by ycc:demo.\n", ""), "description")
 
     def test_no_output_on_failure(self) -> None:
-        write(self.agents / "bad.md", DEMO_AGENT.replace("model: opus", "model: haiku"))
+        write(self.agents / "bad.md", DEMO_AGENT.replace("model: opus", "model: unmapped-alias"))
         with self.assertRaises(OmpGenerationError):
             self.generate()
         self.assertFalse(self.dest.exists())

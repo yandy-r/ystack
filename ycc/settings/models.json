@@ -134,6 +134,7 @@
       "agentModels": {
         "opus": "@slow",
         "sonnet": "@task",
+        "haiku": "@task",
         "inherit": null
       }
     }

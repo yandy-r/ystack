@@ -45,7 +45,9 @@ class OmpModelPolicyTest(unittest.TestCase):
 
     def test_p1_repo_models_and_snippet_are_valid(self) -> None:
         self.assertEqual(self.errors(), [])
-        self.assertEqual(policy.agent_model_map(), {"opus": "@slow", "sonnet": "@task", "inherit": None})
+        self.assertEqual(
+            policy.agent_model_map(), {"opus": "@slow", "sonnet": "@task", "haiku": "@task", "inherit": None}
+        )
 
     def test_p2_unknown_role_rejected(self) -> None:
         omp = copy.deepcopy(self.omp)
