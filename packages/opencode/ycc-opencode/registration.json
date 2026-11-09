@@ -134,6 +134,12 @@
       "path": "skills/init/SKILL.md"
     },
     {
+      "id": "mcp-parity",
+      "name": "mcp-parity",
+      "description": "Researches a repo and creates or syncs a Linear project, milestones, and prioritized issues for one-to-one MCP parity with the app. Use when planning an MCP server for an API or app, or when re-syncing MCP issues after new features.",
+      "path": "skills/mcp-parity/SKILL.md"
+    },
+    {
       "id": "orchestrate",
       "name": "orchestrate",
       "description": "Coordinates specialized agents in dependency-resolved batches. Use when delegating a complex task, splitting independent implementation work, or coordinating multiple specialists.",
@@ -7050,6 +7056,11 @@
       "name": "ycc:init",
       "description": "Initializes project AI-agent docs and workspace conventions. Use when generating agent rules docs, adding GitHub templates, or bootstrapping project rules.",
       "template": "Use the skill tool to load the `init` skill, then follow its instructions with these arguments:\n\n$ARGUMENTS"
+    },
+    {
+      "name": "ycc:mcp-parity",
+      "description": "Researches a repo and creates or syncs a Linear project, milestones, and prioritized issues for one-to-one MCP parity with the app. Use when planning an MCP server for an API or app, or when re-syncing MCP issues after new features.",
+      "template": "Use the skill tool to load the `mcp-parity` skill, then follow its instructions with these arguments:\n\n$ARGUMENTS"
     },
     {
       "name": "ycc:orchestrate",
