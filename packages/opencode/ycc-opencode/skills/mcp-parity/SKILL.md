@@ -7,8 +7,6 @@ description: Researches a repo and creates or syncs a Linear project, milestones
 
 # MCP Parity Planner
 
-> **OpenCode V2 compatibility:** `--team` is unsupported. If it is supplied, abort before setup or dispatch and ask the caller to rerun without it. This target uses native standalone `subagent` calls only.
-
 Research what an API, app, or CLI can do and plan an MCP (Model Context Protocol)
 capability that mirrors it one-to-one. The output is Linear only: one Project, a
 fixed set of milestones, and one prioritized issue per capability, plus a
@@ -28,6 +26,7 @@ capabilities get cancel or removal work. Unchanged capabilities are not touched.
 - `--publish`: skip the Phase 3 confirmation (needed for headless or scheduled runs).
   It never skips the mass-removal guard.
 - `--project REF`: an existing Linear Project (URL, id, or name) to sync. Skips lookup.
+- `--owner-team TEAM`: Linear team key or name for a new Project.
 - `--path DIR`: sub-directory to inventory (monorepo package). Default: the git toplevel.
 - `--refresh-foundation`: on a sync run, re-research foundation and create only
   foundation keys the manifest does not have yet.

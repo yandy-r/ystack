@@ -186,6 +186,8 @@ class DiffApplyTest(unittest.TestCase):
         self.assertEqual(cd.operation_key("get  /users/:id/"), "GET /users/{}")
         self.assertEqual(cd.operation_key("GET /users/{userId}"), "GET /users/{}")
         self.assertEqual(cd.operation_key("Query.users"), "Query.users")
+        self.assertNotEqual(cd.operation_key("POST /v1/things:cancel"), cd.operation_key("POST /v1/things:archive"))
+        self.assertEqual(cd.operation_key("POST /v1/things/:id:cancel"), "POST /v1/things/{}:cancel")
         caps = [cap("u.get", "GET /users/{id}"), cap("u.del", "DELETE /users/{id}"), cap("o.list", "GET /orders")]
         covered = [
             {"operation": "GET /users/:id", "mcpName": "get_user", "inputsMatch": True},

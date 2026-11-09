@@ -48,19 +48,26 @@ FILES="$(list_files)"
 emit() { printf '%s\t%s\n' "$1" "$2"; }
 
 # Language markers (root and up to two directories deep, for monorepos).
-declare -A LANG_MARKERS=(
-  [package.json]=node [pyproject.toml]=python [requirements.txt]=python [setup.py]=python
-  [go.mod]=go [Cargo.toml]=rust [pom.xml]=java [build.gradle]=java [build.gradle.kts]=java
-  [Gemfile]=ruby [composer.json]=php
-)
+# A function, not an associative array: macOS ships Bash 3.2.
+lang_for_base() {
+  case "$1" in
+    package.json) echo node ;;
+    pyproject.toml | requirements.txt | setup.py) echo python ;;
+    go.mod) echo go ;;
+    Cargo.toml) echo rust ;;
+    pom.xml | build.gradle | build.gradle.kts) echo java ;;
+    Gemfile) echo ruby ;;
+    composer.json) echo php ;;
+    *.csproj) echo dotnet ;;
+  esac
+}
 seen_langs=""
 while IFS= read -r f; do
   [[ -n "$f" ]] || continue
   base="${f##*/}"
   depth="${f//[^\/]/}"
   ((${#depth} <= 2)) || continue
-  lang="${LANG_MARKERS[$base]:-}"
-  [[ -z "$lang" && "$base" == *.csproj ]] && lang=dotnet
+  lang="$(lang_for_base "$base")"
   if [[ -n "$lang" && " $seen_langs " != *" $lang "* ]]; then
     seen_langs="$seen_langs $lang"
     emit LANG "$lang"

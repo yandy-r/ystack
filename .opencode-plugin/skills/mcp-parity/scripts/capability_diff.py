@@ -111,7 +111,8 @@ def validate_inventory(data: Any) -> list[dict[str, Any]]:
     return caps
 
 
-PARAM_RE = re.compile(r"\{[^}/]*\}|:[A-Za-z_][A-Za-z0-9_]*|<[^>/]*>|\[[^\]/]*\]")
+# `:name` only at a segment start, so custom verbs (`/things:cancel`) stay distinct.
+PARAM_RE = re.compile(r"\{[^}/]*\}|(?<=/):[A-Za-z_][A-Za-z0-9_]*|<[^>/]*>|\[[^\]/]*\]")
 
 
 def operation_key(operation: str) -> str:
@@ -426,7 +427,7 @@ def render_document(manifest: dict[str, Any]) -> str:
     for cid, entry in caps.items():
         op = str(entry.get("operation", "")).replace("|", "\\|")
         lines.append(f"| `{cid}` | {op} | {entry.get('status', '')} | {entry.get('issue', '')} |")
-    lines += ["", MANIFEST_HEADING, "", "```json", json.dumps(manifest, indent=2), "```", ""]
+    lines += ["", MANIFEST_HEADING, "", "```json", json.dumps(manifest, indent=2, ensure_ascii=False), "```", ""]
     return "\n".join(lines)
 
 

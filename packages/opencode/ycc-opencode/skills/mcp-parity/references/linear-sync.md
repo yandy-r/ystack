@@ -41,6 +41,17 @@ Match marker lines exactly: the whole line, after trimming, equals
 `Capability-ID: {id}`. A substring match confuses `users.get` with
 `users.get.by-email`.
 
+Linear rewrites some markdown on save, so never compare stored bodies byte for
+byte:
+
+- A `+++ Agent notes` collapsible comes back as `>>> Agent notes`; marker lines stay
+  intact on their own lines.
+- Issue keys in Document tables come back as `<issue … label="KEY" />` mentions. Only
+  the fenced `json` block under `## Manifest data` is authoritative, and it
+  round-trips unchanged.
+- `list_issues` `query` search is fuzzy: it returns near matches (`note.create` for
+  `note.update`). Always read each hit's description and apply the exact-line rule.
+
 ## Lookup
 
 Stop at the first hit:
@@ -66,6 +77,7 @@ body as `$WORKDIR/manifest.md` and run
 `capability_diff.py extract --doc "$WORKDIR/manifest.md"`. On success that file is
 `MANIFEST_FILE`. A missing Document or a failed extract → Rebuild, and report why.
 
+Linear team for create mode: `--owner-team`, else `ARTIFACT_LINEAR_TEAM`, else the sole team from
 `list_teams`; several teams → ask.
 
 ## Rebuild

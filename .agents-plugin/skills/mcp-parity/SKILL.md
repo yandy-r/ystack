@@ -26,7 +26,7 @@ capabilities get cancel or removal work. Unchanged capabilities are not touched.
 - `--publish`: skip the Phase 3 confirmation (needed for headless or scheduled runs).
   It never skips the mass-removal guard.
 - `--project REF`: an existing Linear Project (URL, id, or name) to sync. Skips lookup.
-- `--team TEAM`: Linear team key or name for a new Project.
+- `--owner-team TEAM`: Linear team key or name for a new Project.
 - `--path DIR`: sub-directory to inventory (monorepo package). Default: the git toplevel.
 - `--refresh-foundation`: on a sync run, re-research foundation and create only
   foundation keys the manifest does not have yet.
