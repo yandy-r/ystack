@@ -132,10 +132,18 @@ def cover(caps: list[dict[str, Any]], covered: Any) -> tuple[list[dict[str, Any]
     if not isinstance(covered, list):
         raise InputError("coverage must be a JSON array of {operation, mcpName, inputsMatch}")
     by_key: dict[str, dict[str, Any]] = {}
+    unmapped: list[Any] = []
     for entry in covered:
         if not isinstance(entry, dict) or not isinstance(entry.get("operation"), str):
             raise InputError(f"coverage entry {entry!r} needs a string 'operation'")
-        by_key[operation_key(entry["operation"])] = entry
+        key = operation_key(entry["operation"])
+        if key.lower() in ("", "none", "n/a"):
+            unmapped.append(entry)  # MCP-only tool with no app operation
+            continue
+        prior = by_key.get(key)
+        # Several tools on one operation: covered if any of them matches.
+        if prior is None or (entry.get("inputsMatch") is True and prior.get("inputsMatch") is not True):
+            by_key[key] = entry
     used: set[str] = set()
     out: list[dict[str, Any]] = []
     for cap in caps:
@@ -144,7 +152,7 @@ def cover(caps: list[dict[str, Any]], covered: Any) -> tuple[list[dict[str, Any]
         if hit:
             used.add(key)
         out.append({**cap, "mcpCovered": bool(hit and hit.get("inputsMatch") is True)})
-    mcp_only = [e for k, e in by_key.items() if k not in used]
+    mcp_only = unmapped + [e for k, e in by_key.items() if k not in used]
     return out, mcp_only
 
 

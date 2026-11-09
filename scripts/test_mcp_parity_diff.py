@@ -21,19 +21,21 @@ from typing import Any  # noqa: E402
 
 SKILL_SCRIPTS = Path(__file__).resolve().parent.parent / "ycc/skills/mcp-parity/scripts"
 SCRIPT = SKILL_SCRIPTS / "capability_diff.py"
+OPENAPI = SKILL_SCRIPTS / "openapi_inventory.py"
 DETECT = SKILL_SCRIPTS / "detect-api-surface.sh"
 
 
-def _load() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("capability_diff", SCRIPT)
+def _load(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    sys.modules["capability_diff"] = module
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
 
 
-cd = _load()
+cd = _load("capability_diff", SCRIPT)
+oi = _load("openapi_inventory", OPENAPI)
 EMPTY: dict[str, Any] = cd.empty_manifest()
 
 
@@ -189,10 +191,14 @@ class DiffApplyTest(unittest.TestCase):
             {"operation": "GET /users/:id", "mcpName": "get_user", "inputsMatch": True},
             {"operation": "DELETE /users/<id>", "mcpName": "del_user", "inputsMatch": False},
             {"operation": "POST /legacy", "mcpName": "legacy"},
+            {"operation": "none", "mcpName": "compose"},
+            {"operation": "none", "mcpName": "preview"},
+            {"operation": "GET /orders", "mcpName": "a", "inputsMatch": False},
+            {"operation": "GET /orders", "mcpName": "b", "inputsMatch": True},
         ]
         out, mcp_only = cd.cover(caps, covered)
-        self.assertEqual([c["mcpCovered"] for c in out], [True, False, False])
-        self.assertEqual([e["mcpName"] for e in mcp_only], ["legacy"])
+        self.assertEqual([c["mcpCovered"] for c in out], [True, False, True])
+        self.assertEqual([e["mcpName"] for e in mcp_only], ["compose", "preview", "legacy"])
         with self.assertRaises(cd.InputError):
             cd.cover(caps, {"operation": "x"})
 
@@ -287,6 +293,10 @@ class DetectSurfaceTest(unittest.TestCase):
         "src/cli.rs": "#[derive(Parser)]\nstruct Cli;",
         "node_modules/x/index.js": "app.get('/x', h)",
         "src/routes.test.ts": "router.get('/t', h)",
+        "src/api_test.go": 'r.Get("/t", h)',
+        "src/test_api.py": "app.get('/t')",
+        "src/cache.ts": "const cached = cache.get(key)",
+        "src/bin.ts": "import { Command } from 'commander'",
     }
     WANT = (
         "LANG\tnode",
@@ -297,6 +307,7 @@ class DetectSurfaceTest(unittest.TestCase):
         "ROUTES\tsrc/my routes.go",
         "MCP\tsrc/mcp.ts",
         "CLI\tsrc/cli.rs",
+        "CLI\tsrc/bin.ts",
     )
 
     def scan(self, use_git: bool) -> set[str]:
@@ -307,7 +318,9 @@ class DetectSurfaceTest(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(text, encoding="utf-8")
             if use_git:
-                subprocess.run(["git", "init", "-q", str(root)], check=True)
+                # Drop hook-exported GIT_* variables so the fixture never touches the outer repo.
+                clean = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+                subprocess.run(["git", "init", "-q", str(root)], check=True, env=clean)
                 (root / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
             proc = subprocess.run(["bash", str(DETECT), str(root)], capture_output=True, text=True, check=True)
             return set(proc.stdout.splitlines())
@@ -318,7 +331,8 @@ class DetectSurfaceTest(unittest.TestCase):
                 lines = self.scan(use_git)
                 for want in self.WANT:
                     self.assertIn(want, lines)
-                self.assertFalse(any("node_modules" in line or "routes.test" in line for line in lines))
+                noise = ("node_modules", "routes.test", "api_test.go", "test_api.py", "cache.ts")
+                self.assertFalse([line for line in lines if any(n in line for n in noise)])
 
     def test_truncation_keeps_later_sections(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -336,6 +350,94 @@ class DetectSurfaceTest(unittest.TestCase):
     def test_rejects_missing_directory(self) -> None:
         proc = subprocess.run(["bash", str(DETECT), "/nonexistent/ycc"], capture_output=True, text=True)
         self.assertEqual(proc.returncode, 1)
+
+
+SPEC: dict[str, Any] = {
+    "openapi": "3.1.0",
+    "security": [{"session": []}],
+    "components": {
+        "parameters": {"Limit": {"name": "limit", "in": "query", "schema": {"type": "integer"}}},
+        "schemas": {"User": {"type": "object"}},
+    },
+    "paths": {
+        "/api/v1/users": {
+            "get": {
+                "operationId": "listUsers",
+                "tags": ["users"],
+                "summary": "List users\nmore",
+                "parameters": [{"$ref": "#/components/parameters/Limit"}],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {"type": "array", "items": {"$ref": "#/components/schemas/User"}}
+                            }
+                        }
+                    }
+                },
+            },
+            "post": {
+                "requestBody": {
+                    "required": True,
+                    "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}},
+                },
+                "responses": {
+                    "201": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}}
+                },
+            },
+        },
+        "/api/v1/users/{id}": {
+            "parameters": [{"name": "id", "in": "path", "schema": {"type": "string"}}],
+            "delete": {"security": [{"adminSession": []}], "responses": {"204": {}}},
+            "get": {"deprecated": True, "responses": {"200": {}}},
+        },
+        "/api/v1/healthz": {"get": {"security": [], "responses": {"200": {}}}},
+        "/api/v1/public/info": {"get": {"security": [], "responses": {"200": {}}}},
+    },
+}
+
+
+class OpenApiInventoryTest(unittest.TestCase):
+    def test_build_inventory(self) -> None:
+        inv = oi.build_inventory(SPEC, list(oi.DEFAULT_EXCLUDES), "spec.json")
+        caps = {c["id"]: c for c in inv["capabilities"]}
+        self.assertEqual(sorted(caps), ["public.info.list", "users.create", "users.delete", "users.list"])
+        users = caps["users.list"]
+        self.assertEqual(users["inputs"], {"query": {"limit": "integer?"}})
+        self.assertEqual(
+            (users["outputs"], users["auth"], users["mutating"], users["summary"]),
+            ("User[]", "user", False, "List users"),
+        )
+        self.assertEqual(caps["users.create"]["inputs"], {"body": {"type": "User"}})
+        delete = caps["users.delete"]
+        self.assertEqual(
+            (delete["inputs"], delete["outputs"], delete["auth"], delete["destructive"]),
+            ({"path": {"id": "string"}}, "none", "admin", True),
+        )
+        self.assertEqual(caps["public.info.list"]["auth"], "public")
+        reasons = {e["operation"]: e["reason"] for e in inv["excluded"]}
+        self.assertEqual(reasons["GET /api/v1/users/{id}"], "deprecated")
+        self.assertIn("GET /api/v1/healthz", reasons)
+        cd.validate_inventory(inv)  # output is a valid capability_diff inventory
+        again = oi.build_inventory(SPEC, list(oi.DEFAULT_EXCLUDES), "spec.json")
+        self.assertEqual(
+            [cd.fingerprint(c) for c in again["capabilities"]], [cd.fingerprint(c) for c in inv["capabilities"]]
+        )
+
+    def test_cli_and_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            spec = Path(tmp, "spec.json")
+            spec.write_text(json.dumps(SPEC), encoding="utf-8")
+            out = io.StringIO()
+            with redirect_stdout(out):
+                self.assertEqual(oi.main([str(spec), "--exclude", "/public/"]), 0)
+            ids = [c["id"] for c in json.loads(out.getvalue())["capabilities"]]
+            self.assertNotIn("public.info.list", ids)
+            spec.write_text(json.dumps({"swagger": "2.0", "paths": {}}), encoding="utf-8")
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(oi.main([str(spec)]), 1)
+                self.assertEqual(oi.main([str(Path(tmp, "missing.json"))]), 1)
+                self.assertEqual(oi.main([str(spec), "--exclude", "("]), 1)
 
 
 if __name__ == "__main__":

@@ -54,6 +54,8 @@ Read each reference when its phase starts, not up front:
 
 Scripts:
 
+- `${CURSOR_PLUGIN_ROOT}/skills/mcp-parity/scripts/openapi_inventory.py` turns an OpenAPI
+  3.x spec into a deterministic inventory (stable ids and fingerprints).
 - `${CURSOR_PLUGIN_ROOT}/skills/mcp-parity/scripts/detect-api-surface.sh` lists surface
   hints (languages, specs, route files, CLI files, existing MCP code).
 - `${CURSOR_PLUGIN_ROOT}/skills/mcp-parity/scripts/capability_diff.py` validates the
@@ -131,6 +133,19 @@ them, so people's decisions shape this run.
 
 The output is hints, not truth. Notices about truncated lists go to stderr.
 
+**Spec-first inventory.** When `surface.tsv` lists an OpenAPI 3.x `SPEC` that the app
+serves or generates (not a vendored third-party spec), build the base inventory from it
+deterministically. Large APIs (hundreds of operations) are only reliable this way:
+
+```bash
+python3 "${CURSOR_PLUGIN_ROOT}/skills/mcp-parity/scripts/openapi_inventory.py" \
+  "<inventory-root>/<spec path>" > "$WORKDIR/inventory.spec.json"
+```
+
+Use `--exclude REGEX` for app-specific non-capabilities. With several specs, prefer
+the one the server generates or serves; ask when unsure. A YAML spec needs PyYAML;
+install it per the dependency policy, or convert the spec to JSON.
+
 ### Step 4: Dispatch research agents
 
 Read `references/research-agents.md` and dispatch the researchers in parallel in one
@@ -138,7 +153,9 @@ message. Each gets the inventory root and
 `surface.tsv`; on sync runs, researcher 1 also gets each manifest capability's id and
 stored `contract`, so ids and field spellings stay stable:
 
-1. **Surface inventory**: every capability, as inventory JSON.
+1. **Surface inventory**: every capability, as inventory JSON. With a spec-first
+   inventory, it only verifies it and returns capabilities the spec misses (CLI
+   commands, GraphQL/RPC surfaces, undocumented routes) and ids to exclude.
 2. **Architecture and existing MCP**: existing MCP server, auth model, runtime, and
    where a server should live, plus which operations an existing MCP server covers.
 3. **MCP practice**: current spec revision, the official SDK for the language,
@@ -147,7 +164,8 @@ stored `contract`, so ids and field spellings stay stable:
 
 ### Step 5: Assemble, validate, and diff
 
-Write researcher 1's JSON to `$WORKDIR/inventory.raw.json`, then produce
+Write researcher 1's JSON (merged into the spec inventory, when there is one, with
+its exclusions removed) to `$WORKDIR/inventory.raw.json`, then produce
 `$WORKDIR/inventory.json` with `references/inventory-format.md` > Coverage merge.
 Validate and diff:
 

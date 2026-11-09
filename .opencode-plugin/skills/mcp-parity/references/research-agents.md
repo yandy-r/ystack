@@ -40,6 +40,12 @@ Reuse an id when it is the same capability, even if it moved or was renamed, and
 copy the stored spelling of unchanged inputs/outputs so fingerprints stay stable:
 {id → contract list}
 
+{When a spec-first inventory exists:} A deterministic inventory was generated from
+{spec path}: {N} operations, ids {id list}. Do not re-list them. Verify a sample
+against the code, then return only capabilities the spec misses (CLI commands,
+GraphQL/RPC surfaces, undocumented routes) and spec ids that are not real client
+capabilities (internal, dead, or feature-flagged off), with reasons.
+
 Steps:
 1. Prefer contracts: OpenAPI, GraphQL schema, proto files, tRPC routers. Read code
    only where no contract exists or the contract is stale versus the code.
