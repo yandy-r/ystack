@@ -71,17 +71,6 @@ AGENTS_SHARED_DST = AGENTS_PLUGIN_ROOT / "ycc-shared"
 # whose entries must each be a valid skill directory).
 HOME_INSTALL_AGENTS_ROOT = "~/.agents"
 
-# agentskills.io frontmatter keys. `allowed-tools` passes through verbatim from
-# the Claude source (spec-optional; readers interpret it per-tool).
-AGENTS_FRONTMATTER_KEYS = (
-    "name",
-    "description",
-    "license",
-    "compatibility",
-    "metadata",
-    "allowed-tools",
-)
-
 
 # worktree-paths.sh marks its one default-root line; the portable bundle swaps in
 # the runtime-detecting resolver defined in the same file.

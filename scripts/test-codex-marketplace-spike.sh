@@ -3,7 +3,6 @@
 set -euo pipefail
 umask 077
 
-# Print CLI usage and exit.
 usage() {
   cat <<'EOF'
 Usage: test-codex-marketplace-spike.sh [--keep] [--output-dir DIR]

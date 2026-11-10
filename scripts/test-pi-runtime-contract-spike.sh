@@ -8,7 +8,6 @@ set -euo pipefail
 umask 077
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/omp-harness-common.sh"
 
-# Print CLI usage and exit.
 usage() {
   cat <<'EOF'
 Usage: test-pi-runtime-contract-spike.sh [--keep] [--output-dir DIR] [--allow-env-i]

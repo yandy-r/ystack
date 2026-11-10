@@ -13,16 +13,6 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 INSTALL="${REPO_ROOT}/install.sh"
 
-# Match the installer's package-model gate, not generated catalog contents.
-repo_codex_native() {
-    python3 "${REPO_ROOT}/scripts/codex_install.py" enabled >/dev/null 2>&1
-}
-
-# skip_listed <name> — honest marker for an assertion pinned to the unlisted (legacy) repo state.
-skip_listed() {
-    printf '[skip] %s (repo listed: legacy-only assertion)\n' "$1"
-}
-
 PASS=0
 FAIL=0
 

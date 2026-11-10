@@ -41,7 +41,6 @@ from practices_rules import (
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
-BASELINE_PATH = SCRIPT_DIR / "practices-baseline.json"
 
 # Current built-in tools per https://code.claude.com/docs/en/tools-reference
 BUILTIN_TOOLS = frozenset("""

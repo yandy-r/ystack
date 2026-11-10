@@ -58,15 +58,6 @@ def _scan_imports(text: str) -> tuple[list[str], bool]:
     return imports, in_comment
 
 
-def standalone_imports(text: str) -> list[str]:
-    """Return live standalone `@path` imports, stripping HTML comment segments.
-
-    Ignore fenced/indented code and lines where `@path` is not the whole live
-    line (prose, lists, quotes, inline code lookalikes).
-    """
-    return _scan_imports(text)[0]
-
-
 def body_import_errors(text: str) -> list[str]:
     """A scoped rule body may contain no live imports and no unclosed comment."""
     found, unclosed = _scan_imports(text)

@@ -28,8 +28,6 @@ SS_RUN: dict[str, dict[str, int]] = {
     "disabled-plugin": {},
 }
 
-PLUGIN_SCENARIOS = {"plugin-only", "coexist-distinct", "coexist-exact", "post-migration"}
-
 
 def origin(record: dict[str, Any]) -> str:
     """Registration origin: CLAUDE_PLUGIN_ROOT is exported only to plugin handlers."""
