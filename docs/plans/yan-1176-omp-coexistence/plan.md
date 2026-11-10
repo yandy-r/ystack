@@ -89,7 +89,7 @@ and both of my Linear servers should work.
 ## Worktree Setup
 
 Not used: the plan runs with `--no-worktree`. All implementers work in the existing feature worktree
-`/home/yandy/Projects/github.com/yandy-r/ystack/.omp/worktrees/ystack-yan-1176-omp-coexistence/`
+`.omp/worktrees/ystack-yan-1176-omp-coexistence/`
 (branch `feat/yan-1176-omp-coexistence`), with no child worktrees.
 
 ## UX Design

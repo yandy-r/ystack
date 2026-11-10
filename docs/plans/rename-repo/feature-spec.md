@@ -6,7 +6,7 @@ YAN-1134 / [#304](https://github.com/yandy-r/claude-plugins/issues/304), targete
 
 ## External Dependencies
 
-No external APIs, services, authentication, SDKs, or new runtime packages are involved. Runtime requirements are Bash and Python 3, following the repository's existing wrapper/module pattern. The utility must not invoke Git mutation, network tools, sync, package publishing, or generators. See [external research](research-external.md) for standard-library references and rejected dependencies.
+No external APIs, services, authentication, SDKs, or new runtime packages are involved. Runtime requirements are Bash and Python 3, following the repository's existing wrapper/module pattern. The utility must not invoke Git mutation, network tools, sync, package publishing, or generators.
 
 ## Business Requirements
 
@@ -125,7 +125,7 @@ Use the smallest existing patterns: wrapper/module separation, Python `unittest`
 
 ### Advisories
 
-Keep stable relative diff labels and concise summaries. The broader prose and operational inventory belongs to the later flip; it must not silently expand this tool's remit. See [security research](research-security.md) for the complete adversarial matrix.
+Keep stable relative diff labels and concise summaries. The broader prose and operational inventory belongs to the later flip; it must not silently expand this tool's remit.
 
 ## Task Breakdown Preview
 
@@ -147,14 +147,7 @@ None remain for this feature contract. Research proposals for default preview/`-
 
 ## Research References
 
-- [External dependencies](research-external.md)
-- [Business requirements](research-business.md)
-- [Technical design and allowlist](research-technical.md)
-- [Maintainer UX](research-ux.md)
-- [Security boundaries](research-security.md)
-- [Engineering practices and wiring](research-practices.md)
-- [Recommendations and resolved tradeoffs](research-recommendations.md)
-- [Executable PRP plan](../../prps/plans/rename-repo.plan.md)
+- [Executable PRP plan](../../prps/plans/completed/rename-repo.plan.md)
 
 ## Evidence Status
 

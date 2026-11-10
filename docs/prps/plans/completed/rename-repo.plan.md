@@ -125,7 +125,7 @@ Apply the same ordering: parse arguments, derive root, reject all unsafe/missing
 - **Total batches**: 4
 - **Max parallel width**: 3
 
-There is intentionally **no `## Worktree Setup` section** and no child worktree requirement: all B1 work targets the assigned `/home/yandy/Projects/github.com/yandy-r/claude-plugins/.claude/worktrees/claude-plugins-yan-1134-rename-prep` checkout / parent-maintained working tree, with no per-task worktree setup. Files changed in one batch must not overlap.
+There is intentionally **no `## Worktree Setup` section** and no child worktree requirement: all B1 work targets the assigned `.claude/worktrees/claude-plugins-yan-1134-rename-prep` checkout / parent-maintained working tree, with no per-task worktree setup. Files changed in one batch must not overlap.
 
 ## Step-by-Step Tasks
 

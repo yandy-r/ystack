@@ -74,7 +74,7 @@ available as an opt-in that never overwrites my edits, and my project's `.omp/` 
 
 ## Worktree Setup
 
-- **Parent:** `/home/yandy/Projects/github.com/yandy-r/ystack/.omp/worktrees/ystack-yan-1175-omp-rules-settings/`
+- **Parent:** `.omp/worktrees/ystack-yan-1175-omp-rules-settings/`
   (branch `feat/yan-1175-omp-rules-settings`). All implementers work here; no child worktrees.
 
 ## UX Design
