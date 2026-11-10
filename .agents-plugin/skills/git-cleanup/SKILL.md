@@ -106,8 +106,8 @@ flags that emit machine-readable output.
 
 
 - **Worktrees**: `git worktree list --porcelain`. Flag entries whose `worktree`
-  path no longer exists, whose branch is `[gone]`, or which sit under a legacy
-  global ycc root (`~/.claude-worktrees/`) instead of a repo-local managed root.
+  path no longer exists or whose branch is `[gone]`; legacy roots are classified
+  per `active-code-rules.md`.
   The managed roots under the repo root are `.claude/worktrees/`,
   `.opencode/worktrees/`, `.codex/worktrees/`, `.cursor/worktrees/`,
   `.omp/worktrees/` and `.agents/worktrees/`; every runtime checks all of them.
@@ -311,9 +311,8 @@ release-model rules (a malformed state has already stopped the run in Phase 0).
 
 - **Worktrees under any repo-local managed root** (`.claude/`, `.opencode/`,
   `.codex/`, `.cursor/`, `.omp/` or `.agents/` followed by `worktrees/`) are fair
-  game per this repo's convention. Legacy worktrees under `~/.claude-worktrees/`
-  should be reported and, if the user confirms, relocated or removed. Never delete
-  worktrees under `~/.omp/wt`; OMP manages them (`omp worktree clear`).
+  game per this repo's convention. Never delete worktrees under `~/.omp/wt`; OMP
+  manages them (`omp worktree clear`).
 
 - **Respect the repo's label taxonomy**. Do not invent stale/wontfix labels.
 - **No secrets**. Do not log tokens or API responses containing credentials.
