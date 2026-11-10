@@ -18,7 +18,6 @@ from typing import Any
 
 import yaml
 
-# Import shared text transforms from skills generator (same repo scripts/)
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))

@@ -24,7 +24,6 @@ PLUGIN_SHARED_DIR = PLUGIN_ROOT / "shared"
 PLUGIN_MANIFEST_PATH = PLUGIN_ROOT / ".codex-plugin" / "plugin.json"
 PLUGIN_MCP_PATH = PLUGIN_ROOT / ".mcp.json"
 PLUGIN_AGENTS_DIR = CODEX_PLUGIN_CONTAINER / "agents"
-REPO_MARKETPLACE_PATH = REPO_ROOT / ".agents" / "plugins" / "marketplace.json"
 
 SOURCE_PLUGIN_PATH = YCC_DIR / ".claude-plugin" / "plugin.json"
 SOURCE_MCP_PATH = REPO_ROOT / "mcp-configs" / "mcp.json"

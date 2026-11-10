@@ -95,7 +95,6 @@ class OmpError(Exception):
 @dataclass
 class Flags:
     json: bool = False
-    fix: bool = False
     force: bool = False
     dry_run: bool = False
     scope: str | None = None
@@ -1686,8 +1685,6 @@ def parse_plugin_args(argv: list[str]) -> tuple[str, list[str], Flags] | int:
         if name in BOOL_FLAGS and not has_inline:
             if name == "--json":
                 flags.json = True
-            elif name == "--fix":
-                flags.fix = True
             elif name == "--force":
                 flags.force = True
             elif name == "--dry-run":

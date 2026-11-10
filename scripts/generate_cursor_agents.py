@@ -32,7 +32,6 @@ def strip_preamble_before_frontmatter(text: str) -> str:
     """Remove stray lines before the first YAML frontmatter opener."""
     if text.startswith("---"):
         return text
-    # First line that is exactly --- (start of frontmatter)
     lines = text.splitlines(keepends=True)
     for i, line in enumerate(lines):
         if line.strip() == "---":

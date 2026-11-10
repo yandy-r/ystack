@@ -12,9 +12,9 @@ while [[ -L "$SCRIPT_PATH" ]]; do
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd)"
 
-# shellcheck source=bin/lib/modified-files.sh
+# shellcheck source=lib/modified-files.sh
 source "$SCRIPT_DIR/lib/modified-files.sh"
-# shellcheck source=bin/lib/shellcheck-resolve.sh
+# shellcheck source=lib/shellcheck-resolve.sh
 source "$SCRIPT_DIR/lib/shellcheck-resolve.sh"
 
 PROJECT_ROOT="$(detect_project_root)"
