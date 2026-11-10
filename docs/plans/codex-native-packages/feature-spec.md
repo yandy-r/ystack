@@ -94,13 +94,3 @@ No literal secrets found. Preserve credential references/pass-through names, nev
 ## Decisions Needed
 
 None awaiting user input. Safe choices above preserve existing users and keep activation gated. A genuine API limitation or contradictory acceptance criterion must be reported, not silently reduced.
-
-## Research References
-
-- [External](research-external.md)
-- [Business](research-business.md)
-- [Technical](research-technical.md)
-- [UX](research-ux.md)
-- [Security](research-security.md)
-- [Practices](research-practices.md)
-- [Recommendations](research-recommendations.md)

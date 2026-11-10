@@ -13,15 +13,14 @@ Claude-only notes, and path-specific Claude rules live under
 
 ## Layout
 
-| Path                           | Purpose                                                                          |
-| ------------------------------ | -------------------------------------------------------------------------------- |
-| `install/`                     | Runtime-specific install guides for Claude, Cursor, Codex, opencode, and OMP.    |
-| `internal/`                    | Architecture notes, native-package records, and spike dossiers.                  |
-| `plans/`                       | Multi-phase implementation plans — see below.                                    |
-| `releases/`                    | One file per tagged release, drafted by `ycc:bundle-release`.                    |
-| `prps/`                        | Product Requirements / Plans / Reviews — PRP-workflow artifacts.                 |
-| `inventory.json`               | **Generated.** Skill/command/agent manifest. Regenerate via `./scripts/sync.sh`. |
-| `pre-commit-recommendation.md` | Stand-alone note on pre-commit hook policy.                                      |
+| Path             | Purpose                                                                          |
+| ---------------- | -------------------------------------------------------------------------------- |
+| `install/`       | Runtime-specific install guides for Claude, Cursor, Codex, opencode, and OMP.    |
+| `internal/`      | Architecture notes, native-package records, and spike dossiers.                  |
+| `plans/`         | Multi-phase implementation plans — see below.                                    |
+| `releases/`      | One file per tagged release, drafted by `ycc:bundle-release`.                    |
+| `prps/`          | Product Requirements / Plans / Reviews — PRP-workflow artifacts.                 |
+| `inventory.json` | **Generated.** Skill/command/agent manifest. Regenerate via `./scripts/sync.sh`. |
 
 ## Install Guides
 
@@ -99,11 +98,6 @@ move the parent tracking issue and task issues through `started` and
 `completed` as batches run. `ycc:orchestrate` does that only when its input is
 a Linear issue reference. Local mode makes no Linear calls. The contract is
 [`../ycc/skills/_shared/references/artifact-store.md`](../ycc/skills/_shared/references/artifact-store.md).
-
-## Other
-
-- [`pre-commit-recommendation.md`](pre-commit-recommendation.md) — guidance
-  on the pre-commit hook policy used by this repo.
 
 ## Generated vs. source-of-truth
 

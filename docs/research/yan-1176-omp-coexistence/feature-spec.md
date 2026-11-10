@@ -138,8 +138,6 @@ ycc fixes this without touching other targets' files:
 - **US5.** Both `ycc-mcp:linear` and `ycc-mcp:linear-personal` load on OMP with separate logins, with
   no change for Claude, Codex or Cursor.
 
-Personas P1–P7 are in [`research-business.md`](research-business.md).
-
 ### Business Rules
 
 - **BR1.** Native beats fallback: the OMP package is the ycc source on OMP.
@@ -341,7 +339,6 @@ Codex, Cursor and opencode).
   - document the safe invocation and its limits (project plugin skills still load as text;
     `--no-extensions` also drops the user's own extensions, so use `--trusted-extension` to re-allow);
   - `enabledProviders` widening imports foreign MCP commands.
-- **Details:** [`research-security.md`](research-security.md).
 
 ## Decisions Needed
 
@@ -389,9 +386,6 @@ were confirmed by the user.
 ## Research References
 
 - Live log: [`research-live-probes.md`](research-live-probes.md).
-- Research files: [`research-external.md`](research-external.md), [`research-business.md`](research-business.md),
-  [`research-technical.md`](research-technical.md), [`research-ux.md`](research-ux.md),
-  [`research-security.md`](research-security.md), [`research-practices.md`](research-practices.md),
-  [`research-recommendations.md`](research-recommendations.md).
+- Technical research: [`research-technical.md`](research-technical.md).
 - Prior specs: `docs/research/yan-1175-omp-rules-settings/feature-spec.md`, `docs/research/yan-1174-omp-hooks-extension/`.
 - Contract: `docs/internal/adr/0002-omp-runtime-contract.md`; `docs/internal/spikes/omp-runtime-contract.md` §1.8, §2.8, §5.

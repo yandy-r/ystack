@@ -64,7 +64,7 @@ carry a tested OMP verdict that CI keeps honest.
 
 ## Worktree Setup
 
-- **Parent**: /home/yandy/Projects/github.com/yandy-r/ystack/.omp/worktrees/ystack-yan-1174-omp-hooks-extension/ (branch: feat/yan-1174-omp-hooks-extension)
+- **Parent**: .omp/worktrees/ystack-yan-1174-omp-hooks-extension/ (branch: feat/yan-1174-omp-hooks-extension)
 
 ## UX Design
 

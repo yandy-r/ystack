@@ -54,7 +54,7 @@ and remove ycc natively and idempotently, so that I get `/ycc:*`, skills and age
 
 ## Worktree Setup
 
-- **Parent**: /home/yandy/Projects/github.com/yandy-r/ystack/.claude/worktrees/ystack-yan-1172-omp-install-lifecycle/ (branch: feat/yan-1172-omp-install-lifecycle)
+- **Parent**: .claude/worktrees/ystack-yan-1172-omp-install-lifecycle/ (branch: feat/yan-1172-omp-install-lifecycle)
 
 ## Contract (shared by all tasks; do not change without updating every consumer)
 
