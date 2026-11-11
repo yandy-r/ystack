@@ -4,7 +4,6 @@
 #
 # Usage:
 #   setup-worktree.sh parent <repo-name> <feature-slug> [--base-ref <branch>]
-#   setup-worktree.sh child  <repo-name> <feature-slug> <task-id>   [DEPRECATED]
 #
 # Modes:
 #   parent  Creates <repo-root>/.codex/worktrees/<repo>-<feature>/.  This is the
@@ -15,15 +14,10 @@
 #           With --base-ref: checks out the existing branch (e.g. PR head). If the
 #           branch is missing locally, runs git fetch from origin once.
 #
-#   child   DEPRECATED. Does not create a separate per-task worktree. Prints a
-#           warning to stderr and echoes the *feature* worktree path (same as
-#           parent) if it already exists; otherwise instructs the caller to run
-#           `parent` first. Non-destructive — no new git worktrees for “children”.
-#
 # Idempotency (parent): if the path exists and is on the expected branch, echo path.
 #
 # Exit codes:
-#   0  success (path echoed to stdout; child deprecation may print to stderr)
+#   0  success (path echoed to stdout)
 #   1  error (message on stderr)
 
 set -euo pipefail
@@ -36,12 +30,10 @@ usage() {
   cat >&2 <<'EOF'
 Usage:
   setup-worktree.sh parent <repo-name> <feature-slug> [--base-ref <branch>]
-  setup-worktree.sh child  <repo-name> <feature-slug> <task-id>   (deprecated)
 
 Arguments:
   repo-name         Short name of the repository (e.g. "ystack")
   feature-slug      Kebab-case feature identifier (e.g. "add-widget")
-  task-id           (child only, ignored for path) legacy parallel-task id
   --base-ref <b>    (parent only) Check out the existing branch <b> into the
                     worktree instead of creating a new feat/<feature> branch.
 
@@ -51,9 +43,6 @@ Worktree (single contract):
 
 Set YCC_WORKTREE_ROOT to override the root. Relative overrides are resolved
 against the current repository root. Legacy roots are not migrated or touched.
-
-'child' mode is deprecated: it echoes the feature worktree path if present; it does
-not create separate child worktrees. See worktree-strategy.md.
 EOF
 }
 
@@ -68,12 +57,6 @@ _error() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=worktree-paths.sh
 source "${SCRIPT_DIR}/worktree-paths.sh"
-
-# Replace every '.' with '-' in a task-id string.
-normalize_task_id() {
-  local raw="$1"
-  echo "${raw//./-}"
-}
 
 # Return the branch currently checked out in a worktree path.
 # Uses `git worktree list --porcelain` output.
@@ -150,43 +133,6 @@ setup_parent() {
   echo "$parent_path"
 }
 
-# ---------------------------------------------------------------------------
-# Mode: child (deprecated — no separate worktree; echo feature path if exists)
-# ---------------------------------------------------------------------------
-
-setup_child() {
-  local repo_name="$1"
-  local feature_slug="$2"
-  local raw_task_id="$3"
-
-  if [[ -z "$repo_name" || -z "$feature_slug" || -z "$raw_task_id" ]]; then
-    _error "repo-name, feature-slug, and task-id must not be empty"
-    usage
-    exit 1
-  fi
-
-  local _task_id
-  _task_id="$(normalize_task_id "$raw_task_id")"
-
-  local repo_root
-  repo_root="$(ycc_repo_root)"
-
-  local feature_path
-  feature_path="$(ycc_feature_worktree_path "$repo_root" "$repo_name" "$feature_slug")"
-
-  echo "setup-worktree.sh: DEPRECATED: 'child' does not create a per-task worktree (task-id=${_task_id}). Use a single feature worktree; all agents share: ${feature_path}" >&2
-
-  if [[ -d "$feature_path" ]]; then
-    if git -C "$feature_path" rev-parse --git-dir >/dev/null 2>&1; then
-      echo "$feature_path"
-      return 0
-    fi
-  fi
-
-  _error "feature worktree not found at '${feature_path}'. Run: setup-worktree.sh parent ${repo_name} ${feature_slug}"
-  exit 1
-}
-
 parse_parent_args() {
   local -n out_repo="$1"
   local -n out_slug="$2"
@@ -249,15 +195,6 @@ run_parent_mode() {
   setup_parent "$p_repo" "$p_slug" "$p_base_ref"
 }
 
-run_child_mode() {
-  if [[ $# -ne 3 ]]; then
-    _error "'child' mode requires exactly 3 arguments: <repo-name> <feature-slug> <task-id>"
-    usage
-    exit 1
-  fi
-  setup_child "$1" "$2" "$3"
-}
-
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -269,16 +206,12 @@ main() {
       shift
       run_parent_mode "$@"
       ;;
-    child)
-      shift
-      run_child_mode "$@"
-      ;;
     --help|-h)
       usage
       exit 0
       ;;
     *)
-      _error "first argument must be 'parent' or 'child'"
+      _error "first argument must be 'parent'"
       usage
       exit 1
       ;;

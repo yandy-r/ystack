@@ -217,8 +217,7 @@ new default). When worktree mode is active (default), all teammates — parallel
 sequential — share **one** feature worktree: `<repo-root>/<worktree-root>/<repo>-<feature>/`
 (see `worktree-strategy.md` in this directory). Parallel safety comes from
 per-skill batching and prompts (e.g. different files, or exclusive sections), not from
-separate per-task worktrees. The `setup-worktree.sh child` + `merge-children.sh` fan-in
-**sequence is deprecated**; do not add it in new team flows.
+separate per-task worktrees.
 
 **One-time (before the first `Agent` spawn, when the feature worktree is used):** ensure
 the feature worktree exists, typically via:
@@ -228,7 +227,7 @@ branch — e.g. PR review).
 
 ### 7.1 Per-batch ordering
 
-Exact ordering within ONE batch (supersedes the old “create child / merge-children” flow):
+Exact ordering within ONE batch:
 
 1. `TaskCreate` for all tasks in the batch (as in §2.2) — _if_ the team graph registers batch tasks the same way as non-team mode; otherwise follow the skill’s own registration rules.
 2. `Agent` spawn — one message, multiple `Agent` calls (per §2.3). Each call includes
@@ -238,13 +237,9 @@ Exact ordering within ONE batch (supersedes the old “create child / merge-chil
 3. `TaskList` monitor → `SendMessage(shutdown)` to every teammate of the batch (per
    §2.4–2.5).
 4. **Between batches:** run whatever validation the skill requires **inside the same**
-   feature worktree. **Do not** call `merge-children.sh` for fan-in; that entrypoint is a
-   deprecated no-op in the new contract.
+   feature worktree; there is no per-task fan-in merge.
 5. On validation or manual-merge failure in the worktree, follow the skill’s failure
-   policy; do not expect `CONFLICT:` lines from a removed child merge script.
-
-`merge-children.sh` and `setup-worktree.sh child` remain on disk for legacy skill text
-and compatibility only.
+   policy.
 
 ### 7.2 Sequential vs parallel in one tree
 
@@ -261,7 +256,7 @@ suppress) may add a line to the existing dry-run output (§5), e.g.:
 Worktree:   feature=<repo-root>/<worktree-root>/<repo>-<feature>/  (all teammates)
 ```
 
-No `setup-worktree.sh` or `merge-children.sh` calls are made in dry-run mode.
+No `setup-worktree.sh` calls are made in dry-run mode.
 
 ---
 

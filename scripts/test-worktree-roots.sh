@@ -151,7 +151,6 @@ check_home() { # <label> <file> <expected-substring> <forbidden-substring>
   grep -qF -- "$want" "$file" && pass "$label has '$want'" || fail "$label lacks '$want'"
   if grep -qF -- "$bad" "$file"; then fail "$label contains forbidden '$bad'"; else pass "$label free of '$bad'"; fi
 }
-# git-cleanup/SKILL.md names both ~/.claude-worktrees/ (legacy) and a user-global ~/.claude/ path.
 check_home "opencode home rewrite" "${REPO_ROOT}/.opencode-plugin/shared/references/worktree-strategy.md" ".opencode/worktrees" ".config/opencode/.opencode"
 check_home "opencode worktree-paths" "${REPO_ROOT}/.opencode-plugin/shared/scripts/worktree-paths.sh" ".opencode/worktrees" ".config/opencode/worktrees"
 if grep -rqF '~''/.config/opencode/' "${REPO_ROOT}/.opencode-plugin/skills" 2>/dev/null; then

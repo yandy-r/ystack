@@ -24,12 +24,7 @@ plan annotation format, per-target dispatch matrix, and cleanup. There is
 per parallel task, and not per-severity fan-out. Individual skills own flag
 plumbing and per-phase behavior; the shared **invariant** lives here.
 
-**Migration note (GitHub #79 / #80):** Older skills and plan artifacts may still
-describe a parent/child model, `**Children**` lists, per-task `**Worktree**:`,
-or `merge-children.sh` fan-in. That model is **deprecated** for the shared
-contract. `setup-worktree.sh child` and `merge-children.sh` are **compatibility
-shims** (see shared scripts) until all executors are updated. New planners and
-executors should follow **only** the single-worktree contract below.
+**Migration note (GitHub #79 / #80):** the parent/child worktree model and its fan-in merge were removed; follow only the single-worktree contract below.
 
 See `agent-team-dispatch.md` in this directory for the team lifecycle
 and how a single worktree pairs with parallel teammate dispatch.
@@ -236,8 +231,7 @@ Older plans may still include:
 - A per-task line: `- **Worktree**: <path> ...` inside a task block
 
 Parsers that support legacy plans may read these for migration or display, but
-the shared **default** is: **one** worktree, no fan-in merge, no
-`setup-worktree.sh child` in the new workflow path.
+the shared **default** is: **one** worktree, no fan-in merge.
 
 ### Review / PR review artifacts
 
@@ -259,10 +253,8 @@ need not emit per-task `**Worktree**:` lines for new work.
 1. **Once:** `setup-worktree.sh parent <repo> <feature-slug>` (optional `--base-ref` for existing branches).
 2. **Per batch / task:** run work in the feature worktree; dispatch parallel agents
    with `Working directory: <feature-worktree-path>` (or equivalent target-specific isolation) — **all share the same path**.
-3. **No** `setup-worktree.sh child` and **no** `merge-children.sh` in the new contract.
-   (Legacy calls may still exist in older skill text; shims are non-destructive — see script headers.)
-4. **Validate** between batches as the skill requires.
-5. On **merge conflicts** or validation failure, handle in the feature worktree
+3. **Validate** between batches as the skill requires.
+4. On **merge conflicts** or validation failure, handle in the feature worktree
    per skill policy (pause, user resolve, etc.).
 
 ---
