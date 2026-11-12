@@ -193,7 +193,7 @@ Produce a summary with these sections:
   - `lefthook install` (if `--hooks` + lefthook chosen)
   - Review `scripts/` bundle in the first commit that adds it
   - Re-run with `ycc:formatters --sync` after upstream bundle changes
-  - If `lint-autofix.yml` was written: create a GitHub App with Contents: read and write, install it on the repository, and set the `AUTOFIX_APP_CLIENT_ID` variable and `AUTOFIX_APP_PRIVATE_KEY` secret; until then the workflow reports fixes instead of pushing. Anyone who can write to a repository holding the private key can mint tokens for every repository the App is installed on, so reuse one App only across repositories with the same trusted writers. Organization-level variables and secrets are not available to private repositories on GitHub Free; set them on the repository there
+  - If `lint-autofix.yml` was written: create a GitHub App with Contents and Workflows, both read and write (Workflows because the formatters can touch `.github/workflows/*.yml`), install it on the repository, and set the `AUTOFIX_APP_CLIENT_ID` variable and `AUTOFIX_APP_PRIVATE_KEY` secret; until then the workflow reports fixes instead of pushing. Anyone who can write to a repository holding the private key can mint tokens for every repository the App is installed on, so reuse one App only across repositories with the same trusted writers. Organization-level variables and secrets are not available to private repositories on GitHub Free; set them on the repository there
   - Bypass a single hook run: `git commit --no-verify`
 
 ## Important Notes
