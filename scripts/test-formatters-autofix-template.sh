@@ -56,12 +56,15 @@ wf_none="$(render none false)"
 
 # --- Structural contract (parsed YAML). ---
 check_structure() {
-  python3 - "$1" "$2" <<'PY'
+  python3 - "$1" "$2" "$SCRIPT_DIR" <<'PY'
 import sys
 import yaml
 
-path, label = sys.argv[1], sys.argv[2]
-doc = yaml.safe_load(open(path, encoding="utf-8"))
+path, label, scripts_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+sys.path.insert(0, scripts_dir)
+from practices_parse import load_unique_yaml  # noqa: E402 - rejects duplicate keys
+
+doc = load_unique_yaml(open(path, encoding="utf-8").read())
 failures = []
 
 
@@ -336,6 +339,19 @@ elif [[ "$(git -C "$origin" rev-parse refs/heads/feature)" == "$head_sha" ]] \
   pass "push: re-check refuses a symlink retarget without pushing"
 else
   fail "push: symlink re-check"; sed 's/^/    /' "${SCRATCH}/out" >&2
+fi
+
+# A forced-text diff of a binary file gets numeric counts past the validate step;
+# the push step's re-check must still refuse it.
+rt_bintext="$(PATCH_FLAGS="--text --full-index" make_patch bintext "printf 'a\0b\n' > src/app.txt")"
+expect_validate "passes a forced-text binary diff on to the re-check" 0 "$rt_bintext"
+if run_step "$push_sh" "$rt_bintext" "${push_env[@]}" >"${SCRATCH}/out" 2>&1; then
+  fail "push: re-check must refuse a forced-text binary change"
+elif [[ "$(git -C "$origin" rev-parse refs/heads/feature)" == "$head_sha" ]] \
+  && grep -qF 'changes a binary file' "${SCRATCH}/out"; then
+  pass "push: re-check refuses a forced-text binary change without pushing"
+else
+  fail "push: forced-text binary re-check"; sed 's/^/    /' "${SCRATCH}/out" >&2
 fi
 
 # Report-only path: no token, no push, warning plus job summary.

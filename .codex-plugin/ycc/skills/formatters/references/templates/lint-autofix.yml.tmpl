@@ -230,11 +230,12 @@ jobs:
             exit 0
           fi
           git apply --cached "$patch"
-          # Re-check what actually landed in the index: in-place edits to regular files only,
-          # nothing under .github/.
+          # Re-check what actually landed in the index: in-place edits to regular text files
+          # only (a forced-text diff can hide binary content from the validate step), nothing
+          # under .github/.
           git diff --cached --raw -z --no-renames HEAD > "$RUNNER_TEMP/autofix.raw"
           while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
-            read -r old_mode new_mode _ _ status <<< "${meta#:}"
+            read -r old_mode new_mode old_blob new_blob status <<< "${meta#:}"
             case "$old_mode:$new_mode:$status" in
               100644:100644:M | 100755:100755:M) ;;
               *) echo "::error title=Lint autofix refused::The autofix patch changes something other than a regular file's contents."; exit 1 ;;
@@ -242,6 +243,13 @@ jobs:
             case "${path,,}" in
               .github/*) echo "::error title=Lint autofix refused::The autofix patch changes a file under .github/."; exit 1 ;;
             esac
+            for blob in "$old_blob" "$new_blob"; do
+              nul_bytes="$(git cat-file blob "$blob" | tr -dc '\000' | wc -c)"
+              if (( nul_bytes > 0 )); then
+                echo "::error title=Lint autofix refused::The autofix patch changes a binary file."
+                exit 1
+              fi
+            done
           done < "$RUNNER_TEMP/autofix.raw"
           if git diff --cached --quiet HEAD; then
             echo "No autofix changes after applying the patch."
