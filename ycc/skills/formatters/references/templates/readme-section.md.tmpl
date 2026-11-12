@@ -96,7 +96,7 @@ just format-unstaged
 ### CI
 
 {{#IF_CI_INSTALLED}}
-Lint runs automatically on every pull request via `.github/workflows/lint.yml`. If `.github/workflows/lint-autofix.yml` is also present, it applies `./scripts/style.sh format` + `lint --fix` on same-repo PRs and pushes fixes back as `github-actions[bot]`; fork PRs are skipped (the `GITHUB_TOKEN` cannot push to them).
+Lint runs automatically on every pull request via `.github/workflows/lint.yml`. If `.github/workflows/lint-autofix.yml` is also present, it applies `./scripts/style.sh format` + `lint --fix` on same-repo PRs. When the `AUTOFIX_APP_CLIENT_ID` variable and `AUTOFIX_APP_PRIVATE_KEY` secret are set, it pushes the fixes back with a GitHub App token; without them it lists the fixes in the job summary and does not push. Fork PRs are skipped.
 {{/IF_CI_INSTALLED}}
 {{#IF_CI_NOT_INSTALLED}}
 To wire lint into CI, run `ycc:formatters --ci` (installs both `lint.yml` and `lint-autofix.yml`) or pair it with `--no-autofix` to skip the autofix workflow.

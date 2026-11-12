@@ -150,7 +150,7 @@ Unless suppressed, run each applier. Each writes to a distinct file so they can 
    {{package-root}}/skills/formatters/scripts/apply-ci.sh --target "$TARGET" --profile-file "$PROFILE_FILE" [--force] [--no-autofix]
    ```
 
-   Pass `--no-autofix` when `NO_AUTOFIX=true` to install only the check workflow. The check workflow runs on every PR and on pushes to the default branch and `release/**`. The autofix workflow runs on same-repo PRs to the default branch (`origin/HEAD`, falling back to `main`), applies `./scripts/style.sh format` + `lint --fix`, and pushes fixes back as `github-actions[bot]`; fork PRs are skipped because `GITHUB_TOKEN` cannot push to them.
+   Pass `--no-autofix` when `NO_AUTOFIX=true` to install only the check workflow. The check workflow runs on every PR and on pushes to the default branch and `release/**`. The autofix workflow runs on same-repo PRs to the default branch (`origin/HEAD`, falling back to `main`), applies `./scripts/style.sh format` + `lint --fix`, and pushes fixes back with a GitHub App installation token (`actions/create-github-app-token`), because a push made with `GITHUB_TOKEN` leaves every check on the fix commit waiting for approval. It reads the App's client ID from the `AUTOFIX_APP_CLIENT_ID` variable and its private key from the `AUTOFIX_APP_PRIVATE_KEY` secret; without them it reports the fixes in a warning and the job summary instead of pushing. Fork PRs are skipped because the workflow cannot push to them.
 
 4. **Hooks** (run when `HOOKS=true`, OR when the target already has a `lefthook.yml` / `.husky/pre-commit` — i.e., `has_lefthook=true` or `has_husky=true` in the profile):
 
@@ -177,6 +177,7 @@ Produce a summary with these sections:
   - `lefthook install` (if `--hooks` + lefthook chosen)
   - Review `scripts/` bundle in the first commit that adds it
   - Re-run with `formatters --sync` after upstream bundle changes
+  - If `lint-autofix.yml` was written: create a GitHub App with Contents and Workflows, both read and write (Workflows because the formatters can touch `.github/workflows/*.yml`), install it on the repository, and set the `AUTOFIX_APP_CLIENT_ID` variable and `AUTOFIX_APP_PRIVATE_KEY` secret; until then the workflow reports fixes instead of pushing. Anyone who can write to a repository holding the private key can mint tokens for every repository the App is installed on, so reuse one App only across repositories with the same trusted writers. Organization-level variables and secrets are not available to private repositories on GitHub Free; set them on the repository there
   - Bypass a single hook run: `git commit --no-verify`
 
 ## Important Notes

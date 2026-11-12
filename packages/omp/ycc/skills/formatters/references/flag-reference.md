@@ -90,8 +90,10 @@ The check workflow runs on every pull request and on pushes to the default branc
 The autofix workflow:
 
 - Triggers on pull requests to the target repo's default branch (detected via `git symbolic-ref refs/remotes/origin/HEAD`, falling back to `main`).
-- Skips fork PRs via `github.event.pull_request.head.repo.full_name == github.repository` — `GITHUB_TOKEN` cannot push to fork branches.
-- Commits as `github-actions[bot]`; the check workflow (`lint.yml`) still runs authoritatively on the resulting push.
+- Skips fork PRs via `github.event.pull_request.head.repo.full_name == github.repository`; the workflow cannot push to fork branches.
+- Pushes with a GitHub App installation token minted by `actions/create-github-app-token`. A push made with `GITHUB_TOKEN` creates the `pull_request` runs for the fix commit in an approval-required state, so every check on it would wait for a maintainer. `GITHUB_TOKEN` stays at `contents: read`, checkout does not persist credentials, and the token is minted only after the formatters ran.
+- Needs the `AUTOFIX_APP_CLIENT_ID` variable and `AUTOFIX_APP_PRIVATE_KEY` secret and an App with repository permissions Contents and Workflows, both read and write, installed on the repo (Workflows because the formatters can touch `.github/workflows/*.yml`, and a push that changes them needs it). Organization-level variables and secrets are not available to private repositories on GitHub Free, so set them on the repository there. Anyone who can write to a repository holding the private key can mint tokens for every repository the App is installed on, so reuse one App only across repositories with the same trusted writers. Without them, or if minting fails, the job lists the fixes in a warning and the job summary and exits successfully without pushing.
+- Commits as `github-actions[bot]`; the check workflow (`lint.yml`) still runs authoritatively on the resulting push. A loop guard stops a second push when `HEAD` is already the autofix commit and the fixers still change files.
 - Carries a commented `git add -u -- . ':(exclude)...'` placeholder — customize after install if the project has generated files that should not be auto-fixed.
 
 ```
@@ -102,7 +104,7 @@ The autofix workflow:
 
 ### `--no-autofix`
 
-Only meaningful when `--ci` is set. Skips installing `lint-autofix.yml`. The existing check workflow (`lint.yml`) is still installed. Use when a repo has branch-protection rules that forbid bot pushes, or when the team prefers to run formatters exclusively via pre-commit hooks.
+Only meaningful when `--ci` is set. Skips installing `lint-autofix.yml`. The existing check workflow (`lint.yml`) is still installed. Use when a repo has branch-protection rules that forbid bot pushes, when no GitHub App can be set up for the push, or when the team prefers to run formatters exclusively via pre-commit hooks.
 
 ```
 /skill:formatters --ci --no-autofix
