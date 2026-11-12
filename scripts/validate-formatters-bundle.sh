@@ -286,4 +286,10 @@ if grep -Fq 'skipping symlink link.md' "${git_link_stderr}"; then
   exit 1
 fi
 
+# --- CI template contract: lint-autofix.yml keeps PR code away from the App token. ---
+"${SCRIPT_DIR}/test-formatters-autofix-template.sh" >/dev/null || {
+  echo "validate-formatters-bundle: test-formatters-autofix-template.sh failed" >&2
+  exit 1
+}
+
 echo "OK: formatter bundle smoke checks passed."
