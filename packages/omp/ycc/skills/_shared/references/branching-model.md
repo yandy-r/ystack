@@ -29,7 +29,8 @@ These apply to both models.
    scenes and flip it in one final PR shortly before the release.
 5. **A release is a tag on a branch.** Never assemble a release by picking commits after
    the fact.
-6. **Agents never tag or publish** unless a maintainer explicitly approves that step.
+6. **One approval per release.** Once a maintainer approves the release ("ship x.y.z to
+   prod?"), agents may tag, publish and cut it.
 
 ## Models
 

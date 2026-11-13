@@ -122,5 +122,5 @@ long-lived branch into another to sync it.
 
 - Decide the target release before branching. Preserve the machine-readable release
   state and its generated table; update them with the release-state helper, not by hand.
-- Only maintainers cut releases; agents never tag. Follow the release preparation and
-  publication workflow in `RELEASING.md`.
+- A maintainer approves each release once; after that, agents may tag, publish and cut
+  it. Follow the release preparation and publication workflow in `RELEASING.md`.
