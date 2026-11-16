@@ -33,7 +33,7 @@ same workflow will be reused repeatedly.
 creates drift and makes fixes harder to apply consistently.
 
 **Do this instead:** If two or more existing skills need the same helper, add it to
-`.opencode-plugin/skills/_shared/scripts/` and source it from each skill via
+`.opencode-plugin/shared/scripts/` and source it from each skill via
 `~/.config/opencode/shared/scripts/<name>.sh`. Do not create a new skill
 just to house shared logic.
 

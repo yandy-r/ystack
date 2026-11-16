@@ -62,7 +62,7 @@ adding it.
 
 | Field       | Value                                                    |
 | ----------- | -------------------------------------------------------- |
-| Path        | `.opencode-plugin/skills/_shared/scripts/<kebab-name>.sh`             |
+| Path        | `.opencode-plugin/shared/scripts/<kebab-name>.sh`             |
 | Sourced via | `{{package-root}}/shared/scripts/<name>.sh` |
 | Threshold   | Only create when two or more distinct skills need it     |
 

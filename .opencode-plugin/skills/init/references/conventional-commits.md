@@ -17,7 +17,7 @@ Condensed Conventional Commits 1.0.0 spec. The generated `AGENTS.md` carries a o
 
 | Type       | Purpose                                         | Semver bump (release tooling) |
 | ---------- | ----------------------------------------------- | ----------------------------- |
-| `feat`     | New user-facing feature                         | **minor**                     |
+| `feat`     | New user-facing feature                         | **minor** once its set ships  |
 | `fix`      | Bug fix                                         | **patch**                     |
 | `docs`     | Documentation only                              | none                          |
 | `refactor` | Code change that is neither a fix nor a feature | none                          |
@@ -70,6 +70,13 @@ Both forms trigger a **major** version bump in release tooling.
 - Body is free-form; explain the _why_, not the _what_.
 - Footers follow `Token: value` syntax (`BREAKING CHANGE`, `Closes`, `Co-authored-by`).
 - `BREAKING CHANGE` footer MUST be uppercase — `breaking change` is not spec-compliant.
+
+### Feature sets
+
+Several `feat` commits often build one feature. Release tooling groups them into a
+**feature set** (the commit scope by default, so `feat(sync): …` commits form the `sync`
+set) and requires a minor only when a set is complete and user-visible; an in-progress
+set ships in a patch. Add a `Feature-Set: <name>` footer when a feature spans scopes.
 
 ---
 

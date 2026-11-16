@@ -41,7 +41,15 @@ If pre-flight fails: resolve all failing conditions before proceeding. Do not sk
   git log $(git describe --tags --abbrev=0)..HEAD --oneline
   ```
 
-- [ ] Select the semver bump level (major / minor / patch) per `references/version-policy.md`.
+- [ ] Group `feat` commits into feature sets and mark the complete ones:
+
+  ```
+  .opencode-plugin/shared/scripts/release-feature-sets.sh --format text
+  .opencode-plugin/shared/scripts/release-feature-sets.sh --complete <set,...> --format text
+  ```
+
+- [ ] Select the semver bump level (major / minor / patch) at or above `Required bump`,
+      per `references/version-policy.md`.
 - [ ] Record the chosen new version: `<new-version>`
 
 ---

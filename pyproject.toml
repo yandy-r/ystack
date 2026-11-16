@@ -70,4 +70,5 @@ files = [
   "ycc/skills/mcp-parity/scripts/capability_diff.py",
   "ycc/skills/mcp-parity/scripts/openapi_inventory.py",
   "scripts/test_mcp_parity_diff.py",
+  "ycc/skills/_shared/scripts/release_feature_sets.py",
 ]

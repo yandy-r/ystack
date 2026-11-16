@@ -2,8 +2,8 @@
 # ci-classify.sh — Shared failure classification and signature helpers.
 #
 # Sourced by:
-#   - .opencode-plugin/skills/_shared/scripts/ci-monitor.sh         (PR-mode monitor)
-#   - .opencode-plugin/skills/_shared/scripts/release-ci-monitor.sh (release-mode monitor)
+#   - .opencode-plugin/shared/scripts/ci-monitor.sh         (PR-mode monitor)
+#   - .opencode-plugin/shared/scripts/release-ci-monitor.sh (release-mode monitor)
 #
 # Contract:
 #   See _shared/references/ci-monitoring.md ("Failure classification" section)
