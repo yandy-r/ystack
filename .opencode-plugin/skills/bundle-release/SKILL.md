@@ -59,15 +59,32 @@ Read `ycc/skills/bundle-release/references/version-policy.md`.
 Compare the current version (reported by preflight output) against the requested
 `<new-version>`.
 
-Determine the bump kind (major / minor / patch) by inspecting recent commit history:
+Group the commits since the last tag into feature sets:
 
 ```
-git log $(git describe --tags --abbrev=0 2>/dev/null || echo HEAD~20)..HEAD --oneline
+.opencode-plugin/shared/scripts/release-feature-sets.sh --format text
 ```
 
-If the requested bump looks mismatched with the recent history — for example, new
-skills were added but a patch bump was requested — surface the concern and ask the user
-to confirm before continuing.
+A single `feat` commit does not require a minor; a complete feature set does. When
+feature sets are listed, ask which are complete and user-visible (one multi-select
+question; "none" is valid), then rerun with `--complete <set,...>` to read
+`Required bump`. Several `feat` commits for one feature are one set, and a set still in
+progress or hidden behind an off-by-default switch is not complete. A set whose `feat`
+commits shipped in an earlier patch is not listed; if it is now complete, name it in
+`--complete` anyway (the helper finds it before the range).
+
+`Required bump` reads commit markers only, so also apply the Major rules in
+`references/version-policy.md`: a renamed or removed skill, command or agent is a major
+even without a `!` marker. Check with
+`git diff --name-status <last-tag>..HEAD -- ycc/skills ycc/agents` (any `D` or `R` entry
+for a `SKILL.md` or agent file).
+
+The floor is the higher of `Required bump` and the Major rules. A requested version below
+it (a patch over a complete set, such as a finished new skill, or a non-major over a
+breaking change or a renamed/removed surface) is refused, not confirmed: stop, name what
+sets the floor, and ask for a version at or above it. A patch over in-progress sets is
+expected; name those sets once and continue. Headless, treat every set as in progress,
+and on a refusal print the concern plus the rerun command.
 
 ## Phase 2: Dry-run check
 

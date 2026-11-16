@@ -326,6 +326,8 @@ def apply_opencode_text_transforms(
     output = output.replace('".claude-plugin"', '".opencode-plugin"')
     output = output.replace("'.claude-plugin'", "'.opencode-plugin'")
     if rewrite_source_paths:
+        # _shared/ is relocated to shared/ in the opencode bundle layout.
+        output = re.sub(r"\bycc/skills/_shared/", ".opencode-plugin/shared/", output)
         output = re.sub(r"\bycc/skills/", ".opencode-plugin/skills/", output)
         output = re.sub(r"\bycc/agents/", ".opencode-plugin/agents/", output)
 

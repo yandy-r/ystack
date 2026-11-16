@@ -97,6 +97,9 @@ Tags follow `vX.Y.Z` and are cut on `main`. Hand-edited version files:
 version). Generated package manifests are not edited by hand. `./scripts/sync.sh`
 refreshes them, and preflight checks that they match. Changelog: none; each release
 has notes in `docs/releases/<version>.md`.
+A minor needs a complete feature set, not just a `feat:` commit: several `feat` commits
+for one feature (same scope, or a shared `Feature-Set:` footer) ship in patches until the
+set is complete. Breaking changes are always a major.
 `/ycc:bundle-release` prepares a release; nothing publishes automatically.
 
 ### Every release — from `main`

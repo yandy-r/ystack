@@ -46,7 +46,8 @@ Parse `$ARGUMENTS`:
 
 - **version** (optional first positional) — target semver (`1.4.0`, `v1.4.0`, or a
   pre-release like `1.4.0-rc.1`). If omitted, propose one from commit history
-  (conventional-commit bump) and ask for confirmation before continuing.
+  (feature-set bump: a `feat` commit requires a minor only once its feature set is
+  complete) and ask for confirmation before continuing.
 - **--arch=\<list\>** — comma-separated target architectures (e.g. `amd64,arm64`).
   Overrides language defaults.
 - **--os=\<list\>** — comma-separated target operating systems
@@ -249,6 +250,9 @@ If a file cannot be read, say so.
 Scripts (invoke as `skill://releaser/scripts/<name>`):
 
 - `scripts/detect-project.sh` — Run when: Phase 1 detection (emits JSON).
+- `skill://ycc-shared/scripts/release-feature-sets.sh` — Run when:
+  Phase 2 version proposal or sanity check (groups `feat` commits into feature sets
+  and reports `required_bump`).
 - `scripts/check-release-branch.sh` — Run when: Phase 2 branch check after the
   version is confirmed.
 - `scripts/draft-changelog.sh` — Run when: Phase 4 notes drafting.

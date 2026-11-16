@@ -61,6 +61,13 @@ class HomePathTestCase(unittest.TestCase):
         self.assertIn('"~/.config/opencode/hooks"', transformed)
         self.assertNotIn("${HOME}", transformed)
 
+    def test_repo_relative_shared_paths_map_to_the_shared_layout(self) -> None:
+        raw = "Run `ycc/skills/_shared/scripts/x.sh` then `ycc/skills/foo/scripts/y.sh`.\n"
+        transformed = apply_opencode_text_transforms(raw, {})
+        self.assertIn("`.opencode-plugin/shared/scripts/x.sh`", transformed)
+        self.assertIn("`.opencode-plugin/skills/foo/scripts/y.sh`", transformed)
+        self.assertNotIn("skills/_shared/", transformed)
+
     def test_shell_output_still_expands_quoted_home(self) -> None:
         raw = '[[ -f "$LIB" ]] || LIB="~/.claude/shared/scripts/lib/forge.sh"\n'
         transformed = apply_opencode_text_transforms(raw, {}, output_suffix=".sh")

@@ -115,7 +115,7 @@ Use standard semver (`MAJOR.MINOR.PATCH`). Apply the first rule that matches:
 - Change to the `name` field in `plugin.json`
 - Restructure of how the bundle is loaded or distributed
 
-**Minor** — any of the following:
+**Minor** — a complete feature set that includes any of the following:
 
 - New skill, command, or agent added
 - Additive frontmatter fields on existing surfaces (no removals or renames)
@@ -127,9 +127,16 @@ Use standard semver (`MAJOR.MINOR.PATCH`). Apply the first rule that matches:
 - Documentation-only change (SKILL.md prose, reference docs, templates)
 - Template refinement or whitespace/linter-only fix
 
-Tie-breaker: when a change could reasonably justify two bump levels, prefer the more
-conservative (higher) bump. When in doubt, bump minor rather than patch, and major
-rather than minor.
+These rules apply to **feature sets**, not single commits. Several `feat` commits often
+build one feature; `ycc/skills/_shared/scripts/release-feature-sets.sh` groups them by
+their `Feature-Set:` footer, else their scope. A set requires a minor only when it is
+complete and user-visible. A set still in progress, or hidden behind an off-by-default
+switch (see "Unfinished work" in `RELEASING.md`), ships in a patch, and its commits are
+listed under the release notes' features as usual.
+
+Tie-breaker: Major rules are never downgraded; when a change could be breaking, bump
+major. Between minor and patch, the feature-set answer decides: when the maintainer is
+unsure whether a set is complete, it is in progress and the release is a patch.
 
 ## Never-Edit List
 

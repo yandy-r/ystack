@@ -77,25 +77,44 @@ matrix.
 
 ## Phase 2: Propose version and compute bump
 
-If the user did NOT supply a version:
+Steps 1–2 run whether or not the user supplied a version; they produce
+`required_bump` (printed as `Required bump:` by `--format text`).
 
-1. Collect commits since `latest_tag` (or the last 50 if no tag exists):
-   `git log <latest_tag>..HEAD --format="%s"`.
-2. Classify each commit against conventional-commit types. Determine the bump:
-   - Any `!` marker, `BREAKING CHANGE` footer, or `major:` → major.
-   - Any `feat:` → minor.
-   - Otherwise → patch.
-3. Propose the next semver and ASK for confirmation before writing anything.
+1. Group the commits since `latest_tag` into feature sets:
+   `skill://ycc-shared/scripts/release-feature-sets.sh --format text`
+   (`--from <ref>` when `latest_tag` is not the right range start; with no tag it covers
+   all history). `feat` commits are grouped by their `Feature-Set:` footer, else their
+   scope, else `unscoped`; merge commits are skipped.
+2. If any feature sets are listed, ASK which ones are complete and user-visible (one
+   multi-select question listing each set with its commit count; "none" is a valid
+   answer). Several `feat` commits for one feature are one set, and a set that is still
+   in progress, or hidden behind an off-by-default switch, is not complete. Also ask
+   whether a set whose `feat` commits shipped in an earlier patch is now complete: it is
+   not listed, but naming it in `--complete` is accepted (the helper finds it before
+   the range). Rerun the helper with `--complete <set,...>` (or `--complete all`) to
+   get `required_bump`:
+   - Any `!` marker or `BREAKING CHANGE` footer → major.
+   - Any complete feature set → minor.
+   - Otherwise → patch. `feat` commits from in-progress sets ship in a patch.
+3. If the user did NOT supply a version, propose the next semver from `required_bump`
+   and ASK for confirmation before writing anything. The bump is a floor; the
+   maintainer may choose a higher one.
 
-If the user DID supply a version, sanity-check the bump magnitude against commit
-history. Surface a concern if they are mismatched (e.g. `feat:` commits but a patch
-bump) and require explicit confirmation before continuing.
+If the user DID supply a version, check it against `required_bump`. A version below it
+(a patch over a complete feature set, or a minor/patch over a breaking change) is
+refused, not confirmed: stop, say which set or breaking commit sets the floor, and ask
+for a version at or above it (headless: stop and print the rerun command). A patch over
+`feat` commits whose sets are all in progress is not a mismatch; note the in-progress
+sets once and continue. The `release/X.Y` rules below take precedence on that branch.
+
+Headless (no question tool or chat turn): treat every set as in progress, report the
+sets in the proposal, and require the version as an argument as usual.
 
 The release model (from `release-state.sh get`) decides how commit types map to the bump:
 
 - **No RELEASING.md, or trunk-only:** the rules above apply as written. Every release is
-  cut from the trunk, so `feat:` commits mean the next release is a minor; a patch
-  requested over `feat:` commits gets the mismatch concern.
+  cut from the trunk; a complete feature set makes the next release a minor, and a
+  patch requested over a complete set is refused.
 - **release-branches, on `release/X.Y`:** the branch bounds the bump to the next
   `X.Y.Z` patch. Everything on the branch is a deliberate backport, so a `feat:`
   cherry-pick is expected and does NOT raise the mismatch concern or make it a minor.

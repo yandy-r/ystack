@@ -37,7 +37,7 @@ Every template the skill can render, its target path, and the variables it subst
 
 ---
 
-The `templates/CLAUDE.md.tmpl` row combines three mechanisms in one Placeholders cell on purpose: `CLAUDE_MD_SHIM` is the canonical shim token rendered by the shared helper (`{{package-root}}/shared/scripts/rules_pointer.py` via `rules_pointer.py`), so the pointer line is not user-overridable policy; `CLAUDE_ONLY_NOTES` is user/Phase 2 text substituted into that same template; and `IF_CLAUDE_ONLY` is the conditional block that gates the notes section. All three are aspects of the single default `CLAUDE.md` shim, so they share one row.
+The `templates/CLAUDE.md.tmpl` row combines three mechanisms in one Placeholders cell on purpose: `CLAUDE_MD_SHIM` is the canonical shim token rendered by the shared helper (`.opencode-plugin/shared/scripts/rules_pointer.py` via `rules_pointer.py`), so the pointer line is not user-overridable policy; `CLAUDE_ONLY_NOTES` is user/Phase 2 text substituted into that same template; and `IF_CLAUDE_ONLY` is the conditional block that gates the notes section. All three are aspects of the single default `CLAUDE.md` shim, so they share one row.
 
 ## Placeholder Reference
 
