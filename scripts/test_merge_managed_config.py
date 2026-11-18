@@ -2342,7 +2342,7 @@ class ProjectSettingsGroupTestCase(MergeBase):
         self.assertIn("# mine", text)
         self.assertEqual(parsed["model"], "gpt-6-astra")
         self.assertTrue(parsed["agents"]["enabled"])
-        self.assertTrue(parsed["features"]["multi_agent"])
+        self.assertTrue(parsed["features"]["multi_agent_v2"])
         for key in ("approval_policy", "approvals_reviewer", "sandbox_mode", "sandbox_workspace_write"):
             self.assertNotIn(key, parsed)
         for key in ("plugins", "mcp_servers", "tui", "notice", "apps"):

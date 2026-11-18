@@ -144,7 +144,7 @@ status_line = [
 
 [features]
 shell_snapshot = true
-multi_agent = true
+multi_agent_v2 = true
 apps = true
 
 [plugins."github@openai-curated"]

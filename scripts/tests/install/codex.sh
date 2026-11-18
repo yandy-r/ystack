@@ -468,7 +468,7 @@ cat > "${home}/project/.codex/config.toml" <<'TOML'
 model = "gpt-6-astra"
 
 [features]
-multi_agent = true
+multi_agent_v2 = true
 TOML
 cp "${home}/project/.codex/config.toml" "${home}/before.toml"
 install_must_succeed "${home}" remove --target codex --intent settings
