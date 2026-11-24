@@ -1,0 +1,64 @@
+# lefthook.yml — git hook manager for {{PROJECT_NAME}}
+#
+# Install with ./scripts/install-lefthook.sh (bootstraps the binary and runs
+# `lefthook install` to wire .git/hooks). See docs/lefthook-usage.md for details.
+#
+# Bypass a hook once:   git commit --no-verify / git push --no-verify
+# Skip in CI:           lefthook checks CI=true automatically; no config needed.
+
+pre-commit:
+  parallel: true
+  commands:
+{{#IF_RUST}}
+    fmt:
+      run: cargo fmt --check
+      glob: "*.rs"
+    clippy:
+      run: cargo clippy --all-targets -- -D warnings
+      glob: "*.rs"
+{{/IF_RUST}}
+{{#IF_GO}}
+    gofmt:
+      run: gofmt -l {staged_files} | (! grep .)
+      glob: "*.go"
+    vet:
+      run: go vet ./...
+      glob: "*.go"
+{{/IF_GO}}
+{{#IF_PYTHON}}
+    ruff:
+      run: ruff check --fix {staged_files}
+      glob: "*.{py,pyi}"
+      stage_fixed: true
+    black:
+      run: black {staged_files}
+      glob: "*.{py,pyi}"
+      stage_fixed: true
+{{/IF_PYTHON}}
+{{#IF_TS}}
+    biome:
+      run: npx --no -- biome check --write --no-errors-on-unmatched {staged_files}
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json,jsonc,css}"
+      stage_fixed: true
+    typecheck:
+      run: npx --no -- tsc --noEmit
+      glob: "*.{ts,tsx,mts,cts}"
+{{/IF_TS}}
+
+{{#IF_TEST_CMD}}
+pre-push:
+  commands:
+    test:
+      run: {{TEST_CMD}}
+{{/IF_TEST_CMD}}
+{{#IF_NO_TEST_CMD}}
+# No test command was detected, so no pre-push hook is configured.
+# Add `pre-push: commands: test: run: <your test command>` when one exists.
+{{/IF_NO_TEST_CMD}}
+
+{{#IF_TS}}
+commit-msg:
+  commands:
+    commitlint:
+      run: npx --no -- commitlint --edit {1}
+{{/IF_TS}}

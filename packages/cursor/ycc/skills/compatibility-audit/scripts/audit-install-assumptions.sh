@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # audit-install-assumptions.sh — validate install-path assumptions for each
-# generated compatibility target (Claude, Cursor, Codex, opencode, omp, pi).
+# generated compatibility target (Claude, Cursor, Codex, opencode, omp, pi, antigravity).
 #
 # Flags:
-#   --target=<claude|cursor|codex|opencode|omp|pi|all>  (default: all)
+#   --target=<claude|cursor|codex|opencode|omp|pi|antigravity|all>  (default: all)
 #   --format=<human|json>                        (default: human)
 #   --help, -h                                   print usage and exit 0
 #
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 usage() { cat <<'EOF'
-Usage: audit-install-assumptions.sh [--target=<claude|cursor|codex|opencode|omp|pi|all>]
+Usage: audit-install-assumptions.sh [--target=<claude|cursor|codex|opencode|omp|pi|antigravity|all>]
                                     [--format=<human|json>] [--help|-h]
                                     [repo-root]
 
@@ -42,7 +42,7 @@ for arg in "$@"; do
       ;;
   esac
 done
-case "$TARGET" in all|claude|cursor|codex|opencode|omp|pi) ;;
+case "$TARGET" in all|claude|cursor|codex|opencode|omp|pi|antigravity) ;;
   *) echo "audit-install-assumptions.sh: unknown --target: $TARGET" >&2; usage >&2; exit 2 ;; esac
 case "$FORMAT" in human|json) ;;
   *) echo "audit-install-assumptions.sh: unknown --format: $FORMAT" >&2; usage >&2; exit 2 ;; esac
@@ -413,6 +413,35 @@ PY
 }
 
 # ---------------------------------------------------------------------------
+# Antigravity checks
+# ---------------------------------------------------------------------------
+run_antigravity_checks() {
+  local adir="${REPO_ROOT}/packages/antigravity" pkg manifest
+  # AG1: every generated plugin has a valid root plugin.json naming its folder.
+  if [[ ! -d "$adir" ]]; then
+    record "antigravity" "AG1" "FAIL" "${adir} does not exist (run ./scripts/sync.sh --only antigravity)"; return
+  fi
+  for pkg in ycc ycc-mcp ycc-rules; do
+    manifest="${adir}/${pkg}/plugin.json"
+    if ! json_ok "$manifest"; then
+      record "antigravity" "AG1" "FAIL" "${manifest} is missing or not valid JSON"; continue
+    fi
+    if [[ "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("name",""))' "$manifest")" != "$pkg" ]]; then
+      record "antigravity" "AG1" "FAIL" "${manifest} name must be ${pkg}"; continue
+    fi
+    record "antigravity" "AG1" "PASS" "${pkg}"
+  done
+  # AG2: skills and agents carry no Claude plugin-root variable (Antigravity has none).
+  local hits
+  hits="$(grep -rl --include=SKILL.md --include='*.md' 'CLAUDE_PLUGIN_ROOT' "${adir}/ycc/skills"/*/SKILL.md "${adir}/ycc/agents" 2>/dev/null || true)"
+  if [[ -n "$hits" ]]; then
+    record "antigravity" "AG2" "FAIL" "CLAUDE_PLUGIN_ROOT left in: $(tr '\n' ' ' <<<"$hits")"
+  else
+    record "antigravity" "AG2" "PASS" ""
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
 case "$TARGET" in
@@ -422,7 +451,8 @@ case "$TARGET" in
   opencode) run_opencode_checks ;;
   omp)      run_omp_checks ;;
   pi)       run_pi_checks ;;
-  all)      run_claude_checks; run_cursor_checks; run_codex_checks; run_opencode_checks; run_omp_checks; run_pi_checks ;;
+  antigravity) run_antigravity_checks ;;
+  all)      run_claude_checks; run_cursor_checks; run_codex_checks; run_opencode_checks; run_omp_checks; run_pi_checks; run_antigravity_checks ;;
 esac
 
 OVERALL_RC=0

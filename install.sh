@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 CLI_NAME="ycc"
 # shellcheck disable=SC2034  # read by steps.sh (target resolution).
-ALL_TARGETS=(claude cursor codex opencode agents omp)
+ALL_TARGETS=(claude cursor codex opencode agents omp antigravity)
 
 # shellcheck source=scripts/lib/install/core.sh
 source "${SCRIPT_DIR}/scripts/lib/install/core.sh"
@@ -57,7 +57,9 @@ their own plugin CLIs (the ycc marketplace and its packages ycc, ycc-mcp,
 ycc-hooks, ycc-rules). opencode installs it as the npm plugin
 @yandy-r/ycc-opencode: the base step writes one 'plugins' entry into
 ~/.config/opencode/opencode.json. The agents target has no native route;
-the installer copies its skills. After a successful native install (and on
+the installer copies its skills. antigravity places the generated
+packages/antigravity plugins in ~/.gemini/config/plugins (through 'agy plugin
+install' when agy is on PATH, else as ycc-owned copies). After a successful native install (and on
 remove), the installer automatically retires the legacy copies and config
 an older ycc installer wrote for that target — only entries it can prove it
 owns (recorded hash, ownership record or a byte-identical copy); your own
@@ -158,6 +160,9 @@ plugins, mods):
               commands, MCP servers and rules; dedupe is default-on and writes the user
               config.yml; settings and rules are opt-in, user scope only;
               settings runs only with --global)
+    antigravity base, skills, agents, commands, mcp, plugins → base  rules→rules
+              settings, hooks, mods → no-op (global scope only; the plugins
+              ycc, ycc-mcp and ycc-rules carry skills, agents, MCP and rules)
 
 Remove ('remove' subcommand):
   Undoes what the selected steps installed, for every target and intent (same
@@ -274,9 +279,11 @@ Merge semantics (all structured config files):
 
 Options:
   --target <targets>  Comma-separated targets: claude, cursor, codex, opencode,
-                      agents, omp, or all (which must stand alone). Every target
-                      is validated before any of them runs. all skips omp unless
-                      omp >= 18.12.2 is on PATH and an OMP package is listed.
+                      agents, omp, antigravity, or all (which must stand alone).
+                      Every target is validated before any of them runs. all
+                      skips omp unless omp >= 18.12.2 is on PATH and an OMP
+                      package is listed, and antigravity unless agy is on PATH
+                      or ~/.gemini/config exists.
   --mode <mode>       Marketplace source mode (default: local). Supported:
                         local — claude adds this checkout as a directory
                                 marketplace; codex runs 'codex plugin
@@ -446,7 +453,8 @@ Options:
                       codex: ycc, ycc-mcp; cursor: ycc, ycc-rules, ycc-mcp,
                       ycc-hooks; omp: ycc, ycc-mcp, ycc-rules (ycc-hooks
                       excluded: herdr reporting is 'herdr integration install
-                      omp'); opencode: @yandy-r/ycc-opencode.
+                      omp'); opencode: @yandy-r/ycc-opencode; antigravity:
+                      ycc, ycc-mcp, ycc-rules (one plugin each).
                       Each package maps onto the target's native route:
                         claude  ycc → base (ycc@ycc), ycc-mcp → mcp
                                 (ycc-mcp@ycc), ycc-hooks → hooks
@@ -616,8 +624,21 @@ Target steps:
                       (needs PyYAML); local edits are kept unless --force.
             rules:    opt-in, user scope only. symlink
                       ycc/settings/rules/AGENTS.md into <agentDir>/.
+  antigravity base | rules (global only; --project and --mode repo are rejected)
+            base:     install the generated packages/antigravity plugins ycc,
+                      ycc-mcp and ycc-rules into ~/.gemini/config/plugins (the
+                      folder the Antigravity App, IDE and agy CLI share): 'agy
+                      plugin install <path>' when agy is on PATH, else an
+                      owned copy. Ownership is recorded in
+                      ~/.config/ycc/antigravity-install.json; remove deletes
+                      only unedited ycc-owned plugins, a foreign folder is
+                      refused unless --force. YCC_ANTIGRAVITY_CONFIG_DIR and
+                      YCC_ANTIGRAVITY_AGY override the folder and the binary.
+            rules:    opt-in. symlink ycc/settings/rules/AGENTS.md to
+                      ~/.gemini/config/AGENTS.md.
   all       Run claude then cursor then codex then opencode then agents (then
-            omp, once omp >= 18.12.2 is on PATH and an OMP package is listed);
+            omp, once omp >= 18.12.2 is on PATH and an OMP package is listed,
+            then antigravity, once agy is on PATH or ~/.gemini/config exists);
             step flags propagate.
 
 Examples:
@@ -662,6 +683,11 @@ Examples:
   $(basename "$0") install --target omp --force                    # reinstall the ycc-owned packages
   $(basename "$0") remove  --target omp --only base                # uninstall what ycc installed
   $(basename "$0") install --target omp --settings --rules --global  # ycc model roles + approvals, AGENTS.md (user scope)
+
+  # Google Antigravity (App, IDE and the agy CLI share ~/.gemini/config):
+  $(basename "$0") install --target antigravity                    # ycc, ycc-mcp, ycc-rules plugins
+  $(basename "$0") sync    --target antigravity --intent base,rules  # plugins + ~/.gemini/config/AGENTS.md
+  $(basename "$0") remove  --target antigravity --intent base,rules  # remove what ycc installed
 EOF
 }
 
@@ -897,6 +923,7 @@ elif [[ ${#INTENTS[@]} -gt 0 ]]; then
 fi
 
 if [[ ${#ONLY_STEPS[@]} -gt 0 ]]; then
+    # shellcheck disable=SC2034  # read by steps.sh (step_enabled).
     EXCLUSIVE_STEPS=1
     if [[ "${SETTINGS}" == "1" ]]; then
         warn "--settings is ignored when --only is used"
@@ -916,6 +943,7 @@ resolve_targets "${TARGET}"
 # Before any target preflight: agents-only selections never reach a native target.
 preflight_native_selections
 if [[ -n "${PACKAGE}" ]]; then
+    # shellcheck disable=SC2034  # read by the package preflight in packages.sh.
     [[ "${TARGET}" == "all" ]] && PACKAGE_ALL_TARGETS_REQUESTED=1
     package_preflight_targets
     order_targets

@@ -35,7 +35,7 @@ DEFAULT_MATRIX_PATH = REPO_ROOT / "ycc/skills/_shared/references/target-capabili
 DEFAULT_SCHEMA_PATH = REPO_ROOT / "ycc/settings/packages.schema.json"
 MANIFEST_REL = Path("ycc/settings/packages.json")
 
-CANONICAL_TARGETS = ("claude", "cursor", "codex", "opencode", "omp", "pi")
+CANONICAL_TARGETS = ("claude", "cursor", "codex", "opencode", "omp", "pi", "antigravity")
 # Targets modeled before any installer ships, keyed to their generated tree. The tree counts as
 # present only once it holds an installable package (``<tree>/*/package.json``): skills land under
 # packages/pi/ycc/skills (YAN-1184) before the package generator writes package.json (YAN-1188).

@@ -359,7 +359,7 @@ done
 # zsh and fish: the static target lists and the --dry-run option.
 for f in _ycc ycc.fish; do
     script="$(cat "${REPO_ROOT}/scripts/completions/${f}")"
-    assert_contains "${script}" "claude cursor codex opencode agents omp all" "${f} completes --target omp"
+    assert_contains "${script}" "claude cursor codex opencode agents omp antigravity all" "${f} completes --target omp and antigravity"
     assert_contains "${script}" "dry-run" "${f} completes --dry-run"
 done
 

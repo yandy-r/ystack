@@ -45,7 +45,7 @@ expect_targets() {
 }
 
 ALL="${VALIDATE_TARGETS[*]}"
-BUNDLES="inventory cursor codex opencode omp agents claude-native cursor-native codex-native packages release practices"
+BUNDLES="inventory cursor codex opencode omp antigravity agents claude-native cursor-native codex-native packages release practices"
 
 echo "== path -> target mapping =="
 
@@ -177,12 +177,14 @@ expect_targets "install ID tests select packages" "packages" scripts/test_valida
 expect_targets "capability matrix validator selects packages and types" "packages types" scripts/validate_capability_matrix.py
 expect_targets "capability matrix tests select packages" "packages" scripts/test_validate_capability_matrix.py
 expect_targets "PI1 audit fixture test selects packages" "packages" scripts/test-pi-install-assumptions.sh
+expect_targets "antigravity plugins select antigravity and packages" "antigravity packages" packages/antigravity/ycc/plugin.json
+expect_targets "antigravity install helper selects antigravity, config and types" "antigravity config types" scripts/antigravity_install.py
 expect_targets "generated shell path validator selects packages and types" "packages types" scripts/validate_generated_shell_paths.py
 expect_targets "generated shell path tests select packages and types (mypy files)" "packages types" scripts/test_validate_generated_shell_paths.py
 expect_targets "capability matrix selects the bundle targets including packages" "${BUNDLES}" ycc/skills/_shared/references/target-capability-matrix.md
 expect_targets "settings select everything" "${ALL}" ycc/settings/models.json
-expect_targets "package model selects content, native, generators, parity and types" "cursor codex opencode omp claude claude-native cursor-native codex-native packages types" scripts/package_model.py
-expect_targets "package manifest selects content, native, generators and parity" "cursor codex opencode omp claude claude-native cursor-native codex-native packages" ycc/settings/packages.json
+expect_targets "package model selects content, native, generators, parity and types" "cursor codex opencode omp antigravity claude claude-native cursor-native codex-native packages types" scripts/package_model.py
+expect_targets "package manifest selects content, native, generators and parity" "cursor codex opencode omp antigravity claude claude-native cursor-native codex-native packages" ycc/settings/packages.json
 expect_targets "package graph builder selects native split, packages and types" "claude-native packages types" scripts/build_package_graph.py
 expect_targets "package graph extractor selects native split, packages and types" "claude-native packages types" scripts/package_graph_extract.py
 expect_targets "package graph tests select packages" "packages" scripts/test_package_graph.py

@@ -96,6 +96,19 @@
             "YAN-1195 live acceptance on the 1.2.0 floor and current Pi"
           ],
           "notes": "Deferred: generated Pi package under packages/pi/ycc (pi >=1.2.0, recommended 1.5.0) with skills, _shared, ycc:<name> command and subagent extensions, and agent data; rewrites ${CLAUDE_PLUGIN_ROOT}, /ycc: and $ARGUMENTS, which Pi leaves literal. Pi has no catalog: install.sh --target pi will run pi install <abs path>. No generator or installer ships yet."
+        },
+        "antigravity": {
+          "status": "included",
+          "listed": false,
+          "mechanism": "native",
+          "components": ["skills", "agents", "shared"],
+          "requires": [],
+          "target_release": "v6.6.0",
+          "experimental": true,
+          "opt_in": false,
+          "evidence": ["docs/internal/spikes/antigravity-runtime-contract.md"],
+          "gates": ["Live install, sync and remove against agy and the Antigravity App on a clean profile"],
+          "notes": "Generated Antigravity plugin under packages/antigravity/ycc (plugin.json at the root): skills/<name>/SKILL.md, the sibling ycc-shared/ helpers and agents/<name>.md with Antigravity tool names and inherit/flash/pro models. ${CLAUDE_PLUGIN_ROOT} rewrites to ~/.gemini/config/plugins/ycc, so installs are global only. install.sh --target antigravity runs 'agy plugin install <path>' or, without agy, places an owned copy in ~/.gemini/config/plugins/. No catalog: Antigravity publishes no marketplace format."
         }
       }
     },
@@ -182,6 +195,19 @@
             "YAN-1195 live acceptance on the 1.2.0 floor and current Pi"
           ],
           "notes": "Deferred: extension package (pi >=1.2.0) whose registrar calls pi.registerMcpServer for the shipped server set read as package data, because Pi never reads mcp.json from a package; a same-name user mcp.json entry wins, tools become mcp__<server>__<tool>, and SSE servers are rejected. An opt-in install.sh --mcp merge into <agentDir>/mcp.json is the fallback for pi mcp shell commands."
+        },
+        "antigravity": {
+          "status": "included",
+          "listed": false,
+          "mechanism": "native",
+          "components": ["mcp"],
+          "requires": [],
+          "target_release": "v6.6.0",
+          "experimental": true,
+          "opt_in": false,
+          "evidence": ["docs/internal/spikes/antigravity-runtime-contract.md"],
+          "gates": ["Live install, sync and remove against agy and the Antigravity App on a clean profile"],
+          "notes": "Generated Antigravity plugin under packages/antigravity/ycc-mcp: mcp_config.json with serverUrl for Streamable HTTP servers and stdio servers as-is; identity ${VAR} env pass-throughs dropped. Servers surface as ycc-mcp_<server>."
         }
       }
     },
@@ -403,6 +429,19 @@
             "YAN-1195 live acceptance on the 1.2.0 floor and current Pi"
           ],
           "notes": "Deferred: extension package (pi >=1.2.0) carrying the rule files and a path-rule injector that attaches a family's rules after a matching read, edit, or write. Always rules use the installer-fallback AGENTS.md link."
+        },
+        "antigravity": {
+          "status": "included",
+          "listed": false,
+          "mechanism": "native",
+          "components": ["rules"],
+          "requires": [],
+          "target_release": "v6.6.0",
+          "experimental": true,
+          "opt_in": false,
+          "evidence": ["docs/internal/spikes/antigravity-runtime-contract.md"],
+          "gates": ["Live install, sync and remove against agy and the Antigravity App on a clean profile"],
+          "notes": "Generated Antigravity plugin under packages/antigravity/ycc-rules: the flat ycc-<family>-<stem>.md rules with trigger frontmatter (glob + comma-separated globs, always_on, or model_decision for common rules). OMP-only TTSR trigger rules are omitted."
         }
       }
     },
@@ -541,6 +580,19 @@
             "YAN-1193 owned ~/.agents/skills dedupe overrides"
           ],
           "notes": "Deferred, user scope only: --rules links AGENTS.md into <agentDir> (never APPEND_SYSTEM.md, which a trusted project file replaces); opt-in --settings merges defaultModel into settings.json and --mcp merges the server set into mcp.json; owned -~/.agents/skills/<n>/SKILL.md overrides hide duplicate ~/.agents copies. Pi has no approval modes or command status line."
+        },
+        "antigravity": {
+          "status": "included",
+          "listed": false,
+          "mechanism": "file-copy",
+          "components": ["instructions"],
+          "requires": [],
+          "target_release": "v6.6.0",
+          "experimental": false,
+          "opt_in": false,
+          "evidence": ["docs/internal/spikes/antigravity-runtime-contract.md"],
+          "gates": ["Live install, sync and remove against agy and the Antigravity App on a clean profile"],
+          "notes": "install.sh --target antigravity --rules links the shared ycc AGENTS.md to ~/.gemini/config/AGENTS.md (global rules for the App, IDE and agy CLI). No managed settings: settings.json carries no ycc-managed keys."
         }
       }
     }

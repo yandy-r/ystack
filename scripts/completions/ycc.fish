@@ -34,7 +34,7 @@ complete -c ycc -n $none -a cli -d 'Link install.sh onto PATH as ycc'
 complete -c ycc -n $none -a completion -d 'Print or install shell completion'
 complete -c ycc -n $none -a list -d 'List selectable kinds or a kind\'s names'
 
-complete -c ycc -n $isr -l target -x -a '(__ycc_csv "claude cursor codex opencode agents omp all")' -d Targets
+complete -c ycc -n $isr -l target -x -a '(__ycc_csv "claude cursor codex opencode agents omp antigravity all")' -d Targets
 complete -c ycc -n $sr -l intent -x -a '(__ycc_csv "base skills agents commands settings rules mcp hooks plugins mods")' -d Intents
 # --<kind> selectors: one per kind from 'ycc list', names from 'ycc list <kind>'.
 set -l kinds (ycc list 2>/dev/null)
@@ -42,7 +42,7 @@ for kind in $kinds
     complete -c ycc -n $isr -l $kind -x -a "(__ycc_list_names $kind)" -d "Only these $kind"
 end
 complete -c ycc -n "__fish_seen_subcommand_from list; and not __fish_seen_subcommand_from $kinds" -a "$kinds" -d 'Selectable kind'
-complete -c ycc -n '__fish_seen_subcommand_from list' -l target -x -a '(__ycc_csv "claude cursor codex opencode agents omp all")' -d Targets
+complete -c ycc -n '__fish_seen_subcommand_from list' -l target -x -a '(__ycc_csv "claude cursor codex opencode agents omp antigravity all")' -d Targets
 complete -c ycc -n $ir -l only -x -a '(__ycc_csv "base dedupe skills agents settings rules mcp hooks mods")' -d Steps
 complete -c ycc -n $is -l mode -x -a 'local repo' -d 'Marketplace source mode'
 complete -c ycc -n $inst -l package -x -a '(__ycc_csv "ycc ycc-mcp ycc-hooks ycc-rules ycc-all")' -d 'Install package closures'

@@ -69,12 +69,14 @@ def repo_model() -> PackageModel:
                 runtime("claude", components=("skills", "agents", "shared"), listed=True),
                 runtime("codex", components=("skills", "shared")),
                 runtime("cursor", components=("skills", "agents", "commands", "shared")),
+                runtime("antigravity", components=("skills", "agents", "shared")),
             ),
             package(
                 "ycc-mcp",
                 runtime("claude", components=("mcp",)),
                 runtime("codex", components=("mcp",)),
                 runtime("cursor", components=("mcp",)),
+                runtime("antigravity", components=("mcp",)),
             ),
             package(
                 "ycc-hooks",
@@ -83,7 +85,9 @@ def repo_model() -> PackageModel:
                 runtime("cursor", components=("hooks",)),
             ),
             package("ycc-all", runtime("claude", requires=("ycc", "ycc-mcp", "ycc-hooks"))),
-            package("ycc-rules", runtime("cursor", components=("rules",))),
+            package(
+                "ycc-rules", runtime("cursor", components=("rules",)), runtime("antigravity", components=("rules",))
+            ),
             package("installer-fallback", runtime("cursor", mechanism="file-copy")),
         ),
     )
@@ -193,6 +197,12 @@ class ValidatePackagesTests(unittest.TestCase):
         errors = self.errors()
         self.assert_has_error(errors, "packages/cursor/ycc-rules/.cursor-plugin/plugin.json: missing")
         self.assert_has_error(errors, ".codex-plugin/ycc/.codex-plugin/plugin.json: missing")
+
+    def test_antigravity_manifest_at_plugin_root(self) -> None:
+        (self.root / "packages/antigravity/ycc-mcp/plugin.json").unlink()
+        self.assert_has_error(self.errors(), "packages/antigravity/ycc-mcp/plugin.json: missing")
+        self.assertEqual(validator.component_path("mcp", "antigravity"), "mcp_config.json")
+        self.assertEqual(validator.component_path("shared", "antigravity"), "ycc-shared")
 
     def test_missing_component_tree(self) -> None:
         shutil.rmtree(self.root / "packages/cursor/ycc/skills")

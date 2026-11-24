@@ -1,0 +1,12 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "ycc-rules",
+  "displayName": "ycc rules",
+  "version": "6.5.0",
+  "description": "Language and common coding rules for the ycc workflow.",
+  "author": {
+    "name": "yandy-r"
+  },
+  "repository": "https://github.com/yandy-r/ystack",
+  "license": "MIT"
+}

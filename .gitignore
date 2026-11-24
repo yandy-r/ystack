@@ -53,6 +53,7 @@ opencode.json
 .codex/worktrees/
 .cursor/worktrees/
 .omp/worktrees/
+.antigravity/worktrees/
 .agents/worktrees/
 
 .slim/deepwork/

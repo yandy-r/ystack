@@ -17,8 +17,17 @@ import generate_cursor_packages as cursor
 from package_model import PackageModel, load_package_model
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ROOTS = {"claude": Path("packages/claude"), "cursor": Path("packages/cursor"), "codex": Path(".codex-plugin")}
-MANIFESTS = {runtime: Path(f".{runtime}-plugin/plugin.json") for runtime in ROOTS}
+ROOTS = {
+    "claude": Path("packages/claude"),
+    "cursor": Path("packages/cursor"),
+    "codex": Path(".codex-plugin"),
+    "antigravity": Path("packages/antigravity"),
+}
+# Antigravity reads plugin.json at the plugin root (no dot-folder).
+MANIFESTS = {
+    runtime: Path("plugin.json") if runtime == "antigravity" else Path(f".{runtime}-plugin/plugin.json")
+    for runtime in ROOTS
+}
 CLAUDE_CATALOG = Path(".claude-plugin/marketplace.json")
 CURSOR_CATALOG = Path(".cursor-plugin/marketplace.json")
 
@@ -62,9 +71,9 @@ def package_root(key: str, runtime: str) -> Path:
 
 def component_path(component: str, runtime: str) -> str:
     if component == "mcp":
-        return "mcp.json" if runtime == "cursor" else ".mcp.json"
+        return {"cursor": "mcp.json", "antigravity": "mcp_config.json"}.get(runtime, ".mcp.json")
     if component == "shared":
-        return "shared" if runtime == "codex" else "skills/_shared"
+        return {"codex": "shared", "antigravity": "ycc-shared"}.get(runtime, "skills/_shared")
     return component
 
 

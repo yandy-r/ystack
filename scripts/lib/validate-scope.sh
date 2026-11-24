@@ -8,7 +8,7 @@
 # the unscoped validate.sh, so a rule that is too narrow is caught there.
 
 # shellcheck disable=SC2034  # read by validate.sh and the scope tests.
-VALIDATE_TARGETS=(inventory cursor codex opencode omp agents claude claude-native cursor-native codex-native json config packages release mods practices scope types)
+VALIDATE_TARGETS=(inventory cursor codex opencode omp antigravity agents claude claude-native cursor-native codex-native json config packages release mods practices scope types)
 
 # validate_scope_targets_for_path <path> — print the targets a changed
 # repo-relative path affects: a space-separated list, `all`, or nothing.
@@ -43,6 +43,7 @@ validate_scope_owned_targets() {
         packages/claude/*) echo "claude claude-native packages" ;;
         packages/opencode/*) echo "opencode release packages" ;;
         packages/omp/*) echo "omp" ;;
+        packages/antigravity/*) echo "antigravity packages" ;;
         .omp-plugin/*) echo "omp" ;;
         # Pi's generated tree (YAN-1188); until a pi target exists, the capability-matrix
         # check in `packages` fails closed on its presence (ADR 0003).
@@ -51,8 +52,8 @@ validate_scope_owned_targets() {
         # The package manifest and its model feed the packages validators and
         # per-runtime package generators, so they must match before the
         # catch-all settings rule.
-        ycc/settings/packages.json | ycc/settings/packages.schema.json) echo "cursor codex opencode omp claude claude-native cursor-native codex-native packages" ;;
-        scripts/package_model.py | scripts/test_package_model.py) echo "cursor codex opencode omp claude claude-native cursor-native codex-native packages" ;;
+        ycc/settings/packages.json | ycc/settings/packages.schema.json) echo "cursor codex opencode omp antigravity claude claude-native cursor-native codex-native packages" ;;
+        scripts/package_model.py | scripts/test_package_model.py) echo "cursor codex opencode omp antigravity claude claude-native cursor-native codex-native packages" ;;
         # The graph extractor also drives the hidden v7 Claude split check in claude-native.
         scripts/build_package_graph.py | scripts/package_graph_extract.py) echo "claude-native packages" ;;
         scripts/test_package_graph.py) echo "packages" ;;
@@ -119,6 +120,13 @@ validate_scope_owned_targets() {
         # OMP scripted-model live sessions (YAN-1178): the typed driver and its opt-in harness.
         scripts/omp_scripted_smoke.py | scripts/test-omp-scripted-sessions.sh) echo "omp" ;;
 
+        # Google Antigravity plugins: generator, validator and golden tests, and the install
+        # helper (in [tool.mypy] files with its tests, so it selects `types`) that install.sh
+        # --target antigravity drives.
+        scripts/generate_antigravity_packages.py | scripts/generate-antigravity-packages.sh | scripts/validate-antigravity-packages.sh | scripts/test_generate_antigravity_packages.py) echo "antigravity" ;;
+        scripts/antigravity_install.py) echo "antigravity config" ;;
+        scripts/test_antigravity_install.py) echo "antigravity config types" ;;
+
         # Install docs contain model-validated public package identifiers; the OMP hook-verdict
         # check (validate_omp_native.py) also reads the OMP install doc, the ADR and the spike.
         docs/install/*) echo "packages omp" ;;
@@ -140,7 +148,7 @@ validate_scope_owned_targets() {
         # the install tests and the manifest checks, so they select everything.
         ycc/settings/* | ycc/.claude-plugin/*) echo "all" ;;
         ycc/mods/*) echo "config mods" ;;
-        ycc/*) echo "inventory cursor codex opencode omp agents claude-native cursor-native codex-native packages release practices" ;;
+        ycc/*) echo "inventory cursor codex opencode omp antigravity agents claude-native cursor-native codex-native packages release practices" ;;
 
         # install.sh and its tests. The install-coverage validators in the
         # agents and opencode targets parse the per-target install libs.
