@@ -137,6 +137,14 @@
         "haiku": "@task",
         "inherit": null
       }
+    },
+    "antigravity": {
+      "agentModels": {
+        "opus": "pro",
+        "sonnet": "inherit",
+        "haiku": "flash",
+        "inherit": "inherit"
+      }
     }
   }
 }

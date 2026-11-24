@@ -14,12 +14,13 @@ Prefer `./scripts/sync.sh` and `./scripts/validate.sh`. Both support scoped
 `--only <targets>` runs for iteration; consult `--help` for their supported target
 sets (they differ). Do not change generated files independently of source.
 
-| Target   | Targeted generation entrypoints                                                                                              | Targeted validation entrypoints                                                                                              |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Codex    | `generate-codex-skills.sh`, `generate-codex-agents.sh`, `generate-codex-plugin.sh`                                           | `validate-codex-skills.sh`, `validate-codex-agents.sh`, `validate-codex-plugin.sh`                                           |
-| Cursor   | `generate-cursor-skills.sh`, `generate-cursor-agents.sh`, `generate-cursor-rules.sh`                                         | `validate-cursor-skills.sh`, `validate-cursor-agents.sh`, `validate-cursor-rules.sh`                                         |
-| opencode | `generate-opencode-skills.sh`, `generate-opencode-agents.sh`, `generate-opencode-commands.sh`, `generate-opencode-plugin.sh` | `validate-opencode-skills.sh`, `validate-opencode-agents.sh`, `validate-opencode-commands.sh`, `validate-opencode-plugin.sh` |
-| OMP      | `generate-omp-skills.sh`                                                                                                     | `validate-omp-skills.sh`                                                                                                     |
+| Target      | Targeted generation entrypoints                                                                                              | Targeted validation entrypoints                                                                                              |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Codex       | `generate-codex-skills.sh`, `generate-codex-agents.sh`, `generate-codex-plugin.sh`                                           | `validate-codex-skills.sh`, `validate-codex-agents.sh`, `validate-codex-plugin.sh`                                           |
+| Cursor      | `generate-cursor-skills.sh`, `generate-cursor-agents.sh`, `generate-cursor-rules.sh`                                         | `validate-cursor-skills.sh`, `validate-cursor-agents.sh`, `validate-cursor-rules.sh`                                         |
+| opencode    | `generate-opencode-skills.sh`, `generate-opencode-agents.sh`, `generate-opencode-commands.sh`, `generate-opencode-plugin.sh` | `validate-opencode-skills.sh`, `validate-opencode-agents.sh`, `validate-opencode-commands.sh`, `validate-opencode-plugin.sh` |
+| Antigravity | `generate-antigravity-packages.sh`                                                                                           | `validate-antigravity-packages.sh`                                                                                           |
+| OMP         | `generate-omp-skills.sh`                                                                                                     | `validate-omp-skills.sh`                                                                                                     |
 
 All entrypoints above live under `scripts/`. See `scripts/sync.sh --help` for the
 cross-tool `agents` target and inventory generation.

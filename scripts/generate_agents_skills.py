@@ -17,20 +17,42 @@ import shutil
 import stat
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from generate_agents_common import (
     AGENTS_PLUGIN_ROOT,
     AGENTS_SHARED_DST,
+    AGENTS_SKILL_KEYS,
     AGENTS_SKILLS_DST,
     AGENTS_VERBATIM_EXCLUDE,
+    HOME_INSTALL_AGENTS_ROOT,
     SRC_SKILLS_DIR,
     VERBATIM_SKILL_FILES,
+    WORKTREE_DEFAULT_AGENTS_LINE,
     apply_agents_text_transforms,
     load_agent_aliases,
     rewrite_agents_plugin_paths,
     transform_skill_markdown,
 )
+
+
+@dataclass(frozen=True)
+class SkillLayout:
+    """Where a flat skills bundle lives in its tree and on the user's machine.
+
+    The agents target and the Antigravity ycc plugin share one layout shape:
+    ``<root>/skills/<name>/`` plus the sibling ``<root>/ycc-shared/``. Only the
+    install root, the worktree default and the emitted skill keys differ.
+    """
+
+    install_root: str = HOME_INSTALL_AGENTS_ROOT
+    worktree_default_line: str = WORKTREE_DEFAULT_AGENTS_LINE
+    optional_keys: tuple[str, ...] = AGENTS_SKILL_KEYS
+    emit_invocation_flag: bool = False
+
+
+AGENTS_LAYOUT = SkillLayout()
 
 TEXT_SUFFIXES = frozenset(
     {
@@ -59,9 +81,10 @@ def should_transform_text(path: Path) -> bool:
 
 
 def plugin_output_path(rel: Path) -> Path:
+    """Return the path of a source skill file relative to the bundle root."""
     if rel.parts and rel.parts[0] == "_shared":
-        return AGENTS_SHARED_DST / rel.relative_to("_shared")
-    return AGENTS_SKILLS_DST / rel
+        return AGENTS_SHARED_DST.relative_to(AGENTS_PLUGIN_ROOT) / rel.relative_to("_shared")
+    return AGENTS_SKILLS_DST.relative_to(AGENTS_PLUGIN_ROOT) / rel
 
 
 def copy_mode(src: Path, dst: Path) -> None:
@@ -118,13 +141,13 @@ BUNDLE_RELEASE_RESTORE = (
 )
 
 
-def write_tree(dest_root: Path, dry_run: bool) -> set[Path]:
+def write_tree(dest_root: Path, dry_run: bool, layout: SkillLayout = AGENTS_LAYOUT) -> set[Path]:
     aliases = load_agent_aliases()
+    transform = {"install_root": layout.install_root, "worktree_default_line": layout.worktree_default_line}
     written: set[Path] = set()
     for src in iter_source_files():
         rel = src.relative_to(SRC_SKILLS_DIR)
-        dst = plugin_output_path(rel)
-        out = dest_root / dst.relative_to(AGENTS_PLUGIN_ROOT)
+        out = dest_root / plugin_output_path(rel)
         written.add(out.relative_to(dest_root))
 
         if dry_run:
@@ -147,12 +170,19 @@ def write_tree(dest_root: Path, dry_run: bool) -> set[Path]:
                     # Version claims name the real product, not the target runtime.
                     text = text.replace("Claude Code", "\x00INIT_CLAUDE_CODE\x00")
             if src.name == "SKILL.md":
-                transformed = transform_skill_markdown(text, aliases)
+                transformed = transform_skill_markdown(
+                    text,
+                    aliases,
+                    optional_keys=layout.optional_keys,
+                    emit_invocation_flag=layout.emit_invocation_flag,
+                    **transform,
+                )
             else:
                 transformed = apply_agents_text_transforms(
-                    rewrite_agents_plugin_paths(text),
+                    rewrite_agents_plugin_paths(text, layout.install_root),
                     aliases,
                     output_suffix=out.suffix,
+                    **transform,
                 )
             if rel.parts and rel.parts[0] == "bundle-release":
                 for old, new in BUNDLE_RELEASE_RESTORE:

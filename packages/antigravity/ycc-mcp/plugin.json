@@ -1,0 +1,12 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "ycc-mcp",
+  "displayName": "ycc MCP",
+  "version": "6.5.0",
+  "description": "MCP server connections for the ycc skills and agents.",
+  "author": {
+    "name": "yandy-r"
+  },
+  "repository": "https://github.com/yandy-r/ystack",
+  "license": "MIT"
+}

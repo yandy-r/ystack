@@ -23,17 +23,18 @@ from validate_capability_matrix import (  # noqa: E402
     validate,
 )
 
-RUNTIMES = ["claude", "cursor", "codex", "opencode", "omp", "agents", "pi"]
+RUNTIMES = ["claude", "cursor", "codex", "opencode", "omp", "agents", "pi", "antigravity"]
 HEADER = "| capability | " + " | ".join(CANONICAL_TARGETS) + " |"
 SEPARATOR = "| --- | " + " | ".join("---" for _ in CANONICAL_TARGETS) + " |"
-# Every capability is supported except the pi column (the last one), which is all unsupported
+# Every capability is supported except the pi column, which is all unsupported
 # as the fail-closed rule requires while packages/pi/ is absent, so each pi cell needs a note.
 NOTE_KEY = "INSTALL_PATH:pi"
 PI_NOTES = [line for cap in CANONICAL_CAPABILITIES for line in (f"**{cap}:pi**", "Not shipped yet.", "")]
 
 
 def row(capability: str, last: str = "unsupported") -> str:
-    cells = ["supported"] * (len(CANONICAL_TARGETS) - 1) + [last]
+    """One matrix row: every cell supported except the pi cell, which is ``last``."""
+    cells = [last if target == "pi" else "supported" for target in CANONICAL_TARGETS]
     return f"| {capability} | " + " | ".join(cells) + " |"
 
 
@@ -117,7 +118,7 @@ class NegativeTests(MatrixFixture):
         self.assert_error(self.errors(fixture_matrix(header=header)), "must be exactly")
 
     def test_stale_target_not_in_schema_fails(self) -> None:
-        for stale in ("omp", "pi"):
+        for stale in ("omp", "pi", "antigravity"):
             with self.subTest(target=stale):
                 schema = fixture_schema([r for r in RUNTIMES if r != stale])
                 self.assert_error(self.errors(fixture_matrix(), schema), f"target '{stale}' is not a runtime")

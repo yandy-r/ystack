@@ -1,0 +1,43 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "sh",
+      "args": [
+        "-c",
+        "token=$(gh auth token) || exit; export GH_MCP_AUTH=\"Bearer $token\"; header=$(printf 'Authorization:$%s' '{GH_MCP_AUTH}'); exec npx -y mcp-remote https://api.githubcopilot.com/mcp/ --header \"$header\""
+      ]
+    },
+    "context7": {
+      "serverUrl": "https://mcp.context7.com/mcp"
+    },
+    "stripe": {
+      "serverUrl": "https://mcp.stripe.com"
+    },
+    "xero": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@xeroapi/xero-mcp-server@latest"
+      ]
+    },
+    "linear": {
+      "serverUrl": "https://mcp.linear.app/mcp"
+    },
+    "vercel": {
+      "serverUrl": "https://mcp.vercel.com"
+    },
+    "railway": {
+      "serverUrl": "https://mcp.railway.com"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ]
+    },
+    "openaiDeveloperDocs": {
+      "serverUrl": "https://developers.openai.com/mcp"
+    }
+  }
+}

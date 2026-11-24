@@ -59,7 +59,7 @@ _ycc() {
     [[ "${sub}" =~ ^(install|sync|remove|list)$ ]] && kinds="$(_ycc_list)"
 
     case "${prev}" in
-        --target) values="claude cursor codex opencode agents omp all" ;;
+        --target) values="claude cursor codex opencode agents omp antigravity all" ;;
         --intent) values="base skills agents commands settings rules mcp hooks plugins mods" ;;
         --package) [[ "${sub}" == "install" ]] && values="ycc ycc-mcp ycc-hooks ycc-rules ycc-all" ;;
         --only)   values="base dedupe skills agents settings rules mcp hooks mods" ;;

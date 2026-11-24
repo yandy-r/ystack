@@ -51,6 +51,8 @@ files = [
   "scripts/claude_agents_split_smoke.py",
   "scripts/test_claude_agents_split.py",
   "scripts/omp_install.py",
+  "scripts/antigravity_install.py",
+  "scripts/test_antigravity_install.py",
   "scripts/test_omp_install.py",
   "scripts/tests/install/fake_omp.py",
   "scripts/tests/install/seed_opencode_legacy.py",

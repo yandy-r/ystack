@@ -13,7 +13,7 @@
 # replayed in order. `config` runs last and alone: its install tests regenerate
 # the bundles in this checkout, which the other targets read.
 #
-# Targets: inventory, cursor, codex, opencode, omp, agents, claude, claude-native,
+# Targets: inventory, cursor, codex, opencode, omp, antigravity, agents, claude, claude-native,
 #          cursor-native, codex-native, json, config, packages, release, mods, practices, scope, types
 #   - inventory  validates ycc skill frontmatter, the shared inventory, the formatter bundle and
 #                plan-workflow regressions, per-runtime worktree roots (scripts/test-worktree-roots.sh) and
@@ -25,6 +25,8 @@
 #   - omp        checks generated OMP skill, agent and command drift (bytes and modes), content policy and golden
 #                tests, plus native package manifests, catalog listing, lockstep versions and closure, and the
 #                built-in command pin against a live omp (warns and skips when omp is absent)
+#   - antigravity checks generated Antigravity plugin drift (bytes and modes), plugin.json, skill,
+#                agent, rule and MCP policy, and the install helper (copy and agy routes)
 #   - json       validates .claude-plugin/marketplace.json plus ycc/.claude-plugin/plugin.json
 #   - claude     tests the generated hidden Claude package generator
 #   - *-native   checks generated native package drift, runtime policies and fixtures;
@@ -289,6 +291,10 @@ run_target() {
             python3 "${REPO_ROOT}/scripts/test_generate_codex_agents.py" || fail "test_generate_codex_agents.py"
             echo "== test: codex skills generator =="
             python3 "${REPO_ROOT}/scripts/test_generate_codex_skills.py" || fail "test_generate_codex_skills.py"
+            ;;
+        antigravity)
+            echo "== validate: antigravity packages =="
+            "${REPO_ROOT}/scripts/validate-antigravity-packages.sh" || fail "validate-antigravity-packages.sh"
             ;;
         omp)
             echo "== validate: omp skills =="

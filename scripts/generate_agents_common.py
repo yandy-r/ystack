@@ -58,6 +58,10 @@ __all__ = [
     "parse_frontmatter",
     "rewrite_agents_plugin_paths",
     "AGENTS_VERBATIM_EXCLUDE",
+    "AGENTS_SKILL_KEYS",
+    "WORKTREE_DEFAULT_AGENTS_LINE",
+    "quoted_home_root",
+    "transform_skill_markdown",
 ]
 
 REPO_ROOT = SRC_SKILLS_DIR.parent.parent
@@ -81,19 +85,19 @@ WORKTREE_DEFAULT_AGENTS_LINE = 'ycc_runtime_worktree_root "$repo_root"'
 AGENTS_VERBATIM_EXCLUDE: frozenset[str] = frozenset({"_shared/scripts/worktree-paths.sh"})
 
 
-def rewrite_agents_plugin_paths(text: str) -> str:
+def rewrite_agents_plugin_paths(text: str, install_root: str = HOME_INSTALL_AGENTS_ROOT) -> str:
     """Rewrite ``${CLAUDE_PLUGIN_ROOT}/skills/<path>`` references to absolute
-    ~/.agents install paths.
+    install paths under ``install_root`` (``~/.agents`` by default).
 
-    ``_shared/`` relocates to the sibling ``~/.agents/ycc-shared/`` directory.
+    ``_shared/`` relocates to the sibling ``<install_root>/ycc-shared/`` directory.
     """
     pattern = r"\$\{CLAUDE_PLUGIN_ROOT\}/skills/([^\"`\s]+)"
 
     def replace(match: re.Match[str]) -> str:
         path_text = match.group(1)
         if path_text.startswith("_shared/"):
-            return f"{HOME_INSTALL_AGENTS_ROOT}/ycc-shared/{path_text[len('_shared/'):]}"
-        return f"{HOME_INSTALL_AGENTS_ROOT}/skills/{path_text}"
+            return f"{install_root}/ycc-shared/{path_text[len('_shared/'):]}"
+        return f"{install_root}/skills/{path_text}"
 
     return re.sub(pattern, replace, text)
 
@@ -104,13 +108,17 @@ def apply_agents_text_transforms(
     *,
     rewrite_runtime_aliases: bool = True,
     output_suffix: str = ".md",
+    install_root: str = HOME_INSTALL_AGENTS_ROOT,
+    worktree_default_line: str = WORKTREE_DEFAULT_AGENTS_LINE,
 ) -> str:
     """Apply the agents-target rewrite pass (minimal, tool-neutral subset).
 
     Product names are deliberately left as-is: this bundle is read by many
     tools and renaming "Claude Code" prose to any single tool would be wrong.
     ``output_suffix`` gates the quoted-home rewrite to shell and Markdown files
-    (see generate_codex_common.expand_quoted_home).
+    (see generate_codex_common.expand_quoted_home). ``install_root`` and
+    ``worktree_default_line`` let another flat-skills bundle (Antigravity) reuse
+    this pass with its own install location and worktree root.
     """
     text, verbatim_blocks = protect_marked_verbatim_blocks(text)
     output = fix_mcp_malformed_tokens(text)
@@ -126,15 +134,15 @@ def apply_agents_text_transforms(
     # Portable bundle: the worktree root is runtime-selected (YAN-1111), not
     # fixed to Claude's. Only the marked default line changes; prose that names
     # `.claude/worktrees` as the Claude root is left alone.
-    output = output.replace(WORKTREE_DEFAULT_MARKER_LINE, WORKTREE_DEFAULT_AGENTS_LINE)
+    output = output.replace(WORKTREE_DEFAULT_MARKER_LINE, worktree_default_line)
     # Example paths must be resolved with ycc_worktree_root, never assume Claude.
     output = output.replace("/.claude/worktrees", "/<worktree-root>")
 
     # Plugin-root variable -> absolute install paths.
-    output = rewrite_agents_plugin_paths(output)
+    output = rewrite_agents_plugin_paths(output, install_root)
     # Tilde does not expand inside double quotes (SC2088); use ${HOME} there —
     # shell and Markdown output only, never Python/JSON/YAML/... text.
-    output = expand_quoted_home(output, ".agents/", output_suffix)
+    output = expand_quoted_home(output, quoted_home_root(install_root), output_suffix)
 
     # Slash-command and agent namespace references (/ycc:foo -> /foo).
     if rewrite_runtime_aliases:
@@ -154,7 +162,25 @@ def apply_agents_text_transforms(
     return restore_marked_verbatim_blocks(output, verbatim_blocks)
 
 
-def transform_skill_markdown(raw: str, aliases: dict[str, str]) -> str:
+def quoted_home_root(install_root: str) -> str:
+    """Return the first home-relative segment of ``install_root`` (``~/.agents`` -> ``.agents/``)."""
+    if not install_root.startswith("~/"):
+        raise ValueError(f"install root must be home-relative (~/...): {install_root}")
+    return install_root[2:].split("/", 1)[0] + "/"
+
+
+AGENTS_SKILL_KEYS: tuple[str, ...] = ("license", "compatibility", "metadata", "allowed-tools")
+
+
+def transform_skill_markdown(
+    raw: str,
+    aliases: dict[str, str],
+    *,
+    install_root: str = HOME_INSTALL_AGENTS_ROOT,
+    worktree_default_line: str = WORKTREE_DEFAULT_AGENTS_LINE,
+    optional_keys: tuple[str, ...] = AGENTS_SKILL_KEYS,
+    emit_invocation_flag: bool = False,
+) -> str:
     """Rewrite a SKILL.md with agentskills.io frontmatter: `name` + required
     `description` (compressed to <=1024 chars), optional `license`,
     `compatibility`, `metadata`, and `allowed-tools` passed through verbatim.
@@ -163,24 +189,29 @@ def transform_skill_markdown(raw: str, aliases: dict[str, str]) -> str:
     """
     frontmatter, body = parse_frontmatter(raw)
     name = str(frontmatter.get("name") or "skill")
-    model_invocation_disabled(frontmatter, name)  # strict validation; flag is not emitted
+    invocation_disabled = model_invocation_disabled(frontmatter, name)  # strict validation
     description = str(frontmatter.get("description") or "").strip()
+    transform = {"install_root": install_root, "worktree_default_line": worktree_default_line}
     transformed_description = compress_skill_description(
         apply_agents_text_transforms(
-            rewrite_agents_plugin_paths(description),
+            rewrite_agents_plugin_paths(description, install_root),
             aliases,
+            **transform,
         ).strip()
     )
     transformed_body = apply_agents_text_transforms(
-        rewrite_agents_plugin_paths(body),
+        rewrite_agents_plugin_paths(body, install_root),
         aliases,
+        **transform,
     )
 
     payload: dict[str, object] = {
         "name": name,
         "description": transformed_description,
     }
-    for optional_key in ("license", "compatibility", "metadata", "allowed-tools"):
+    if emit_invocation_flag and invocation_disabled:
+        payload["disable-model-invocation"] = True
+    for optional_key in optional_keys:
         if optional_key in frontmatter and frontmatter[optional_key] not in (None, "", {}):
             payload[optional_key] = frontmatter[optional_key]
 
@@ -188,10 +219,10 @@ def transform_skill_markdown(raw: str, aliases: dict[str, str]) -> str:
     # re-point them to the ~/.agents install layout.
     tools = payload.get("allowed-tools")
     if isinstance(tools, str):
-        payload["allowed-tools"] = rewrite_agents_plugin_paths(tools)
+        payload["allowed-tools"] = rewrite_agents_plugin_paths(tools, install_root)
     elif isinstance(tools, list):
         payload["allowed-tools"] = [
-            rewrite_agents_plugin_paths(item) if isinstance(item, str) else item for item in tools
+            rewrite_agents_plugin_paths(item, install_root) if isinstance(item, str) else item for item in tools
         ]
 
     return dump_frontmatter(payload) + transformed_body

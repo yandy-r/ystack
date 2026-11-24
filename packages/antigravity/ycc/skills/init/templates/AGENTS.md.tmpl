@@ -1,0 +1,44 @@
+# {{PROJECT_NAME}} — Agent Rules
+
+{{PROJECT_PURPOSE}}
+
+This is the canonical, tool-neutral repository policy.
+
+## Commands
+
+```bash
+{{TEST_CMD}}
+```
+
+```bash
+{{LINT_CMD}}
+```
+
+```bash
+{{BUILD_CMD}}
+```
+
+## Project conventions
+
+{{PROJECT_CONVENTIONS}}
+
+## MUST / MUST NOT
+
+- **Never** commit secrets: `.env`, tokens, API keys, credentials.
+- **Commits**: Conventional Commits 1.0.0 — `feat|fix|docs|refactor|perf|test|build|ci|chore(scope): description`. Use `docs(internal): …` for internal plans or research docs.
+- **Issues**: use `.github/ISSUE_TEMPLATE/` forms when present; never open title-only issues.
+- **Pull requests**: follow `.github/pull_request_template.md` when present; link the issue (`Closes #…`).
+- Follow [CONTRIBUTING.md](CONTRIBUTING.md) and the label taxonomy in [`.github/labels.md`](.github/labels.md) when present.
+- **Modularity**: small, cohesive units with minimal coupling; extract shared logic instead of copy-pasting.
+{{#IF_RELEASE_MODEL}}
+
+## Branching & releases
+
+Read [`RELEASING.md`](RELEASING.md) before branching, opening a PR, or releasing. It is the source of truth for trunk, maintenance branches, and backports. Never merge one long-lived branch into another to sync it.
+{{/IF_RELEASE_MODEL}}
+{{#IF_ARTIFACT_STORE}}
+
+## Planning artifacts
+
+Planning artifacts live in Linear (see `.plans-config`); `.ycc/artifacts/` is a gitignored local cache. If it's missing, pull from Linear.
+{{/IF_ARTIFACT_STORE}}
