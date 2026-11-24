@@ -52,6 +52,35 @@ def plugins_dir() -> Path:
     return config_dir() / "plugins"
 
 
+# The generated plugins reach their helpers through these spellings of the default
+# plugins folder (see generate_antigravity_packages.py).
+DEFAULT_PLUGIN_PREFIXES = ("${HOME}/.gemini/config/plugins/", "~/.gemini/config/plugins/")
+
+
+def relocated() -> bool:
+    """True when ``YCC_ANTIGRAVITY_CONFIG_DIR`` moves the plugins off the default folder."""
+    return config_dir().expanduser().resolve() != (Path.home() / ".gemini/config").resolve()
+
+
+def relocate_tree(root: Path, plugins: Path) -> None:
+    """Point the default plugin-folder references in ``root``'s text files at ``plugins``."""
+    target = f"{plugins.expanduser().resolve()}/"
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        updated = text
+        for prefix in DEFAULT_PLUGIN_PREFIXES:
+            updated = updated.replace(prefix, target)
+        if updated != text:
+            mode = path.stat().st_mode
+            path.write_text(updated, encoding="utf-8")
+            path.chmod(mode)
+
+
 def state_path() -> Path:
     return Path.home() / ".config/ycc/antigravity-install.json"
 
@@ -117,6 +146,8 @@ def place_copy(src: Path, dest: Path) -> None:
     staging = Path(tempfile.mkdtemp(prefix=f".{dest.name}.", dir=dest.parent))
     try:
         shutil.copytree(src, staging / dest.name, symlinks=True)
+        if relocated():
+            relocate_tree(staging / dest.name, dest.parent)
         if dest.exists() or dest.is_symlink():
             remove_tree(dest) if dest.is_dir() and not dest.is_symlink() else dest.unlink()
         (staging / dest.name).rename(dest)
@@ -168,7 +199,7 @@ def ownership(state: dict[str, Any], name: str, dest: Path, src_digest: str | No
     if current is None:
         return (record is not None, None)
     if record is not None:
-        if record.get("method") == "copy" and record.get("digest") not in (None, current):
+        if record.get("digest") not in (None, current):
             return (True, f"{dest} was edited since ycc placed it")
         return (True, None)
     if current == src_digest:
@@ -257,6 +288,14 @@ def parse_packages(value: str | None) -> tuple[str, ...]:
 
 
 def run(action: str, ctx: Context, names: Sequence[str]) -> int:
+    if action == "install" and ctx.agy and relocated():
+        # agy installs into its own config folder and keeps the generated default paths.
+        print(
+            f"[err] antigravity: YCC_ANTIGRAVITY_CONFIG_DIR={config_dir()} needs the copy route;"
+            " agy installs into its own folder (unset it, or pass --no-agy)",
+            file=sys.stderr,
+        )
+        return 1
     state = load_state()
     route = f"agy plugin ({ctx.agy})" if ctx.agy else f"owned copy in {plugins_dir()}"
     print(f"antigravity: {action} via {route}")

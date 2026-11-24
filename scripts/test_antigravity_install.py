@@ -41,7 +41,11 @@ class InstallHelperTests(unittest.TestCase):
             root = self.source / name
             (root / "skills/demo").mkdir(parents=True)
             (root / "plugin.json").write_text(json.dumps({"name": name}) + "\n", encoding="utf-8")
-            (root / "skills/demo/SKILL.md").write_text(f"---\nname: demo\ndescription: {name}\n---\n", encoding="utf-8")
+            (root / "skills/demo/SKILL.md").write_text(
+                f"---\nname: demo\ndescription: {name}\n---\n"
+                "Run `${HOME}/.gemini/config/plugins/ycc/ycc-shared/run.sh`.\n",
+                encoding="utf-8",
+            )
         patcher = mock.patch.dict(os.environ, {"HOME": str(self.home)}, clear=False)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -129,6 +133,20 @@ class InstallHelperTests(unittest.TestCase):
         log = (self.home / "agy.log").read_text(encoding="utf-8").splitlines()
         self.assertEqual(log, [f"plugin install {(self.source / 'ycc').resolve()}", "plugin uninstall ycc"])
 
+    def test_edited_agy_install_is_kept_on_remove(self) -> None:
+        os.environ["YCC_ANTIGRAVITY_AGY"] = str(self.make_fake_agy())
+        self.assertEqual(self.run_helper("install", "--packages", "ycc")[0], 0)
+        installed = self.plugins / "ycc"
+        installed.chmod(0o755)
+        (installed / "notes.md").write_text("mine\n", encoding="utf-8")
+        code, out = self.run_helper("remove", "--packages", "ycc")
+        self.assertEqual(code, 0)
+        self.assertIn("edited since ycc placed it", out)
+        self.assertTrue((installed / "notes.md").is_file())
+        code, out = self.run_helper("install", "--packages", "ycc")
+        self.assertEqual(code, 1)
+        self.assertIn("edited since ycc placed it", out)
+
     def test_unknown_package_is_a_usage_error(self) -> None:
         with self.assertRaises(SystemExit):
             self.run_helper("install", "--packages", "ycc-hooks")
@@ -140,6 +158,18 @@ class InstallHelperTests(unittest.TestCase):
         code, _ = self.run_helper("install", "--no-agy", "--packages", "ycc")
         self.assertEqual(code, 0)
         self.assertTrue((custom / "plugins/ycc/plugin.json").is_file())
+        skill = (custom / "plugins/ycc/skills/demo/SKILL.md").read_text(encoding="utf-8")
+        self.assertIn(f"{(custom / 'plugins').resolve()}/ycc/ycc-shared/run.sh", skill)
+        self.assertNotIn(".gemini/config", skill)
+
+    def test_config_dir_override_refuses_the_agy_route(self) -> None:
+        os.environ["YCC_ANTIGRAVITY_CONFIG_DIR"] = str(self.home / "custom-config")
+        self.addCleanup(os.environ.pop, "YCC_ANTIGRAVITY_CONFIG_DIR", None)
+        os.environ["YCC_ANTIGRAVITY_AGY"] = str(self.make_fake_agy())
+        code, out = self.run_helper("install", "--packages", "ycc")
+        self.assertEqual(code, 1)
+        self.assertIn("needs the copy route", out)
+        self.assertFalse((self.home / "agy.log").exists())
 
 
 if __name__ == "__main__":

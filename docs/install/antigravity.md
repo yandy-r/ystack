@@ -78,10 +78,10 @@ The installer records each plugin it places in
 
 ## Overrides
 
-| Variable                     | Default            | Purpose                        |
-| ---------------------------- | ------------------ | ------------------------------ |
-| `YCC_ANTIGRAVITY_CONFIG_DIR` | `~/.gemini/config` | The Antigravity config folder. |
-| `YCC_ANTIGRAVITY_AGY`        | `agy` on `PATH`    | The `agy` binary to call.      |
+| Variable                     | Default            | Purpose                                                                                                                                       |
+| ---------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `YCC_ANTIGRAVITY_CONFIG_DIR` | `~/.gemini/config` | The Antigravity config folder. Copy route only: the installed skills and agents are rewritten to point at it, and the `agy` route refuses it. |
+| `YCC_ANTIGRAVITY_AGY`        | `agy` on `PATH`    | The `agy` binary to call.                                                                                                                     |
 
 ## Worktrees
 
