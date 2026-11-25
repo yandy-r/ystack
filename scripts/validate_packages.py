@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import generate_codex_plugin as codex
 import generate_cursor_packages as cursor
@@ -32,7 +33,7 @@ CLAUDE_CATALOG = Path(".claude-plugin/marketplace.json")
 CURSOR_CATALOG = Path(".cursor-plugin/marketplace.json")
 
 
-def load_object(path: Path) -> dict:
+def load_object(path: Path) -> dict[str, Any]:
     """Load a JSON object; raise ValueError (with the path) when unreadable or malformed."""
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))

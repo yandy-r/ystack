@@ -9,6 +9,7 @@ import stat
 import sys
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Any
 
 from generate_cursor_packages import (
     MARKETPLACE_PATH,
@@ -33,7 +34,7 @@ class ValidationInputError(ValueError):
     """An unreadable or malformed validation input."""
 
 
-def load(path: Path) -> dict:
+def load(path: Path) -> dict[str, Any]:
     """Load a JSON object from ``path``, raising ValidationInputError when malformed."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -95,7 +96,7 @@ def _plugin_errors(
     package_key: str,
     runtime_components: Iterable[str],
     manifest_path: Path,
-    manifest: dict,
+    manifest: dict[str, Any],
     version: str | None,
     validator: Draft7Validator,
 ) -> list[str]:
