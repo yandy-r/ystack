@@ -125,6 +125,9 @@ for m in mints:
     check(not any(k.startswith("permission-") and k != "permission-contents" for k in w),
           f"mint must request contents only, got {sorted(w)}")
     check(m.get("continue-on-error") is True, "a failed mint must report, not fail")
+    # actionlint's stale metadata errors on these inputs are ignored below, so check them here.
+    check(bool(w.get("client-id") or w.get("app-id")), "mint passes a client-id or app-id")
+    check(bool(w.get("private-key")), "mint passes a private-key")
 check("permission-workflows" not in open(path, encoding="utf-8").read(), "no permission-workflows anywhere")
 
 if failures:
@@ -364,8 +367,16 @@ else
 fi
 
 # --- actionlint, when it is already installed. ---
+# actionlint's bundled action metadata (v1.7.12, the latest release, and its main branch)
+# still lists only `app-id` for actions/create-github-app-token@v3, which also accepts
+# `client-id`. Ignore exactly those two stale-metadata errors; every other check still runs.
+# Drop these patterns once an actionlint release lists `client-id` for that action.
+actionlint_ignores=(
+  -ignore 'input "client-id" is not defined in action "actions/create-github-app-token@v3"'
+  -ignore 'missing input "app-id" which is required by action "actions/create-github-app-token@v3"'
+)
 if command -v actionlint >/dev/null 2>&1; then
-  if actionlint "$wf_all" "$wf_none" >"${SCRATCH}/out" 2>&1; then
+  if actionlint "${actionlint_ignores[@]}" "$wf_all" "$wf_none" >"${SCRATCH}/out" 2>&1; then
     pass "actionlint"
   else
     fail "actionlint"; sed 's/^/    /' "${SCRATCH}/out" >&2
