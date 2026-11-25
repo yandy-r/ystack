@@ -37,6 +37,8 @@ subagent(agent="<agent>", description="<short title>",
          prompt="<complete task prompt>", background=false)
 ```
 
+Omit `sessionID` for a new child. Never pass a placeholder session ID.
+
 The call waits for the child run and returns its response. Treat the response as a
 candidate report, not proof that the requested work exists. Before accepting it:
 
@@ -55,6 +57,8 @@ explicitly supports deferred result retrieval:
 subagent(agent="<agent>", description="<short title>",
          prompt="<complete task prompt>", background=true)
 ```
+
+Omit `sessionID` for a new child. Never pass a placeholder session ID.
 
 The initial return is an acknowledgement containing a child `sessionID`, not the final
 report. Record that ID immediately. Continue only non-overlapping work. If there is
