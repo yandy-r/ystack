@@ -127,13 +127,13 @@ class HooksLab(Lab):
         records: list[dict[str, Any]] = []
         if self.record_file.exists():
             records = [json.loads(line) for line in self.record_file.read_text().splitlines()]
-        events = []
+        events: list[dict[str, Any]] = []
         for line in out.splitlines():
             try:
                 events.append(json.loads(line))
             except ValueError:
                 continue
-        init = next((e for e in events if e.get("subtype") == "init"), {})
+        init: dict[str, Any] = next((e for e in events if e.get("subtype") == "init"), {})
         cwd = Path(str(init.get("cwd", "/missing")))
         default = self.root / "work" / ".claude/worktrees" / label
         # Verify hook input/event/cwd and source immutability, not fake response text.

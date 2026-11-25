@@ -13,7 +13,9 @@ import tempfile
 import unittest
 from collections.abc import Callable
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import patch
 
 import generate_claude_packages as generator
@@ -38,7 +40,7 @@ def serialized(payload: object) -> bytes:
     return (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-def with_claude_runtime(model: PackageModel, key: str, **changes: object) -> PackageModel:
+def with_claude_runtime(model: PackageModel, key: str, **changes: Any) -> PackageModel:
     """Return a model whose Claude runtime entry for ``key`` has ``changes`` applied."""
 
     def update(package: Package) -> Package:
@@ -64,8 +66,8 @@ class ClaudeNativePackageTests(unittest.TestCase):
         return {path.relative_to(root): path.read_bytes() for path in root.rglob("*") if path.is_file()}
 
     @staticmethod
-    def json_at(root: Path, rel: Path) -> dict:
-        return json.loads((root / rel).read_text(encoding="utf-8"))
+    def json_at(root: Path, rel: Path) -> dict[str, Any]:
+        return cast("dict[str, Any]", json.loads((root / rel).read_text(encoding="utf-8")))
 
     def patch_generator(self, name: str, value: object) -> None:
         patcher = patch.object(generator, name, value)
@@ -306,10 +308,10 @@ class ClaudeNativePackageTests(unittest.TestCase):
                 (dest / neighbor).write_bytes(b"neighbor\n")
                 (dest / rel).write_bytes(b"not a directory\n")
                 before = self.snapshot(dest)
-                actions = {
-                    "write": lambda _dest=dest: generator.write_all(_dest),
-                    "dry-run": lambda _dest=dest: generator.write_all(_dest, dry_run=True),
-                    "check": lambda _dest=dest: generator.run_check(_dest),
+                actions: dict[str, Callable[[], object]] = {
+                    "write": partial(generator.write_all, dest),
+                    "dry-run": partial(generator.write_all, dest, dry_run=True),
+                    "check": partial(generator.run_check, dest),
                 }
                 for mode, action in actions.items():
                     with self.subTest(mode=mode):
