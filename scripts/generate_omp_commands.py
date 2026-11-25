@@ -39,7 +39,7 @@ DST_DIR = REPO_ROOT / "packages/omp/ycc/commands"
 COMMAND_NAMESPACE = "ycc"
 COMMAND_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
-# OMP built-in slash command names and aliases, pinned from omp 18.12.3
+# OMP built-in slash command names and aliases (`commit` added from omp 18.22.2), pinned from omp 18.12.3
 # packages/coding-agent/src/slash-commands/*.ts (BUILTIN_SLASH_COMMAND_RESERVED_NAMES:
 # every top-level `name:` and `aliases:` entry in the builtin-*.ts registries and
 # seance.ts). Built-ins dispatch before file commands and parse the name up to the first

@@ -13,12 +13,12 @@ AG_PACKAGES=(ycc ycc-mcp ycc-rules)
 # override. The no-agy cases assert the owned-copy route and the 'all' gate,
 # which a host agy on PATH would otherwise change.
 without_agy() {
-    local dir kept=()
-    local IFS=:
-    for dir in ${PATH}; do
+    local dir kept=() path_dirs
+    IFS=: read -r -a path_dirs <<< "${PATH}"
+    for dir in "${path_dirs[@]}"; do
         [[ -x "${dir}/agy" ]] || kept+=("${dir}")
     done
-    PATH="${kept[*]}" YCC_ANTIGRAVITY_AGY="" "$@"
+    PATH="$(IFS=:; echo "${kept[*]}")" YCC_ANTIGRAVITY_AGY="" "$@"
 }
 
 echo "== install.sh sync: antigravity (owned copies, no agy) =="
@@ -65,7 +65,7 @@ echo '{"name": "ycc", "mine": true}' > "${home}/.gemini/config/plugins/ycc/plugi
 out="$(run_install "${home}" sync --target antigravity --intent base)" && rc=0 || rc=$?
 [[ ${rc} -ne 0 ]] && ok "antigravity refuses to replace a foreign plugin folder" || ko "antigravity refuses to replace a foreign plugin folder" "${out}"
 assert_contains "$(cat "${home}/.gemini/config/plugins/ycc/plugin.json")" '"mine"' "antigravity leaves the foreign folder untouched"
-install_must_succeed "${home}" sync --target antigravity --intent base --force
+without_agy install_must_succeed "${home}" sync --target antigravity --intent base --force
 assert_not_contains "$(cat "${home}/.gemini/config/plugins/ycc/plugin.json")" '"mine"' "antigravity --force replaces the foreign folder"
 
 echo "== install.sh: antigravity via a stub agy =="
