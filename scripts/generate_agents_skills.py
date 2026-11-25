@@ -143,7 +143,6 @@ BUNDLE_RELEASE_RESTORE = (
 
 def write_tree(dest_root: Path, dry_run: bool, layout: SkillLayout = AGENTS_LAYOUT) -> set[Path]:
     aliases = load_agent_aliases()
-    transform = {"install_root": layout.install_root, "worktree_default_line": layout.worktree_default_line}
     written: set[Path] = set()
     for src in iter_source_files():
         rel = src.relative_to(SRC_SKILLS_DIR)
@@ -175,14 +174,16 @@ def write_tree(dest_root: Path, dry_run: bool, layout: SkillLayout = AGENTS_LAYO
                     aliases,
                     optional_keys=layout.optional_keys,
                     emit_invocation_flag=layout.emit_invocation_flag,
-                    **transform,
+                    install_root=layout.install_root,
+                    worktree_default_line=layout.worktree_default_line,
                 )
             else:
                 transformed = apply_agents_text_transforms(
                     rewrite_agents_plugin_paths(text, layout.install_root),
                     aliases,
                     output_suffix=out.suffix,
-                    **transform,
+                    install_root=layout.install_root,
+                    worktree_default_line=layout.worktree_default_line,
                 )
             if rel.parts and rel.parts[0] == "bundle-release":
                 for old, new in BUNDLE_RELEASE_RESTORE:

@@ -30,9 +30,8 @@ try:
         return _yaml.safe_load(text)
 
 except ImportError:
-    _yaml = None  # type: ignore[assignment]
 
-    def _load_yaml(text: str) -> Any:  # type: ignore[misc]
+    def _load_yaml(text: str) -> Any:
         """Minimal tolerant YAML parser: extracts top-level string scalars only."""
         result: dict[str, Any] = {}
         for line in text.splitlines():
@@ -361,11 +360,11 @@ def _group_agents(agents: list[dict[str, str]]) -> list[tuple[str, list[str]]]:
     agent_names = {a["name"] for a in agents}
 
     for name in sorted(agent_names):
-        category = known.get(name)
-        if category is None:
+        known_category = known.get(name)
+        if known_category is None:
             uncategorized.append(name)
         else:
-            by_category[category].append(name)
+            by_category[known_category].append(name)
 
     if uncategorized:
         print(
