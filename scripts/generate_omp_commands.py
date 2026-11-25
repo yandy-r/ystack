@@ -58,6 +58,7 @@ OMP_BUILTIN_COMMANDS: frozenset[str] = frozenset(
         "cleanse",
         "clear",
         "collab",
+        "commit",
         "compact",
         "computer",
         "context",
