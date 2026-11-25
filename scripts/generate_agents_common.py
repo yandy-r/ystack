@@ -191,18 +191,19 @@ def transform_skill_markdown(
     name = str(frontmatter.get("name") or "skill")
     invocation_disabled = model_invocation_disabled(frontmatter, name)  # strict validation
     description = str(frontmatter.get("description") or "").strip()
-    transform = {"install_root": install_root, "worktree_default_line": worktree_default_line}
     transformed_description = compress_skill_description(
         apply_agents_text_transforms(
             rewrite_agents_plugin_paths(description, install_root),
             aliases,
-            **transform,
+            install_root=install_root,
+            worktree_default_line=worktree_default_line,
         ).strip()
     )
     transformed_body = apply_agents_text_transforms(
         rewrite_agents_plugin_paths(body, install_root),
         aliases,
-        **transform,
+        install_root=install_root,
+        worktree_default_line=worktree_default_line,
     )
 
     payload: dict[str, object] = {
