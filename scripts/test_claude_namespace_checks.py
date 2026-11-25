@@ -102,6 +102,17 @@ class RealConfigGuardTests(unittest.TestCase):
         write(self.config / "skills/new/SKILL.md", "")
         self.assertEqual(self.changed(), [str(self.config / "skills/new/SKILL.md")])
 
+    def test_directory_symlinks_stay_guarded(self) -> None:
+        target = self.home / "elsewhere"
+        target.mkdir()
+        link = self.config / "skills/linked"
+        link.symlink_to(target, target_is_directory=True)
+        self.assertEqual(self.changed(), [str(link)])
+        self.before = self.snap()
+        link.unlink()
+        link.symlink_to(self.home, target_is_directory=True)
+        self.assertEqual(self.changed(), [str(link)])
+
     def test_removed_plugin_index_fails(self) -> None:
         (self.config / "plugins/known_marketplaces.json").unlink()
         self.assertEqual(self.changed(), [str(self.config / "plugins/known_marketplaces.json")])

@@ -342,8 +342,8 @@ def snapshot(paths: list[str]) -> dict[str, Any]:
     """Capture guarded content/mtime identity, not secret contents; do not follow symlinks.
 
     Inside a config directory, volatile live-session state (is_volatile) is skipped and
-    nested directories are not recorded (sessions create ancestors for excluded state);
-    every guarded file or symlink beneath them still is.
+    nested real directories are not recorded (sessions create ancestors for excluded
+    state); every guarded file and file or directory symlink beneath them still is.
     ~/.claude.json and the plugin indexes compare a semantic JSON digest (json_identity).
     Everything else (settings, marketplaces, plugin cache payloads, hooks, agents, skills,
     credentials) stays strict: content digest, size and mtime must not change.
@@ -356,7 +356,9 @@ def snapshot(paths: list[str]) -> dict[str, Any]:
             for directory, dirs, files in os.walk(root, followlinks=False):
                 base = Path(directory)
                 dirs[:] = sorted(d for d in dirs if not is_volatile((base / d).relative_to(root).as_posix()))
-                kept = (n for n in sorted(files) if not is_volatile((base / n).relative_to(root).as_posix()))
+                # Directory symlinks land in dirs and are not walked: record them like files.
+                links = [d for d in dirs if (base / d).is_symlink()]
+                kept = (n for n in sorted(files + links) if not is_volatile((base / n).relative_to(root).as_posix()))
                 items.extend(base / name for name in kept)
         result.update((str(item), entry_identity(root, item)) for item in items)
     return result
