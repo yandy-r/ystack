@@ -429,6 +429,7 @@ class SensitiveFilePolicyTestCase(unittest.TestCase):
 
         plugins = build_opencode_config()["plugins"]
         self.assertIsInstance(plugins, list)
+        assert isinstance(plugins, list)  # narrows the object-typed config value for mypy
         # @yandy-r/ycc-opencode ships and loads the guard; the merged settings
         # carry no local plugin path that would point at nothing.
         self.assertFalse([p for p in plugins if isinstance(p, str) and p.startswith("./")])

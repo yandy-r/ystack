@@ -57,7 +57,8 @@ class Api:
             raise SystemExit(f"FAIL wrong location: {response.get('location')}")
         if not isinstance(response.get("data"), list):
             raise SystemExit(f"FAIL invalid {component} envelope")
-        return response["data"]
+        data: list[dict[str, Any]] = response["data"]
+        return data
 
 
 def run_env(lab: Path) -> dict[str, str]:

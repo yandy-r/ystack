@@ -55,6 +55,7 @@ import json
 import sys
 import tempfile
 from pathlib import Path
+from typing import cast
 
 from generate_opencode_common import (
     OPENCODE_AGENTS_MD_PATH,
@@ -221,7 +222,7 @@ def build_opencode_config() -> dict[str, object]:
     # workspace and load the project's AGENTS.md again.
     config: dict[str, object] = {
         "$schema": "https://opencode.ai/config.json",
-        "model": model_settings["main"]["model"],
+        "model": cast(dict[str, object], model_settings["main"])["model"],
         "plugins": DEFAULT_PLUGINS,
         # Runtime policy, not a model setting, so it stays out of models.json.
         "experimental": {"subagent_depth": DEFAULT_SUBAGENT_DEPTH},
@@ -251,7 +252,7 @@ def build_agents_md() -> str:
     return header + SOURCE_RULES_PATH.read_text(encoding="utf-8")
 
 
-def write_json(path: Path, payload: dict, *, dry_run: bool) -> None:
+def write_json(path: Path, payload: dict[str, object], *, dry_run: bool) -> None:
     serialized = json.dumps(payload, indent=2) + "\n"
     if dry_run:
         print(f"Would write {path.relative_to(REPO_ROOT)} ({len(serialized)} bytes)")

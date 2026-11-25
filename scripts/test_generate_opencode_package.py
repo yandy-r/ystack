@@ -374,7 +374,7 @@ FAKE_INVENTORY = [
 ]
 
 
-def run_driver(root: Path, *extra: str, env: dict[str, str] | None = None) -> dict:
+def run_driver(root: Path, *extra: str, env: dict[str, str] | None = None) -> dict[str, Any]:
     assert NODE is not None
     script = root.parent / f"driver-{abs(hash(extra))}.mjs"
     script.write_text(DRIVER, encoding="utf-8")
@@ -388,7 +388,8 @@ def run_driver(root: Path, *extra: str, env: dict[str, str] | None = None) -> di
     )
     if result.returncode:
         raise AssertionError(result.stderr or result.stdout)
-    return json.loads(result.stdout.strip().splitlines()[-1])
+    payload: dict[str, Any] = json.loads(result.stdout.strip().splitlines()[-1])
+    return payload
 
 
 FIXER = "pr-comment-fixer"
@@ -423,6 +424,15 @@ def host_saved(kind: str, *patterns: str) -> dict[str, Any]:
 
 
 class OpencodeNpmPackageTests(unittest.TestCase):
+    _temp: tempfile.TemporaryDirectory[str]
+    dest: Path
+    model: PackageModel
+    inventory: set[Path]
+    root: Path
+    manifest: dict[str, Any]
+    registration: dict[str, Any]
+    tmp: Path
+
     @classmethod
     def setUpClass(cls) -> None:
         cls._temp = tempfile.TemporaryDirectory()
@@ -1103,7 +1113,7 @@ console.log(JSON.stringify(seen));
         self.assertEqual(list(target.iterdir()), [])
 
     def test_selection_follows_the_model_not_catalog_visibility(self) -> None:
-        def with_runtime(**changes: object) -> PackageModel:
+        def with_runtime(**changes: Any) -> PackageModel:
             packages = tuple(
                 (
                     replace(

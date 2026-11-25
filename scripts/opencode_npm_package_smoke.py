@@ -61,7 +61,7 @@ class Provider(threading.Thread):
                     self.send_header("Content-Type", "text/event-stream")
                     self.end_headers()
                     base = {"id": "npm", "object": "chat.completion.chunk", "created": 0, "model": "npm"}
-                    delta = {"role": "assistant", "content": "OK"}
+                    delta: dict[str, object] = {"role": "assistant", "content": "OK"}
                     finish = "stop"
                     if call:
                         delta = {"role": "assistant", "tool_calls": [{"index": 0, **call}]}
