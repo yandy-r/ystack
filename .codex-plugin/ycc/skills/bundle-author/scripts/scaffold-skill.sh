@@ -14,6 +14,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
+# A generated bundle copy (packages/<target>/ycc/skills/...) sits deeper than the
+# canonical ycc/skills tree; scaffold into the canonical source, never the bundle.
+if [[ ! -f "${REPO_ROOT}/ycc/.codex-plugin/plugin.json" ]]; then
+    REPO_ROOT="$(git -C "${PWD}" rev-parse --show-toplevel 2>/dev/null || true)"
+    [[ -n "${REPO_ROOT}" && -f "${REPO_ROOT}/ycc/.codex-plugin/plugin.json" ]] || {
+        echo "scaffold-skill.sh: run from a ystack checkout (no ycc/.codex-plugin/plugin.json found)" >&2
+        exit 1
+    }
+fi
 
 SKILL_NAME=""
 SKILL_ONLY=0

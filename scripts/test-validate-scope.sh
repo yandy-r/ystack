@@ -70,8 +70,10 @@ expect_targets "Cursor package tests select content, native and config" "cursor 
 expect_targets "shared MCP secret audit selects Cursor, OMP, config and types" "cursor omp cursor-native config types" scripts/mcp_secret_audit.py
 expect_targets "generated OMP skills, agents and commands select omp" "omp" \
     packages/omp/ycc/skills/init/SKILL.md packages/omp/ycc/agents/planner.md packages/omp/ycc/commands/plan.md
-expect_targets "OMP generators select omp and types" "omp types" \
-    scripts/generate_omp_skills.py scripts/generate_omp_agents.py scripts/generate_omp_commands.py
+expect_targets "OMP skills generator selects omp, packages (Pi imports it) and types" "omp packages types" \
+    scripts/generate_omp_skills.py
+expect_targets "OMP agent and command generators select omp and types" "omp types" \
+    scripts/generate_omp_agents.py scripts/generate_omp_commands.py
 expect_targets "OMP wrappers and validators select omp" "omp" \
     scripts/generate-omp-skills.sh scripts/validate-omp-skills.sh \
     scripts/generate-omp-agents.sh scripts/validate-omp-agents.sh \
@@ -81,7 +83,11 @@ expect_targets "OMP golden tests select omp and types (mypy files)" "omp types" 
 expect_targets "generated OMP manifests and catalog select omp" "omp" \
     packages/omp/ycc/.omp-plugin/plugin.json packages/omp/ycc/package.json .omp-plugin/marketplace.json
 expect_targets "generated Pi tree selects packages (capability-matrix tree check)" "packages" \
-    packages/pi/ycc/package.json
+    packages/pi/ycc/package.json packages/pi/ycc/skills/init/SKILL.md
+expect_targets "Pi skills generator and wrappers select packages (+types for the module)" "packages types" \
+    scripts/generate_pi_skills.py scripts/test_generate_pi_skills.py
+expect_targets "Pi skills wrappers and validator select packages" "packages" \
+    scripts/generate-pi-skills.sh scripts/validate-pi-skills.sh
 expect_targets "OMP package generator and policy select omp, config and types" "omp config types" \
     scripts/generate_omp_packages.py scripts/validate_omp_native.py
 expect_targets "OMP smoke driver selects omp and types" "omp types" scripts/omp_native_smoke.py

@@ -45,8 +45,8 @@ validate_scope_owned_targets() {
         packages/omp/*) echo "omp" ;;
         packages/antigravity/*) echo "antigravity packages" ;;
         .omp-plugin/*) echo "omp" ;;
-        # Pi's generated tree (YAN-1188); until a pi target exists, the capability-matrix
-        # check in `packages` fails closed on its presence (ADR 0003).
+        # Pi's generated tree: skills (YAN-1184) are checked in `packages`, whose
+        # capability-matrix check also fails closed on an installable package (ADR 0003).
         packages/pi/*) echo "packages" ;;
 
         # The package manifest and its model feed the packages validators and
@@ -61,6 +61,9 @@ validate_scope_owned_targets() {
         scripts/validate_install_doc_ids.py | scripts/test_validate_install_doc_ids.py) echo "packages" ;;
         scripts/validate_capability_matrix.py | scripts/test_validate_capability_matrix.py) echo "packages" ;;
         scripts/test-pi-install-assumptions.sh) echo "packages" ;;
+        # Pi skills generator (validated in `packages`); its golden test is in the [tool.mypy] file list.
+        scripts/generate_pi_skills.py | scripts/generate-pi-skills.sh | scripts/validate-pi-skills.sh) echo "packages" ;;
+        scripts/test_generate_pi_skills.py) echo "packages types" ;;
         # Generated shell helper-path check; its tests are in the [tool.mypy] file list.
         scripts/validate_generated_shell_paths.py) echo "packages" ;;
         scripts/test_validate_generated_shell_paths.py) echo "packages types" ;;
@@ -81,7 +84,9 @@ validate_scope_owned_targets() {
 
         # OMP skill, agent and command generators, validators and golden tests. The golden
         # tests are in pyproject.toml [tool.mypy] files, so they also select `types`.
-        scripts/generate_omp_skills.py | scripts/generate-omp-skills.sh | scripts/validate-omp-skills.sh) echo "omp" ;;
+        # generate_pi_skills.py imports the OMP skills generator, so it also selects packages.
+        scripts/generate_omp_skills.py) echo "omp packages" ;;
+        scripts/generate-omp-skills.sh | scripts/validate-omp-skills.sh) echo "omp" ;;
         scripts/generate_omp_agents.py | scripts/generate-omp-agents.sh | scripts/validate-omp-agents.sh) echo "omp" ;;
         scripts/generate_omp_commands.py | scripts/generate-omp-commands.sh | scripts/validate-omp-commands.sh) echo "omp" ;;
         scripts/test_generate_omp_skills.py | scripts/test_generate_omp_agents.py | scripts/test_generate_omp_commands.py) echo "omp types" ;;
