@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import stat
 import subprocess
@@ -218,8 +219,10 @@ class GeneratedHelperTest(unittest.TestCase):
                 shutil.copytree(repo / rel, root / rel)
             pi.write_tree(root / "packages/pi/ycc/skills", dry_run=False)
             helper = root / "packages/pi/ycc/skills/bundle-author/scripts/scaffold-skill.sh"
-            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
-            subprocess.run(["bash", str(helper), "zz-probe"], cwd=root, check=True, capture_output=True)
+            env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+            env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+            subprocess.run(["git", "init", "-q"], cwd=root, env=env, check=True)
+            subprocess.run(["bash", str(helper), "zz-probe"], cwd=root, env=env, check=True, capture_output=True)
             self.assertTrue((root / "ycc/skills/zz-probe/SKILL.md").is_file())
             self.assertFalse((root / "packages/pi/ycc/skills/zz-probe").exists())
 
