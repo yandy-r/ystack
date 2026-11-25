@@ -111,7 +111,8 @@ class ClaudeNativeValidationTests(unittest.TestCase):
 
     def test_manifest_wrong_or_malformed_name_is_diagnostic_not_type_error(self) -> None:
         addon = self.add_package("ycc-extra")
-        for name in ("wrong", [], None):
+        names: tuple[object, ...] = ("wrong", [], None)
+        for name in names:
             with self.subTest(name=name):
                 self.write_json(addon / ".claude-plugin/plugin.json", {"name": name, "version": VERSION})
                 self.assertTrue(self.errors())
