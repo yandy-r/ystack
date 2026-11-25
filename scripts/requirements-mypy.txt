@@ -2,3 +2,4 @@
 # CI installs this file; the helper requires the installed mypy to match the pin.
 mypy==2.4.0
 types-PyYAML==6.0.12.20260906
+types-jsonschema==4.26.0.20261006

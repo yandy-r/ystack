@@ -29,7 +29,7 @@ import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from jsonschema import Draft7Validator, FormatChecker
 from mcp_secret_audit import audit_no_secret_literals, collect_variables, load_mcp_config
@@ -129,7 +129,7 @@ def manifest_author() -> dict[str, str]:
 
 
 def load_plugin_schema() -> dict[str, Any]:
-    return read_json(SCHEMA_DIR / "plugin.schema.json")
+    return cast(dict[str, Any], read_json(SCHEMA_DIR / "plugin.schema.json"))
 
 
 def build_marketplace(packages: Iterable[Package]) -> dict[str, Any] | None:

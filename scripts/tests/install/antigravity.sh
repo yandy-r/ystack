@@ -9,11 +9,33 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 AG_PACKAGES=(ycc ycc-mcp ycc-rules)
 
+# Run "$@" with no agy reachable and the override cleared. The no-agy cases
+# assert the owned-copy route and the 'all' gate, which a host agy on PATH would
+# otherwise change. A PATH directory holding agy is swapped for a sandbox shim
+# that links every other entry, so its other tools (bash, python3, ...) stay
+# reachable.
+without_agy() {
+    local dir entry shim kept=() path_dirs
+    IFS=: read -r -a path_dirs <<< "${PATH}"
+    for dir in "${path_dirs[@]}"; do
+        if [[ -x "${dir}/agy" ]]; then
+            shim="$(mktemp -d "${SANDBOX_ROOT}/no-agy-bin.XXXXXX")"
+            for entry in "${dir}"/*; do
+                [[ "${entry##*/}" == agy ]] || ln -s "${entry}" "${shim}/"
+            done
+            kept+=("${shim}")
+        else
+            kept+=("${dir}")
+        fi
+    done
+    PATH="$(IFS=:; echo "${kept[*]}")" YCC_ANTIGRAVITY_AGY="" "$@"
+}
+
 echo "== install.sh sync: antigravity (owned copies, no agy) =="
 
 home="$(new_home)"
 plugins="${home}/.gemini/config/plugins"
-install_must_succeed "${home}" sync --target antigravity --intent base
+without_agy install_must_succeed "${home}" sync --target antigravity --intent base
 for pkg in "${AG_PACKAGES[@]}"; do
     if [[ -f "${plugins}/${pkg}/plugin.json" ]]; then
         ok "antigravity base places ${pkg} in ~/.gemini/config/plugins"
@@ -53,7 +75,7 @@ echo '{"name": "ycc", "mine": true}' > "${home}/.gemini/config/plugins/ycc/plugi
 out="$(run_install "${home}" sync --target antigravity --intent base)" && rc=0 || rc=$?
 [[ ${rc} -ne 0 ]] && ok "antigravity refuses to replace a foreign plugin folder" || ko "antigravity refuses to replace a foreign plugin folder" "${out}"
 assert_contains "$(cat "${home}/.gemini/config/plugins/ycc/plugin.json")" '"mine"' "antigravity leaves the foreign folder untouched"
-install_must_succeed "${home}" sync --target antigravity --intent base --force
+without_agy install_must_succeed "${home}" sync --target antigravity --intent base --force
 assert_not_contains "$(cat "${home}/.gemini/config/plugins/ycc/plugin.json")" '"mine"' "antigravity --force replaces the foreign folder"
 
 echo "== install.sh: antigravity via a stub agy =="
@@ -90,14 +112,14 @@ out="$(run_install "${home}" sync --target antigravity --intent base --project)"
 assert_contains "${out}" "--project is not supported by step 'base' for target 'antigravity'" "antigravity --project names the step"
 out="$(run_install "${home}" sync --target antigravity --intent base --mode repo)" && rc=0 || rc=$?
 [[ ${rc} -ne 0 ]] && ok "antigravity rejects --mode repo" || ko "antigravity rejects --mode repo" "${out}"
-install_must_succeed "${home}" sync --target antigravity --intent base,rules --dry-run
+without_agy install_must_succeed "${home}" sync --target antigravity --intent base,rules --dry-run
 assert_contains "${INSTALL_OUT}" "[dry-run] would copy" "antigravity dry-run previews the copies"
 [[ ! -e "${home}/.gemini" ]] && ok "antigravity dry-run writes nothing" || ko "antigravity dry-run writes nothing" "${INSTALL_OUT}"
 
 echo "== install.sh: --target all gates antigravity =="
 
 home="$(new_home)"
-install_must_succeed "${home}" sync --target all --intent rules --dry-run
+without_agy install_must_succeed "${home}" sync --target all --intent rules --dry-run
 assert_contains "${INSTALL_OUT}" "skipping antigravity" "all skips antigravity without agy or ~/.gemini/config"
 mkdir -p "${home}/.gemini/config"
 install_must_succeed "${home}" sync --target all --intent rules --dry-run
