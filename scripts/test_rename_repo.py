@@ -207,7 +207,9 @@ class RenameRepoTestCase(unittest.TestCase):
             preexec_fn=set_umask,
         )
 
-    def rename(self, root: Path, *extra: str, frm: str = OLD, to: str = NEW, **kwargs: Any):
+    def rename(
+        self, root: Path, *extra: str, frm: str = OLD, to: str = NEW, **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
         return self.run_cli(root, "--from", frm, "--to", to, *extra, **kwargs)
 
     def expected_snapshot(self, before: Snapshot, slug: str) -> Snapshot:

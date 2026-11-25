@@ -249,8 +249,9 @@ class Rpc:
             line = self.pending.get(timeout=max(0.001, deadline - time.monotonic()))
         except queue.Empty as exc:
             raise TimeoutError("app-server response/notification timeout") from exc
-        require(line is not None, f"app-server closed unexpectedly: {self.process.poll()}")
-        message = json.loads(line)
+        if line is None:
+            raise RuntimeError(f"app-server closed unexpectedly: {self.process.poll()}")
+        message: dict[str, Any] = json.loads(line)
         self.messages.append({"direction": "received", **message})
         require(
             not ("method" in message and "id" in message),
@@ -365,7 +366,7 @@ def write_hooks(path: Path, revision: str) -> None:
 def list_hooks(rpc: Rpc, root: Path, expected: str) -> list[dict[str, Any]]:
     result = rpc.request("hooks/list", {"cwds": [str(root / "work")]})
     require(len(result["data"]) == 1 and not result["data"][0]["errors"], f"hook discovery failed: {result}")
-    hooks = result["data"][0]["hooks"]
+    hooks: list[dict[str, Any]] = result["data"][0]["hooks"]
     require(len(hooks) == 2 and {h["eventName"] for h in hooks} == set(EVENTS), f"unexpected hooks: {hooks}")
     for hook in hooks:
         require(
@@ -576,10 +577,10 @@ def main() -> int:
     )
     args = parser.parse_args()
     binary_text = os.environ.get("CODEX_BIN")
-    require(
-        bool(binary_text),
-        "set CODEX_BIN to an explicit official 0.160.0 native executable; no auto-download or PATH fallback",
-    )
+    if not binary_text:
+        raise RuntimeError(
+            "set CODEX_BIN to an explicit official 0.160.0 native executable; no auto-download or PATH fallback"
+        )
     binary = Path(binary_text).resolve(strict=True)
     require(binary.is_file() and os.access(binary, os.X_OK), "CODEX_BIN must be executable")
     parent = args.output_dir.resolve(strict=True)
