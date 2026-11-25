@@ -114,6 +114,25 @@ class OpenCodeDispatchProjectionTestCase(unittest.TestCase):
         self.assertIn("Inspect the working tree", rendered)
         self.assertEqual(find_dispatch_residue(rendered, "standalone-dispatch.md"), [])
 
+    def test_new_child_templates_say_to_omit_session_id(self) -> None:
+        """Foreground and background templates must forbid a placeholder sessionID.
+
+        Models otherwise invent one (e.g. "ses") on a new dispatch and pay a
+        failed tool call. Resume (section 4) is the only place a sessionID goes.
+        """
+        rendered = render_standalone_dispatch_reference()
+        sections = {
+            match.group(1): match.group(0)
+            for match in re.finditer(r"^## (\d+)\..*?(?=^## \d+\.|\Z)", rendered, flags=re.MULTILINE | re.DOTALL)
+        }
+        line = "Omit `sessionID` for a new child."
+        for number in ("2", "3"):
+            with self.subTest(section=number):
+                self.assertIn(line, sections[number])
+                self.assertNotIn("sessionID=", sections[number].split("```text", 2)[1].split("```", 1)[0])
+        self.assertNotIn(line, sections["4"])
+        self.assertIn('sessionID="<existing child session ID>"', sections["4"])
+
     def test_shared_reference_carries_preparation_and_batching_sections(self) -> None:
         rendered = render_standalone_dispatch_reference()
 
