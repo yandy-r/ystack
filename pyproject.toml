@@ -32,6 +32,8 @@ files = [
   "scripts/test_validate_generated_shell_paths.py",
   "scripts/generate_omp_skills.py",
   "scripts/test_generate_omp_skills.py",
+  "scripts/generate_pi_skills.py",
+  "scripts/test_generate_pi_skills.py",
   "scripts/generate_omp_agents.py",
   "scripts/test_generate_omp_agents.py",
   "scripts/generate_omp_commands.py",

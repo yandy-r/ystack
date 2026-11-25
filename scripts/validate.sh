@@ -35,7 +35,7 @@
 #   - config     tests the managed-config merge helper and install.sh sync CLI
 #   - packages   validates the package manifest (ycc/settings/packages.json) against its schema
 #                and invariants, package graph closures, manifest/tree/catalog parity, install doc IDs,
-#                generated shell helper paths across every bundle, and tests
+#                generated shell helper paths across every bundle, generated Pi skill drift and policy, and tests
 #   - release    runs every scripts/test-release-*.sh (release-model state scripts,
 #                RELEASING.md template, signal collector)
 #   - mods       validates the Claude Code mods under ycc/mods and their marketplace
@@ -411,6 +411,9 @@ run_target() {
 		echo "== validate: target capability matrix =="
 		python3 "${REPO_ROOT}/scripts/test_validate_capability_matrix.py" || fail "test_validate_capability_matrix.py"
 		python3 "${REPO_ROOT}/scripts/validate_capability_matrix.py" || fail "validate_capability_matrix.py"
+		echo "== validate: pi skills (generated, not installable until YAN-1188) =="
+		"${REPO_ROOT}/scripts/validate-pi-skills.sh" || fail "validate-pi-skills.sh"
+		python3 "${REPO_ROOT}/scripts/test_generate_pi_skills.py" || fail "test_generate_pi_skills.py"
 		echo "== validate: compatibility audit (pi install assumptions, PI1) =="
 		"${REPO_ROOT}/scripts/test-pi-install-assumptions.sh" || fail "test-pi-install-assumptions.sh"
 		"${REPO_ROOT}/ycc/skills/compatibility-audit/scripts/audit-install-assumptions.sh" --target=pi "${REPO_ROOT}" \

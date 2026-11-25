@@ -112,8 +112,9 @@ The recommendation in `docs/research/ystack/recommendation.md` is qualified by
   supported floor `>=1.2.0`, recommended 1.5.0. Pi gets a generated `packages/pi/` tree
   (YAN-1188) installed by absolute path with `pi install`; there is no catalog. Pi has no
   built-in subagents, no shell hooks or `hooks.json`, no `WorktreeCreate` event, and no approval
-  modes, and a Pi package cannot depend on another, so `ycc-all` is omitted. See ADR 0003. No Pi
-  generator or installer ships yet, so every `pi` cell above is `unsupported`.
+  modes, and a Pi package cannot depend on another, so `ycc-all` is omitted. See ADR 0003. The Pi
+  skills generator (YAN-1184) writes `packages/pi/ycc/skills`, but no package manifest or
+  installer ships yet, so every `pi` cell above is `unsupported`.
 - `antigravity-runtime-contract.md`: desk research against the official Antigravity docs, not yet
   run against a live `agy`. The App, IDE and CLI share `~/.gemini/config/`; ycc generates
   `packages/antigravity/{ycc,ycc-mcp,ycc-rules}` (root `plugin.json`) and installs them globally.
@@ -535,10 +536,15 @@ Unsupported. The Claude Code mod API differs from OMP's `ExtensionAPI`; the stat
 not ported. Source: ADR 0002.
 
 **SKILLS:pi**
-Unsupported today: ycc ships no Pi skill tree. Planned `partial` (YAN-1184): Pi discovers package
-`skills/<name>/SKILL.md` natively as `/skill:<name>`, and `disable-model-invocation` maps natively,
-but Pi leaves `${CLAUDE_PLUGIN_ROOT}`, `/ycc:<name>` and body `$ARGUMENTS` literal, so the generator
-must rewrite them and ship `_shared` inside the package. Floor pi `>=1.2.0`. Coexistence: Pi
+Unsupported today: `scripts/generate_pi_skills.py` (YAN-1184) generates every skill and `_shared`
+under `packages/pi/ycc/skills`, but nothing installs it until YAN-1188 adds
+`packages/pi/ycc/package.json`; this cell flips to `partial` in that PR. Pi discovers
+`skills/<name>/SKILL.md` natively as `/skill:<name>`, and `disable-model-invocation` maps natively.
+Pi leaves `${CLAUDE_PLUGIN_ROOT}`, `/ycc:<name>` and body `$ARGUMENTS` literal, so the generator
+rewrites plugin-root and `_shared` paths to skill-directory-relative `../<path>`, maps `/ycc:`
+references and Claude file-tool names, and prefixes skills that use `$ARGUMENTS` with a note that
+it is the text Pi appends after the skill block. `_shared/` has no `SKILL.md`, so Pi does not
+discover it as a skill (checked against the Pi 1.5.0 loader). Floor pi `>=1.2.0`. Coexistence: Pi
 discovers `~/.agents/skills` by default, so copies from the `agents` target load unadapted and
 outrank a package skill of the same name (no namespacing, spike §1.5); YAN-1193 adds owned
 `-~/.agents/skills/<n>/SKILL.md` dedupe overrides. Source: ADR 0003; spike §1.5, §3.

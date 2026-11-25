@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Auto-fix + format staged files, then re-stage the fixes.
+# To bypass once: git commit --no-verify
+
+set -e
+
+./scripts/style.sh lint --modified --fix
+./scripts/style.sh format --modified
+
+# Re-stage any files the fixer touched.
+git diff --name-only --diff-filter=ACMR | xargs -r git add

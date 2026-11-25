@@ -6,13 +6,13 @@
 #   ./scripts/sync.sh --only inventory           # single target
 #   ./scripts/sync.sh --only cursor,codex        # comma-separated subset
 #
-# Targets: inventory, cursor, codex, opencode, omp, antigravity, agents, claude
+# Targets: inventory, cursor, codex, opencode, omp, pi, antigravity, agents, claude
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-VALID_TARGETS=(inventory cursor codex opencode omp antigravity agents claude)
+VALID_TARGETS=(inventory cursor codex opencode omp pi antigravity agents claude)
 TARGETS=("${VALID_TARGETS[@]}")
 
 usage() {
@@ -102,6 +102,11 @@ run_ycc_target() {
             "${REPO_ROOT}/scripts/generate-omp-commands.sh"
             echo "== sync: omp native packages and catalog =="
             "${REPO_ROOT}/scripts/generate-omp-packages.sh"
+            ;;
+        pi)
+            # Skills only (YAN-1184); packages/pi/ycc/package.json arrives with YAN-1188.
+            echo "== sync: pi skills =="
+            "${REPO_ROOT}/scripts/generate-pi-skills.sh"
             ;;
         antigravity)
             echo "== sync: antigravity plugins =="
