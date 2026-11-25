@@ -9,7 +9,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import generate_opencode_commands as commands
-from generate_opencode_common import parse_frontmatter
+from description_budget import DESCRIPTION_LIMIT, DESCRIPTION_TOTAL_CAP
+from generate_opencode_common import OPENCODE_COMMANDS_DIR, parse_frontmatter
 
 
 class SkillCommandsTest(unittest.TestCase):
@@ -61,13 +62,13 @@ class SkillCommandsTest(unittest.TestCase):
     def test_budget_accepts_commands_within_caps(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self._write_commands(root, [commands.DESCRIPTION_LIMIT, 10])
+            self._write_commands(root, [DESCRIPTION_LIMIT, 10])
             self.assertEqual(commands.description_budget_errors(root), [])
 
     def test_budget_rejects_over_cap_description(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self._write_commands(root, [commands.DESCRIPTION_LIMIT + 1])
+            self._write_commands(root, [DESCRIPTION_LIMIT + 1])
             errors = commands.description_budget_errors(root)
             self.assertEqual(len(errors), 1)
             self.assertIn("listing cap", errors[0])
@@ -76,23 +77,23 @@ class SkillCommandsTest(unittest.TestCase):
     def test_budget_accepts_exact_aggregate_cap(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            full_files = commands.DESCRIPTION_TOTAL_CAP // commands.DESCRIPTION_LIMIT
-            self._write_commands(root, [commands.DESCRIPTION_LIMIT] * full_files)
+            full_files = DESCRIPTION_TOTAL_CAP // DESCRIPTION_LIMIT
+            self._write_commands(root, [DESCRIPTION_LIMIT] * full_files)
             self.assertEqual(commands.description_budget_errors(root), [])
 
     def test_budget_rejects_one_char_over_aggregate_cap(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            full_files = commands.DESCRIPTION_TOTAL_CAP // commands.DESCRIPTION_LIMIT
-            lengths = [commands.DESCRIPTION_LIMIT] * full_files + [1]
+            full_files = DESCRIPTION_TOTAL_CAP // DESCRIPTION_LIMIT
+            lengths = [DESCRIPTION_LIMIT] * full_files + [1]
             self._write_commands(root, lengths)
-            self.assertEqual(sum(lengths), commands.DESCRIPTION_TOTAL_CAP + 1)
+            self.assertEqual(sum(lengths), DESCRIPTION_TOTAL_CAP + 1)
             errors = commands.description_budget_errors(root)
             self.assertEqual(len(errors), 1)
             self.assertIn("listing budget", errors[0])
 
     def test_generated_commands_fit_budget(self) -> None:
-        self.assertEqual(commands.description_budget_errors(commands.OPENCODE_COMMANDS_DIR), [])
+        self.assertEqual(commands.description_budget_errors(OPENCODE_COMMANDS_DIR), [])
 
     def test_absent_hint_has_no_usage(self) -> None:
         for hint in ("", "argument-hint: null\n"):

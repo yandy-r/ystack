@@ -44,7 +44,7 @@ class OpenCodeConfigValidationTestCase(unittest.TestCase):
         self.assertEqual(config["agents"], build_agents_config(load_model_settings()))
 
     def test_generated_config_sets_subagent_depth(self) -> None:
-        config = build_opencode_config()
+        config: dict[str, Any] = build_opencode_config()
 
         self.assertEqual(config["experimental"]["subagent_depth"], 2)
 
@@ -126,7 +126,7 @@ class OpenCodeConfigValidationTestCase(unittest.TestCase):
         self.assert_has_error(errors, "uses a shell placeholder")
 
     def test_rejects_malformed_v2_permission_rules(self) -> None:
-        config = build_opencode_config()
+        config: dict[str, Any] = build_opencode_config()
         config["agents"]["general"]["permissions"] = [
             {"action": 42, "resource": "", "effect": "sometimes"},
             {"action": "read", "effect": "allow"},
@@ -190,7 +190,7 @@ class OpenCodeConfigValidationTestCase(unittest.TestCase):
 
     def test_provider_config_effort_and_verbosity_and_subagent_variant(self) -> None:
         settings = load_model_settings()
-        providers = build_provider_config(settings)
+        providers: dict[str, Any] = build_provider_config(settings)
 
         self.assertIn("openai", providers)
         openai_models = providers["openai"]["models"]
@@ -218,7 +218,7 @@ class OpenCodeConfigValidationTestCase(unittest.TestCase):
         config["agents"]["stale-agent-xyz"] = {"model": "openai/gpt-5.6-sol"}
         original_read_text = Path.read_text
 
-        def fake_read_text(self: Path, *args: object, **kwargs: object) -> str:
+        def fake_read_text(self: Path, *args: Any, **kwargs: Any) -> str:
             if self == bundle_path:
                 return json.dumps(config)
             return original_read_text(self, *args, **kwargs)
@@ -236,7 +236,7 @@ class OpenCodeConfigValidationTestCase(unittest.TestCase):
         self.assertIn("agents.stale-agent-xyz: emitted but not declared in models.json", output)
 
     def test_agents_config_mapping_preserved_after_generation(self) -> None:
-        settings = load_model_settings()
+        settings: dict[str, Any] = load_model_settings()
         agents_config = build_agents_config(settings)
         declared_mapping = settings["agents"]
 

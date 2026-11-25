@@ -630,7 +630,7 @@ class SensitiveGuardTestCase(unittest.TestCase):
     def test_approved_directory_is_not_asked_again_for_the_internal_search(self) -> None:
         _, session, outside = self.outside_project()
         approved = [f"{outside}/*"]
-        cases = [
+        cases: list[dict[str, Any]] = [
             # The host would ask the helper for the directory the caller just approved.
             {
                 "kind": "execute",

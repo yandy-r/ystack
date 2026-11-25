@@ -15,6 +15,7 @@ import tempfile
 import tomllib
 import unittest
 from pathlib import Path
+from typing import Any
 
 from managed_config_entries import item_key, marketplace_of
 
@@ -50,8 +51,9 @@ class EntrySelectionTestCase(unittest.TestCase):
         ]  # fmt: skip
         return subprocess.run(argv, capture_output=True, text=True, env=env)
 
-    def servers(self) -> dict:
-        return json.loads(self.dest.read_text(encoding="utf-8")).get("mcpServers", {})
+    def servers(self) -> dict[str, Any]:
+        servers: dict[str, Any] = json.loads(self.dest.read_text(encoding="utf-8")).get("mcpServers", {})
+        return servers
 
     def test_list_entries_prints_managed_names(self) -> None:
         result = self.run_helper("--list-entries")
@@ -145,7 +147,7 @@ class ItemKeyTestCase(unittest.TestCase):
         self.assertIsNone(marketplace_of("a@"))
 
 
-CLAUDE_PLUGINS = {
+CLAUDE_PLUGINS: dict[str, Any] = {
     "enabledPlugins": {
         "ycc@ycc": True,
         "superpowers@claude-plugins-official": True,
@@ -181,11 +183,13 @@ class PluginSelectionTestCase(unittest.TestCase):
         ]  # fmt: skip
         return subprocess.run(argv, capture_output=True, text=True, env=env)
 
-    def dest_json(self) -> dict:
-        return json.loads(self.dest.read_text(encoding="utf-8"))
+    def dest_json(self) -> dict[str, Any]:
+        payload: dict[str, Any] = json.loads(self.dest.read_text(encoding="utf-8"))
+        return payload
 
-    def state_entry(self) -> dict:
-        return json.loads(self.state.read_text(encoding="utf-8"))[f"claude-settings:{self.dest}"]
+    def state_entry(self) -> dict[str, Any]:
+        entry: dict[str, Any] = json.loads(self.state.read_text(encoding="utf-8"))[f"claude-settings:{self.dest}"]
+        return entry
 
     def test_list_entries_prints_plugins_without_marketplaces(self) -> None:
         result = self.run_helper("--list-entries")

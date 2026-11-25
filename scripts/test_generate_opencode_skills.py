@@ -19,6 +19,10 @@ FORGE_FALLBACK = '[[ -f "$FORGE_LIB" ]] || FORGE_LIB="${HOME}/.config/opencode/s
 
 
 class HomePathTestCase(unittest.TestCase):
+    temp: tempfile.TemporaryDirectory[str]
+    root: Path
+    written: set[Path]
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.temp = tempfile.TemporaryDirectory()

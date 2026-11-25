@@ -74,7 +74,7 @@ class MergeBase(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
         return result
 
-    def write_json(self, path: Path, payload: dict) -> Path:
+    def write_json(self, path: Path, payload: dict[str, Any]) -> Path:
         path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         return path
 
@@ -820,10 +820,10 @@ class MergeHelperTestCase(MergeBase):
 
     # -- --remove ---------------------------------------------------------
 
-    def remove(self, source: Path, destination: Path, *extra: str, **kwargs) -> subprocess.CompletedProcess[str]:
+    def remove(self, source: Path, destination: Path, *extra: str, **kwargs: Any) -> subprocess.CompletedProcess[str]:
         return self.run_merge("claude-mcp", source, destination, "mcp", extra=("--remove", *extra), **kwargs)
 
-    def mcp_source(self, servers: dict) -> Path:
+    def mcp_source(self, servers: dict[str, Any]) -> Path:
         return self.write_json(self.tmp / "src.json", {"mcpServers": servers})
 
     def test_remove_keeps_user_servers_and_other_keys(self) -> None:
@@ -926,7 +926,7 @@ class MergeHelperTestCase(MergeBase):
         self.assertEqual(original.read_bytes(), before)
         self.assertEqual(original.stat().st_ino, inode)
 
-    def remove_plugins(self, source: Path, destination: Path, **kwargs) -> subprocess.CompletedProcess[str]:
+    def remove_plugins(self, source: Path, destination: Path, **kwargs: Any) -> subprocess.CompletedProcess[str]:
         return self.run_merge("opencode-config", source, destination, "plugins", extra=("--remove",), **kwargs)
 
     def test_remove_list_union_takes_back_only_appended_items(self) -> None:
@@ -1021,7 +1021,7 @@ class OmpYamlMergeTest(MergeBase):
 
     def test_m2_user_keys_survive(self) -> None:
         providers = {"ollama": {"baseUrl": "http://127.0.0.1:11434", "models": ["llama4"]}}
-        user = {
+        user: dict[str, Any] = {
             "providers": providers,
             "modelRoles": {"smol": "openai/gpt-5.6-mini", "reviewer": "@slow"},
             "tools": {"approval": {"bash": "deny"}},
@@ -1075,7 +1075,7 @@ class OmpYamlMergeTest(MergeBase):
 
     def test_m8_fallback_chains_owned_per_role(self) -> None:
         destination = self.tmp / "config.yml"
-        user_retry = {"maxRetries": 5, "fallbackChains": {"smol": ["openai/gpt-5.6-mini"]}}
+        user_retry: dict[str, Any] = {"maxRetries": 5, "fallbackChains": {"smol": ["openai/gpt-5.6-mini"]}}
         destination.write_text(yaml.safe_dump({"retry": user_retry}, sort_keys=False), encoding="utf-8")
         source = self.write_source(chains=self.CHAINS)
 
@@ -1413,7 +1413,7 @@ class HookCommandPruneTestCase(MergeBase):
     OTHER = {"type": "command", "command": "user-hook"}
     GROUP = {"matcher": "Bash", "hooks": [COMMAND]}
 
-    def seed(self, groups: list | None = None) -> tuple[Path, Path]:
+    def seed(self, groups: list[Any] | None = None) -> tuple[Path, Path]:
         source = self.write_json(self.tmp / "src.json", {"hooks": {"PreToolUse": groups or [self.GROUP]}})
         destination = self.write_json(self.tmp / "dest.json", {"keep": True})
         self.run_merge("claude-settings", source, destination, "hooks")
@@ -1692,14 +1692,15 @@ class GithubMcpMigrationTestCase(MergeBase):
                 self.assertEqual(self.load(dest)["mcpServers"]["github"], self.NPM)
 
     def sync(
-        self, profile: str, source: Path, dest: Path, groups: str = "mcp", **kw
+        self, profile: str, source: Path, dest: Path, groups: str = "mcp", **kw: Any
     ) -> subprocess.CompletedProcess[str]:
         return self.run_merge(profile, source, dest, groups, **kw)
 
-    def load(self, path: Path) -> dict:
-        return json.loads(path.read_text())
+    def load(self, path: Path) -> dict[str, Any]:
+        payload: dict[str, Any] = json.loads(path.read_text())
+        return payload
 
-    def claude(self, github: dict, **extra: object) -> tuple[Path, Path]:
+    def claude(self, github: dict[str, Any], **extra: object) -> tuple[Path, Path]:
         source = self.write_json(self.tmp / "src.json", self.SERVERS)
         dest = self.write_json(self.tmp / "dest.json", {"keep": 1, "mcpServers": {"github": github, **extra}})
         return source, dest
@@ -1760,7 +1761,7 @@ class GithubMcpMigrationTestCase(MergeBase):
         self.assertEqual(self.load(dest)["mcpServers"]["github"], self.BRIDGE)
 
     def test_custom_github_untouched_without_force_replaced_with_force(self) -> None:
-        for custom in (
+        customs: tuple[dict[str, Any], ...] = (
             {"command": "docker", "args": ["run", "ghcr.io/github/github-mcp-server"]},
             {"command": "npx", "args": ["-y", "my-github-fork"], "env": {"X": "1"}},
             {"url": "https://ghe.example.com/mcp", "headers": {"A": "b"}},
@@ -1769,7 +1770,8 @@ class GithubMcpMigrationTestCase(MergeBase):
             {**GithubMcpMigrationTestCase.NATIVE, "env": {"GH_HOST": "ghe.example.com"}},
             {**GithubMcpMigrationTestCase.NATIVE, "env_vars": ["GITHUB_TOKEN"]},
             {**GithubMcpMigrationTestCase.BRIDGE, "env": {"GH_TOKEN": "custom"}},
-        ):
+        )
+        for custom in customs:
             with self.subTest(custom=custom):
                 source, dest = self.claude(custom)
                 self.sync("claude-mcp", source, dest)
@@ -1783,9 +1785,9 @@ class GithubMcpMigrationTestCase(MergeBase):
                     if kept:
                         expected["env"] = kept
                 if "env_vars" in custom:
-                    kept = [n for n in custom["env_vars"] if n not in GithubMcpMigrationTestCase.AUTH_OVERRIDES]
-                    if kept:
-                        expected["env_vars"] = kept
+                    kept_vars = [n for n in custom["env_vars"] if n not in GithubMcpMigrationTestCase.AUTH_OVERRIDES]
+                    if kept_vars:
+                        expected["env_vars"] = kept_vars
                 self.assertEqual(self.load(dest)["mcpServers"]["github"], expected)
 
     def test_dry_run_and_entry_selection_do_not_migrate(self) -> None:
@@ -1915,21 +1917,24 @@ class KeyedPluginListTestCase(MergeBase):
         self.source = self.tmp / "src.json"
         self.dest = self.tmp / "opencode.json"
 
-    def sync(self, plugins: list, *extra: str, force: bool = False) -> subprocess.CompletedProcess[str]:
+    def sync(self, plugins: list[Any], *extra: str, force: bool = False) -> subprocess.CompletedProcess[str]:
         self.write_json(self.source, {"plugins": plugins})
         return self.run_merge("opencode-config", self.source, self.dest, "plugins", force=force, extra=extra)
 
-    def remove(self, plugins: list, *extra: str, force: bool = False) -> subprocess.CompletedProcess[str]:
+    def remove(self, plugins: list[Any], *extra: str, force: bool = False) -> subprocess.CompletedProcess[str]:
         self.write_json(self.source, {"plugins": plugins})
         return self.run_merge(
             "opencode-config", self.source, self.dest, "plugins", force=force, extra=("--remove", *extra)
         )
 
-    def plugins(self) -> list:
-        return json.loads(self.dest.read_text())["plugins"]
+    def plugins(self) -> list[Any]:
+        plugins: list[Any] = json.loads(self.dest.read_text())["plugins"]
+        return plugins
 
     def owned(self) -> list[str]:
-        return json.loads(self.state.read_text())[f"opencode-config:{self.dest}"]["/plugins"][ADDED_ITEMS_KEY]
+        state = json.loads(self.state.read_text())
+        owned: list[str] = state[f"opencode-config:{self.dest}"]["/plugins"][ADDED_ITEMS_KEY]
+        return owned
 
     def test_selective_sync_adds_only_the_selected_item(self) -> None:
         self.write_json(self.dest, {"plugins": ["mine"]})
@@ -2090,8 +2095,9 @@ class MarketplaceRetentionTestCase(MergeBase):
     def remove(self, *extra: str) -> subprocess.CompletedProcess[str]:
         return self.run_merge("claude-settings", self.source, self.dest, "plugins", extra=("--remove", *extra))
 
-    def state_entry(self) -> dict:
-        return json.loads(self.state.read_text()).get(f"claude-settings:{self.dest}", {})
+    def state_entry(self) -> dict[str, Any]:
+        entry: dict[str, Any] = json.loads(self.state.read_text()).get(f"claude-settings:{self.dest}", {})
+        return entry
 
     def test_removing_one_of_two_plugins_keeps_their_marketplace(self) -> None:
         result = self.remove("--entries", "superpowers@claude-plugins-official")
