@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from claude_namespace_checks import (
+    changed_entries,
     check,
     digest,
     negative_self_test,
@@ -463,8 +464,8 @@ def main() -> None:
         save(args.output, snapshot(args.paths))
     elif args.command == "compare":
         before, after = json.loads(args.before.read_text()), json.loads(args.after.read_text())
-        changed = [key for key in before.keys() | after.keys() if before.get(key) != after.get(key)]
-        print("real-config hash/mtime unchanged:", not changed, "entries:", len(before))
+        changed = changed_entries(before, after)
+        print("real-config hash/mtime unchanged:", not changed, "guarded entries:", len(before))
         if changed:
             raise SystemExit("Real config changed (possibly concurrent use): " + str(changed))
     else:

@@ -7,12 +7,38 @@ import hashlib
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 
 BANNED_DIAGNOSTICS = re.compile(r"collision|conflict|duplicate", re.IGNORECASE)
 
 EXPECTED_DUP_SKILL_COUNT = {"2.1.143": 2, "2.1.300": 1}
+
+# Real-config guard (YAN-2454): live Claude sessions rewrite this runtime state on their
+# own, so it is not compared. Settings, plugin indexes/caches, marketplaces, hooks,
+# agents, skills and credentials stay strict.
+VOLATILE_DIRS = frozenset(
+    {
+        "backups", "bridge-spawn", "cache", "chrome", "debug", "downloads", "file-history",
+        "ide", "jobs", "paste-cache", "plans", "projects", "remote", "session-data",
+        "session-env", "sessions", "shell-snapshots", "state", "statsig", "tasks", "teams",
+        "telemetry", "todos", "transcripts", "usage-data",
+    }
+)  # fmt: skip
+VOLATILE_SUBTREES = frozenset({"plugins/.trash", "plugins/data", "plugins/store", "plugins/synced", "skills/synced"})
+VOLATILE_TOP_FILES = frozenset({"history.jsonl"})
+VOLATILE_NAME = re.compile(r"\.(stamp|signature)\.json(\.tmp\.\w+)?$|-cache(-v\d+)?\.json$")
+# Plugin indexes stay strict except for the lastUpdated stamps live sessions bump when
+# they check marketplaces for updates; any added/removed/changed entry still fails.
+PLUGIN_INDEXES = frozenset({"plugins/installed_plugins.json", "plugins/known_marketplaces.json"})
+INDEX_TIMESTAMP_KEYS = frozenset({"lastUpdated"})
+CLAUDE_JSON = ".claude.json"
+# ~/.claude.json is rewritten by every live session (counters, caches, per-project
+# stats); only its MCP servers and per-project tool/MCP permissions are guarded.
+CLAUDE_JSON_PROJECT_KEYS = (
+    "allowedTools", "disabledMcpServers", "disabledMcpjsonServers", "enabledMcpjsonServers", "mcpServers",
+)  # fmt: skip
 
 
 def check(label: str, expected: Any, actual: Any) -> None:
@@ -231,24 +257,105 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def guarded_json_rel(root: Path, item: Path) -> str | None:
+    """Return the key for files compared by semantic JSON digest, else None."""
+    rel = item.name if item == root else item.relative_to(root).as_posix()
+    # A custom CLAUDE_CONFIG_DIR keeps its .claude.json inside the config directory.
+    return rel if rel == CLAUDE_JSON or (item != root and rel in PLUGIN_INDEXES) else None
+
+
+def is_volatile(rel: str) -> bool:
+    """True for config-dir paths that concurrent live Claude sessions rewrite on their own."""
+    parts = rel.split("/")
+    name = parts[-1]
+    return (
+        parts[0] in VOLATILE_DIRS
+        or "/".join(parts[:2]) in VOLATILE_SUBTREES
+        or (len(parts) == 1 and name in VOLATILE_TOP_FILES)
+        or name == ".in_use"
+        or name.startswith((".last-", ".last_"))
+        or VOLATILE_NAME.search(name) is not None
+    )
+
+
+def strip_timestamps(value: Any) -> Any:
+    """Drop the lastUpdated stamps live sessions bump on plugin indexes without other changes."""
+    if isinstance(value, dict):
+        return {k: strip_timestamps(v) for k, v in value.items() if k not in INDEX_TIMESTAMP_KEYS}
+    if isinstance(value, list):
+        return [strip_timestamps(v) for v in value]
+    return value
+
+
+def claude_json_guarded(data: dict[str, Any]) -> dict[str, Any]:
+    """Keep only the settings-bearing keys of ~/.claude.json (MCP servers, tool permissions)."""
+    projects = data.get("projects")
+    scoped = {
+        name: picked
+        for name, entry in (projects.items() if isinstance(projects, dict) else [])
+        if isinstance(entry, dict) and (picked := {k: entry[k] for k in CLAUDE_JSON_PROJECT_KEYS if entry.get(k)})
+    }
+    return {"mcpServers": data.get("mcpServers"), "projects": scoped}
+
+
+def json_identity(path: Path, rel: str) -> dict[str, Any] | None:
+    """Semantic digest of a live-rewritten JSON file; None means hash it strictly instead."""
+    for attempt in range(3):
+        try:
+            data = json.loads(path.read_bytes())
+        except (OSError, ValueError):  # a live session may be mid-rewrite: retry, then fail strict
+            time.sleep(0.2 * (attempt + 1))
+            continue
+        if not isinstance(data, dict):
+            return None
+        guarded = claude_json_guarded(data) if rel == CLAUDE_JSON else strip_timestamps(data)
+        return {"json_sha256": hashlib.sha256(json.dumps(guarded, sort_keys=True).encode()).hexdigest()}
+    return None
+
+
+def entry_identity(root: Path, item: Path) -> dict[str, Any]:
+    """Identity of one snapshot entry; never follows symlinks or records file contents."""
+    if not item.exists() and not item.is_symlink():
+        return {"absent": True}
+    if item.is_dir() and not item.is_symlink():
+        return {"dir": True}
+    regular = item.is_file() and not item.is_symlink()
+    rel = guarded_json_rel(root, item) if regular else None
+    identity = json_identity(item, rel) if rel else None
+    if identity is not None:
+        return identity
+    stat = item.lstat()
+    return {
+        "mtime_ns": stat.st_mtime_ns,
+        "size": stat.st_size,
+        "sha256": digest(item) if regular else None,
+        "symlink": os.readlink(item) if item.is_symlink() else None,
+    }
+
+
 def snapshot(paths: list[str]) -> dict[str, Any]:
-    """Capture content/mtime identity, not secret contents; do not follow symlinks."""
+    """Capture guarded content/mtime identity, not secret contents; do not follow symlinks.
+
+    Inside a config directory, volatile live-session state (is_volatile) is skipped and
+    directories record presence only (their mtimes move whenever a session adds a file).
+    ~/.claude.json and the plugin indexes compare a semantic JSON digest (json_identity).
+    Everything else (settings, marketplaces, plugin cache payloads, hooks, agents, skills,
+    credentials) stays strict: content digest, size and mtime must not change.
+    """
     result: dict[str, Any] = {}
     for raw in paths:
         root = Path(raw)
         items = [root]
         if not root.is_symlink() and root.is_dir():
             for directory, dirs, files in os.walk(root, followlinks=False):
-                items.extend(Path(directory) / name for name in sorted(dirs + files))
-        for item in items:
-            if not item.exists() and not item.is_symlink():
-                result[str(item)] = {"absent": True}
-                continue
-            stat = item.lstat()
-            result[str(item)] = {
-                "mtime_ns": stat.st_mtime_ns,
-                "size": stat.st_size,
-                "sha256": digest(item) if item.is_file() and not item.is_symlink() else None,
-                "symlink": os.readlink(item) if item.is_symlink() else None,
-            }
+                base = Path(directory)
+                dirs[:] = sorted(d for d in dirs if not is_volatile((base / d).relative_to(root).as_posix()))
+                kept = (n for n in dirs + sorted(files) if not is_volatile((base / n).relative_to(root).as_posix()))
+                items.extend(base / name for name in kept)
+        result.update((str(item), entry_identity(root, item)) for item in items)
     return result
+
+
+def changed_entries(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
+    """Sorted guarded paths that were added, removed or modified between snapshots."""
+    return sorted(key for key in before.keys() | after.keys() if before.get(key) != after.get(key))

@@ -17,7 +17,8 @@ Usage: scripts/test-claude-agents-split.sh [--keep]
 
 Explicit opt-in (never run by validate.sh). Uses CLAUDE_BIN or `claude` on PATH in
 an env -i lab with isolated HOME/CLAUDE_CONFIG_DIR/XDG/TMPDIR and a 127.0.0.1 fake
-API. The real ~/.claude config is snapshotted before and after and must not change.
+API. Real ~/.claude settings/plugin config is snapshotted before and after and must not
+change; live-session state is skipped, so concurrent Claude sessions are OK.
 --keep     Retain the lab, transcripts and request logs.
 -h, --help Show this text.
 EOF

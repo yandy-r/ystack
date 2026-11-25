@@ -56,6 +56,7 @@ files = [
   "scripts/claude_hooks_spike.py",
   "scripts/claude_namespace_checks.py",
   "scripts/claude_namespace_fake_api.py",
+  "scripts/test_claude_namespace_checks.py",
   "scripts/claude_native_smoke.py",
   "scripts/generate_claude_packages.py",
   "scripts/test_generate_claude_packages.py",
