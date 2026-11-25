@@ -6,6 +6,7 @@
 # Path refusals and the fail-closed / --allow-env-i fallback run with bwrap hidden from PATH,
 # so they hold on every CI runner. When a working bwrap exists, the suite also checks that the
 # layout hides the real home and host runtime dirs, and that the probe rejects a bound socket.
+# Off CI, a host whose probe exits or times out without naming a cause skips those two cases.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -74,7 +75,16 @@ bwrap_bin=$(command -v bwrap || true)
 if [[ -n "$bwrap_bin" ]] &&
   bwrap --ro-bind / / --dev /dev --proc /proc --unshare-net --unshare-pid /bin/true >/dev/null 2>&1; then
   out=$(run_helper "$PATH" 0 "$ROOT" "$REAL_HOME" /usr/bin) || true
-  if [[ "$out" == *'sandbox=bwrap-netns'* ]]; then ok 'bwrap layout passes its probe'; else
+  # A probe that dies without a diagnostic (a host that can't finish it: user-namespace
+  # limits, or a scan past its 60 s bound) says nothing about the layout. Skip the probe
+  # cases there, as when bwrap is missing; a probe that names a leak still fails. CI
+  # (CI=true) never skips: its runners complete the probe, so a failure there is real.
+  probe_runs=1
+  if [[ "$out" == *'sandbox=bwrap-netns'* ]]; then ok 'bwrap layout passes its probe'
+  elif [[ "${CI:-}" != true && "$out" == *'probe failed: probe exited non-zero or timed out'* ]]; then
+    probe_runs=0
+    printf 'SKIP bwrap layout: the probe cannot run on this host (exited non-zero or timed out without a reason)\n'
+  else
     bad "bwrap layout: $out"
   fi
   expect_bwrap_refused() {
@@ -93,8 +103,12 @@ if [[ -n "$bwrap_bin" ]] &&
 import socket, sys
 socket.socket(socket.AF_UNIX).bind(sys.argv[1])
 PY
-  expect_bwrap_refused 'probe rejects a visible host socket' 'host socket or FIFO visible' \
-    "$ROOT" "$REAL_HOME" "${SCRATCH}/exposed"
+  if ((probe_runs)); then
+    expect_bwrap_refused 'probe rejects a visible host socket' 'host socket or FIFO visible' \
+      "$ROOT" "$REAL_HOME" "${SCRATCH}/exposed"
+  else
+    printf 'SKIP probe rejects a visible host socket: the probe cannot run on this host\n'
+  fi
 else
   printf 'note: no working bwrap; skipped the live layout checks\n'
 fi
