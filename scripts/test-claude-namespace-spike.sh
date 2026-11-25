@@ -24,7 +24,8 @@ Inconclusive or unsupported paths exit nonzero. Fresh HOME/CLAUDE_CONFIG_DIR/
 XDG/TMPDIR/npm prefix and empty non-git cwd; no repo plugins, executable fixture
 hooks, real user settings, or credentials are copied. Nonessential traffic and
 updates are disabled; egress is NOT OS-firewalled (see doc best-effort boundary).
-Avoid concurrent real Claude use: config hashes/mtimes must match before/after.
+Real settings/plugin config hashes must match before/after; live-session state
+(sessions, backups, stamps, caches) is skipped, so concurrent Claude use is OK.
 EOF
 }
 # Emit fatal diagnostics without printing inherited environment values.

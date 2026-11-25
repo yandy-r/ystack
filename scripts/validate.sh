@@ -373,6 +373,8 @@ run_target() {
             echo "== validate: hidden v7 split (ycc skills + ycc-agents) =="
             python3 "${REPO_ROOT}/scripts/claude_agents_split.py" --check || fail "claude_agents_split.py --check"
             python3 "${REPO_ROOT}/scripts/test_claude_agents_split.py" || fail "test_claude_agents_split.py"
+            echo "== test: Claude spike real-config guard =="
+            python3 "${REPO_ROOT}/scripts/test_claude_namespace_checks.py" || fail "test_claude_namespace_checks.py"
             ;;
         cursor-native)
             echo "== validate: cursor native packages =="
