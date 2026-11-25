@@ -125,6 +125,9 @@ for m in mints:
     check(not any(k.startswith("permission-") and k != "permission-contents" for k in w),
           f"mint must request contents only, got {sorted(w)}")
     check(m.get("continue-on-error") is True, "a failed mint must report, not fail")
+    # actionlint's stale metadata errors on these inputs are ignored below, so check them here.
+    check(bool(w.get("client-id") or w.get("app-id")), "mint passes a client-id or app-id")
+    check(bool(w.get("private-key")), "mint passes a private-key")
 check("permission-workflows" not in open(path, encoding="utf-8").read(), "no permission-workflows anywhere")
 
 if failures:
