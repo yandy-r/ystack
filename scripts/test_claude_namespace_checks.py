@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -36,6 +37,8 @@ class RealConfigGuardTests(unittest.TestCase):
         write(self.config / "backups/.claude.json.backup.1", "{}")
         write(self.config / "projects/-home/a.jsonl", "")
         write(self.config / "skills/mine/SKILL.md", "")
+        write(self.config / "plugins/cache/mkt/demo/1.0.0/schema-cache.json", "{}")
+        write(self.config / "plugins/cache/mkt/demo/1.0.0/hooks/.in_use", "")
         self.write_claude_json(numStartups=1, projects={"/repo": {"allowedTools": [], "lastCost": 1}})
         self.before = self.snap()
 
@@ -62,6 +65,8 @@ class RealConfigGuardTests(unittest.TestCase):
         write(self.config / "history.jsonl", "{}\n")
         write(self.config / "mcp-needs-auth-cache.json", "{}")
         write(self.config / ".last-cleanup", "")
+        write(self.config / "plugins/plugin-directory-cache-v2.json", "{}")
+        write(self.config / "plugins/.last_inuse_sweep", "")
         write(self.config / "plugins/known_marketplaces.json", '{"mkt": {"lastUpdated": "t2", "source": {}}}')
         self.write_claude_json(
             numStartups=2, tipsHistory={"a": 1}, projects={"/repo": {"allowedTools": [], "lastCost": 2}, "/new": {}}
@@ -78,6 +83,10 @@ class RealConfigGuardTests(unittest.TestCase):
             "plugins/cache/ns-lab/p0/1.0.0/.claude-plugin/plugin.json": "{}",
             "plugins/marketplaces/ns-lab/.claude-plugin/marketplace.json": "{}",
             "skills/mine/SKILL.md": "changed",
+            "plugins/cache/mkt/demo/1.0.0/schema-cache.json": "changed",
+            "plugins/cache/mkt/demo/1.0.0/hooks/.in_use": "changed",
+            "plugins/cache/mkt/demo/1.0.0/x.stamp.json": "{}",
+            "agents/.last-run": "",
         }
         for relative, text in cases.items():
             with self.subTest(relative):
@@ -85,16 +94,25 @@ class RealConfigGuardTests(unittest.TestCase):
                 write(self.config / relative, text)
                 self.assertIn(str(self.config / relative), self.changed())
 
+    def test_ancestor_created_only_for_excluded_state_is_ignored(self) -> None:
+        shutil.rmtree(self.config / "skills")
+        self.before = self.snap()
+        write(self.config / "skills/synced/x/SKILL.md", "")
+        self.assertEqual(self.changed(), [])
+        write(self.config / "skills/new/SKILL.md", "")
+        self.assertEqual(self.changed(), [str(self.config / "skills/new/SKILL.md")])
+
     def test_removed_plugin_index_fails(self) -> None:
         (self.config / "plugins/known_marketplaces.json").unlink()
         self.assertEqual(self.changed(), [str(self.config / "plugins/known_marketplaces.json")])
 
     def test_claude_json_mcp_and_permissions_still_fail(self) -> None:
-        for data in (
+        changes: tuple[dict[str, object], ...] = (
             {"mcpServers": {"lab": {"command": "x"}}},
             {"projects": {"/repo": {"allowedTools": ["Bash"], "lastCost": 1}}},
             {"projects": {"/lab": {"mcpServers": {"lab": {}}}}},
-        ):
+        )
+        for data in changes:
             with self.subTest(data):
                 base: dict[str, object] = {"numStartups": 1, "projects": {"/repo": {"allowedTools": [], "lastCost": 1}}}
                 self.write_claude_json(**base)

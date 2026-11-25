@@ -265,16 +265,21 @@ def guarded_json_rel(root: Path, item: Path) -> str | None:
 
 
 def is_volatile(rel: str) -> bool:
-    """True for config-dir paths that concurrent live Claude sessions rewrite on their own."""
+    """True for config-dir paths that concurrent live Claude sessions rewrite on their own.
+
+    Filename patterns apply only to top-level and plugins/ runtime files, plus the
+    plugins/cache/<market>/<plugin>/<version>/.in_use marker, never inside plugin
+    payloads, marketplaces, hooks, agents or skills.
+    """
     parts = rel.split("/")
     name = parts[-1]
+    runtime_file = len(parts) == 1 or (len(parts) == 2 and parts[0] == "plugins")
     return (
         parts[0] in VOLATILE_DIRS
         or "/".join(parts[:2]) in VOLATILE_SUBTREES
         or (len(parts) == 1 and name in VOLATILE_TOP_FILES)
-        or name == ".in_use"
-        or name.startswith((".last-", ".last_"))
-        or VOLATILE_NAME.search(name) is not None
+        or (len(parts) == 6 and parts[:2] == ["plugins", "cache"] and name == ".in_use")
+        or (runtime_file and (name.startswith((".last-", ".last_")) or VOLATILE_NAME.search(name) is not None))
     )
 
 
@@ -318,7 +323,7 @@ def entry_identity(root: Path, item: Path) -> dict[str, Any]:
     if not item.exists() and not item.is_symlink():
         return {"absent": True}
     if item.is_dir() and not item.is_symlink():
-        return {"dir": True}
+        return {"dir": True}  # only roots: nested directories are walked, not recorded
     regular = item.is_file() and not item.is_symlink()
     rel = guarded_json_rel(root, item) if regular else None
     identity = json_identity(item, rel) if rel else None
@@ -337,7 +342,8 @@ def snapshot(paths: list[str]) -> dict[str, Any]:
     """Capture guarded content/mtime identity, not secret contents; do not follow symlinks.
 
     Inside a config directory, volatile live-session state (is_volatile) is skipped and
-    directories record presence only (their mtimes move whenever a session adds a file).
+    nested directories are not recorded (sessions create ancestors for excluded state);
+    every guarded file or symlink beneath them still is.
     ~/.claude.json and the plugin indexes compare a semantic JSON digest (json_identity).
     Everything else (settings, marketplaces, plugin cache payloads, hooks, agents, skills,
     credentials) stays strict: content digest, size and mtime must not change.
@@ -350,7 +356,7 @@ def snapshot(paths: list[str]) -> dict[str, Any]:
             for directory, dirs, files in os.walk(root, followlinks=False):
                 base = Path(directory)
                 dirs[:] = sorted(d for d in dirs if not is_volatile((base / d).relative_to(root).as_posix()))
-                kept = (n for n in dirs + sorted(files) if not is_volatile((base / n).relative_to(root).as_posix()))
+                kept = (n for n in sorted(files) if not is_volatile((base / n).relative_to(root).as_posix()))
                 items.extend(base / name for name in kept)
         result.update((str(item), entry_identity(root, item)) for item in items)
     return result
