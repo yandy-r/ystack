@@ -359,8 +359,8 @@ def probe(kind: str, path: Path, args: list[str]) -> int:
     if kind == "trusted":
         return 0 if str(data["trusted"]).lower() == args[0] else fail(f"trusted={data['trusted']}")
     if kind == "active-tools":
-        want = [] if args == ["-"] else args
-        return 0 if sorted(data["active"]) == sorted(want) else fail(f"active={data['active']}")
+        want_active = [] if args == ["-"] else args
+        return 0 if sorted(data["active"]) == sorted(want_active) else fail(f"active={data['active']}")
     if kind == "skill-desc":
         needle = f"<name>{args[0]}</name>\n    <description>{args[1]}</description>"
         return 0 if needle in prompt else fail(f"skill {args[0]} not listed with {args[1]}")
