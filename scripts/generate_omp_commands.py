@@ -39,13 +39,16 @@ DST_DIR = REPO_ROOT / "packages/omp/ycc/commands"
 COMMAND_NAMESPACE = "ycc"
 COMMAND_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
-# OMP built-in slash command names and aliases (`commit` added from omp 18.22.2), pinned from omp 18.12.3
+# OMP built-in slash command names and aliases, pinned from omp 18.12.3
 # packages/coding-agent/src/slash-commands/*.ts (BUILTIN_SLASH_COMMAND_RESERVED_NAMES:
 # every top-level `name:` and `aliases:` entry in the builtin-*.ts registries and
-# seance.ts). Built-ins dispatch before file commands and parse the name up to the first
-# whitespace or colon, so the namespace must not be one of these, and no `ycc:<name>` may
-# equal one (the `force:` alias contains a colon). scripts/omp_builtin_commands.py checks
-# this pin against a live omp's RPC `get_available_commands` (validate.sh --only omp).
+# seance.ts), plus later additions: omp 18.16.0 adds the TUI-only `local` and the
+# `subagents` alias of `hub`; omp 18.22.2 adds `commit`. Built-ins dispatch before file
+# commands and parse the name up to the first whitespace or colon, so the namespace must
+# not be one of these, and no `ycc:<name>` may equal one (the `force:` alias contains a
+# colon). scripts/omp_builtin_commands.py checks this pin against a live omp's RPC
+# `get_available_commands` (validate.sh --only omp); RPC omits TUI-only built-ins such as
+# `local` and `subagents`, so those are pinned by hand.
 OMP_BUILTIN_COMMANDS: frozenset[str] = frozenset(
     {
         "add-dir",
@@ -88,6 +91,7 @@ OMP_BUILTIN_COMMANDS: frozenset[str] = frozenset(
         "join",
         "leave",
         "live",
+        "local",
         "login",
         "logout",
         "loop",
@@ -134,6 +138,7 @@ OMP_BUILTIN_COMMANDS: frozenset[str] = frozenset(
         "ssh",
         "stats",
         "status",
+        "subagents",
         "switch",
         "tan",
         "todo",

@@ -161,6 +161,14 @@ class FailureTest(FixtureTestCase):
         self.assertNotIn(omp.COMMAND_NAMESPACE, omp.OMP_BUILTIN_COMMANDS)
         self.assert_fails("namespace 'plan' is an OMP built-in", namespace="plan")
 
+    def test_omp_18_16_tui_builtins_are_pinned_and_rejected(self) -> None:
+        # omp 18.16.0 TUI-only built-ins; RPC get_available_commands cannot report them,
+        # so only the hand pin keeps the collision guard rejecting them.
+        for name in ("local", "subagents"):
+            with self.subTest(name=name):
+                self.assertIn(name, omp.OMP_BUILTIN_COMMANDS)
+                self.assert_fails(f"namespace '{name}' is an OMP built-in", namespace=name)
+
     def test_empty_description(self) -> None:
         write(self.src / "helper/SKILL.md", HELPER_SKILL.replace("Helper skill.", "''"))
         self.assert_fails("commands/helper.md", "non-empty string description")
