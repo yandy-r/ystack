@@ -90,8 +90,12 @@ check_python_home() {
     source "$LIB"
     # Simulate the selected sandbox's visibility without requiring namespaces:
     # default to denying the probe; an empty wrapper exposes the fixture unchanged.
+    # shellcheck disable=SC2034 # consumed by omp_h_check_python_home in the sourced helper
     wrap=(/bin/false)
-    if [[ $want == visible ]]; then wrap=(); fi
+    if [[ $want == visible ]]; then
+      # shellcheck disable=SC2034 # consumed by omp_h_check_python_home in the sourced helper
+      wrap=()
+    fi
     sandbox=$mode omp_h_check_python_home "$python_home" "$path:$NOBWRAP" "$@"
   ) 2>&1) || rc=$?
   if [[ $want != reject && $rc == 0 ]] ||
