@@ -14,6 +14,8 @@
 #   omp_h_under_tmp PATH                      true when PATH is /tmp or below (symlinks resolved)
 #   omp_h_safe_path ALLOW_ENV_I [LEAD_DIR]    the sandbox PATH: LEAD_DIR, extras, /usr/local/bin:/usr/bin:/bin
 #   omp_h_check_path_tools PATH TOOL...       fail unless every TOOL resolves on PATH
+#   omp_h_check_python_home REAL_HOME PATH [PYTHON]
+#                                             reject Python paths hidden by the selected sandbox
 #   omp_in_dir                                array: prefix, then DIR and a command (portable `env -C`)
 #   omp_h_sandbox ALLOW_ENV_I ROOT REAL_HOME [RO_PATH...]
 #                                             select the sandbox: sets `sandbox` and `wrap`
@@ -93,6 +95,23 @@ omp_h_check_path_tools() {
   for tool in "$@"; do
     PATH=$path command -v "$tool" >/dev/null ||
       omp_h_die "missing prerequisite on the sandbox PATH ($path): $tool"
+  done
+}
+
+# Check both the sandbox PATH and any caller-selected Python invoked by absolute path.
+# Keep the last component unresolved for the first check: a venv's python3 can be a
+# symlink to system Python, but the link itself is still hidden with the real home.
+omp_h_check_python_home() {
+  local real_home=$1 path=$2 explicit=${3:-} python entry target
+  [[ "$sandbox" == bwrap-netns ]] || return 0
+  python=$(PATH=$path command -v python3) ||
+    omp_h_die "missing prerequisite on the sandbox PATH ($path): python3"
+  for python in "$python" ${explicit:+"$explicit"}; do
+    entry=$(realpath -- "$(dirname -- "$python")")/${python##*/}
+    target=$(realpath -- "$python")
+    if [[ "$python" == "$real_home"/* || "$entry" == "$real_home"/* || "$target" == "$real_home"/* ]]; then
+      omp_h_die "python3 ($python) resolves under the real home, which bubblewrap hides; put the system python3 first on PATH"
+    fi
   done
 }
 

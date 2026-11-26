@@ -109,6 +109,7 @@ h() { python3 "$helper_src" "$@"; }
 ro_paths=("$node_prefix" "$pi_tree")
 [[ "$repo" == "$real_home"/* ]] || ro_paths+=("$repo")
 omp_h_sandbox "$allow_env_i" "$root" "$real_home" "${ro_paths[@]}"
+omp_h_check_python_home "$real_home" "$safe_path"
 
 case_home=
 agent=

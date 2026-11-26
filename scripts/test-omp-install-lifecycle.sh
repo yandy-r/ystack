@@ -85,6 +85,7 @@ safe_path=$(omp_h_safe_path "$allow_env_i" "$root/bin")
 omp_h_check_path_tools "$safe_path" bash git python3 timeout realpath
 
 omp_h_sandbox "$allow_env_i" "$root" "$real_home" "$omp" "$repo"
+omp_h_check_python_home "$real_home" "$safe_path"
 
 # The current case: its HOME/XDG tree and extra environment (OMP_PROFILE).
 case_home=$root/case

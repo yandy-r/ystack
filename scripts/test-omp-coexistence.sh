@@ -61,6 +61,7 @@ omp=${OMP_BIN:-$HOME/.local/bin/omp}
 [[ -n "$omp" && -x "$omp" ]] || die 'set OMP_BIN or install omp at ~/.local/bin/omp or on PATH'
 omp=$(realpath "$omp")
 python=$(command -v python3)
+[[ "$python" == /* ]] || python=$PWD/$python
 real_home=$(realpath "${HOME:?HOME must be set}")
 root=$(omp_h_mktemp_root omp-coexistence)
 [[ "$root" != "$real_home" && "$root" != "$real_home"/* ]] || die 'sandbox must not live under the real HOME'
@@ -88,6 +89,7 @@ safe_path=$(omp_h_safe_path "$allow_env_i" "$root/bin")
 omp_h_check_path_tools "$safe_path" bash git python3 timeout realpath
 
 omp_h_sandbox "$allow_env_i" "$root" "$real_home" "$omp" "$repo"
+omp_h_check_python_home "$real_home" "$safe_path" "$python"
 
 # The current case: its HOME/XDG tree and extra environment (OMP_PROFILE).
 case_home=$root/a

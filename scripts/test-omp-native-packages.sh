@@ -127,6 +127,7 @@ case_home=$root/case
 omp_home=$case_home/home/.omp
 
 omp_h_sandbox "$allow_env_i" "$root" "$real_home" "$omp"
+omp_h_check_python_home "$real_home" "$safe_path"
 
 # Run a command with no inherited environment, an isolated HOME/XDG tree, and file-only git.
 clean() {

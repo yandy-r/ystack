@@ -71,6 +71,43 @@ if [[ "$out" == *'sandbox=env-i wrap=0'* ]]; then ok 'no bwrap + --allow-env-i s
   bad "no bwrap + --allow-env-i: $out"
 fi
 
+# Exercise both Python selections without needing bubblewrap: the caller's explicit
+# interpreter (coexistence/scripted sessions) and the interpreter on the sandbox PATH.
+python_home="$SCRATCH/real home"
+python_outside="$SCRATCH/real home-sibling"
+mkdir -p "$python_home/.venv/bin" "$python_outside" "$SCRATCH/shims"
+cp /bin/true "$python_outside/python3"
+cp /bin/true "$python_home/python3"
+ln -s "$python_outside/python3" "$python_home/.venv/bin/python3"
+ln -s "$python_home/.venv/bin" "$SCRATCH/alias-bin"
+ln -s "$python_home/python3" "$SCRATCH/shims/python3"
+
+check_python_home() {
+  local name=$1 want=$2 mode=$3 path=$4 out rc=0
+  shift 4
+  out=$( (
+    # shellcheck source=lib/omp-harness-common.sh
+    source "$LIB"
+    sandbox=$mode
+    omp_h_check_python_home "$python_home" "$path:$NOBWRAP" "$@"
+  ) 2>&1) || rc=$?
+  if [[ $want == allow && $rc == 0 ]] ||
+    [[ $want == reject && $rc == 1 && $out == 'ERROR: '* &&
+      $out == *'put the system python3 first on PATH'* ]]; then
+    ok "$name"
+  else
+    bad "$name: wanted $want, rc=$rc: $out"
+  fi
+}
+
+check_python_home 'explicit venv symlink to system Python is hidden' reject bwrap-netns \
+  "$python_outside" "$python_home/.venv/bin/python3"
+check_python_home 'venv on sandbox PATH is hidden' reject bwrap-netns "$python_home/.venv/bin:$python_outside"
+check_python_home 'symlinked bin directory under the real home is hidden' reject bwrap-netns "$SCRATCH/alias-bin"
+check_python_home 'outside shim targets Python under the real home' reject bwrap-netns "$SCRATCH/shims"
+check_python_home 'Python outside the real home passes (including same-prefix sibling)' allow bwrap-netns "$python_outside"
+check_python_home 'env-i does not hide the real home' allow env-i "$python_home/.venv/bin" "$python_home/.venv/bin/python3"
+
 bwrap_bin=$(command -v bwrap || true)
 if [[ -n "$bwrap_bin" ]] &&
   bwrap --ro-bind / / --dev /dev --proc /proc --unshare-net --unshare-pid /bin/true >/dev/null 2>&1; then

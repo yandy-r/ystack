@@ -94,6 +94,7 @@ safe_path=$(omp_h_safe_path "$allow_env_i" "$root/bin")
 omp_h_check_path_tools "$safe_path" bash git python3 timeout realpath
 
 omp_h_sandbox "$allow_env_i" "$root" "$real_home" "$omp" "$repo"
+omp_h_check_python_home "$real_home" "$safe_path"
 
 case_home=$root/case
 home=$(realpath -m "$case_home/home")

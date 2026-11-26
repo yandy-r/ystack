@@ -89,6 +89,7 @@ bare_cl=$root/claude.git
 # Network/home isolation: bwrap (see omp_h_sandbox) is required unless --allow-env-i
 # explicitly accepts the weaker env -i-only sandbox. Only the omp binary is bound back.
 omp_h_sandbox "$allow_env_i" "$root" "$real_home" "$omp"
+omp_h_check_python_home "$real_home" "$safe_path"
 
 case_home=
 # Select (and create) the isolated HOME/XDG tree for subsequent omp calls.
