@@ -5,10 +5,10 @@ Trigger and behavior evals for the `ycc` plugin (`claude plugin eval`, Claude Co
 CI. Run them locally:
 
 ```bash
-./scripts/eval.sh                                  # default run (36 cases), $8 ceiling
+./scripts/eval.sh                                  # default run (39 cases), $8 ceiling
 ./scripts/eval.sh --suite trigger                  # trigger family only (policy, behavior also valid)
 ./scripts/eval.sh --case 'plan-near-miss-*'        # one family
-./scripts/eval.sh --quarantine                     # known-failing YAN-1114 cases
+./scripts/eval.sh --quarantine                     # quarantined cases (currently none)
 ```
 
 Results land in `ycc/evals/results/` (gitignored). To reset,
@@ -18,17 +18,18 @@ Results land in `ycc/evals/results/` (gitignored). To reset,
 
 | Case family            | Count | Directory               | What it proves                                                                            |
 | ---------------------- | ----- | ----------------------- | ----------------------------------------------------------------------------------------- |
-| Should-trigger prompts | 17    | `trigger/`              | natural language loads the expected skill (`tool_used: Skill`, min 1)                     |
+| Should-trigger prompts | 20    | `trigger/`              | natural language loads the expected skill (`tool_used: Skill`, min 1)                     |
 | Near-miss prompts      | 12    | `trigger/`              | a sibling prompt does not load the target skill (min 0, max 0)                            |
 | Policy no-autoinvoke   | 4     | `policy/`               | `clean` and `git-cleanup` never auto-load on natural language (manual-only safety policy) |
 | Behavior gates         | 3     | `behavior/`             | hard gates hold inside a scratch repo                                                     |
-| **Default run**        | 36    |                         | `./scripts/eval.sh` discovers only `ycc/evals/`                                           |
-| Quarantined            | 3     | `ycc/evals-quarantine/` | known-failing YAN-1114 should-trigger cases (3 of the 20 authored should-trigger prompts) |
+| **Default run**        | 39    |                         | `./scripts/eval.sh` discovers only `ycc/evals/`                                           |
+| Quarantined            | 0     | `ycc/evals-quarantine/` | empty; the 3 YAN-1114 cases were promoted to `trigger/` (YAN-1146)                        |
 
-Authored total: 39 cases (20 should-trigger + 12 near-miss + 4 policy + 3 behavior).
-Baseline (Claude Code 2.1.299, `--runs 1`): 32/39 before this restructure; the 4
-policy cases and 3 quarantined cases were the 7 failures. The restructured default
-run has 36 cases; its pass rate has not been re-measured with a paid run.
+Authored total: 39 cases (20 should-trigger + 12 near-miss + 4 policy + 3 behavior),
+all in the default run.
+Baseline (Claude Code 2.1.299, `--runs 1`): 32/39 before the restructure; the 4
+policy cases and the 3 since-promoted YAN-1114 cases were the 7 failures. The full
+39-case default run has not been re-measured with a paid run since then.
 
 Tag filters: `trigger`, `policy`, `behavior`.
 
@@ -43,13 +44,18 @@ branch refs and worktree metadata intact, no files deleted). Report creation is 
 `Skill` grader verifies it did not auto-load; slash expansion injects skill content
 directly, so a positive `Skill` grader would be incorrect.
 
-## Quarantined (YAN-1114)
+## Quarantine
 
-`compare-rate-limit-options`, `validate-research-before-planning`, and
-`structure-go-packages` failed the 32/39 baseline because the model inspects
-files directly instead of loading the skill. They live in
-`ycc/evals-quarantine/` and are governed by YAN-1114 (skill description
-tuning). Run them explicitly while working on YAN-1114:
+`ycc/evals-quarantine/` holds known-failing cases kept out of the default run. It
+is currently empty. `compare-rate-limit-options`, `validate-research-before-planning`,
+and `structure-go-packages` failed the 32/39 baseline because the model inspected
+files directly instead of loading the skill. YAN-1114 fixed the `plan`,
+`plan-workflow`, and `go-patterns` descriptions, and YAN-1146 moved the three cases
+into `trigger/` after single runs passed on Claude Code 2.1.332 ($0.70 total, $1
+ceiling per case).
+
+To quarantine a case again, move its directory into `ycc/evals-quarantine/`, tag it
+`quarantine`, list it here, and run it explicitly:
 
 ```bash
 ./scripts/eval.sh --quarantine --max-cost-usd 1
@@ -68,16 +74,16 @@ behavior of an explicit invocation is graded on observable state only.
 `git-cleanup-policy-no-autoinvoke-stale-resources` failed once (`Skill called 1x`)
 in a 2-case rerun and passed in the next 4-case policy run (single runs, cause
 unconfirmed). Treat a lone red policy case as a rerun candidate before changing
-skill metadata; two consecutive failures belong with the YAN-1114 follow-ups.
+skill metadata; two consecutive failures belong in the quarantine with a tracking issue.
 
 ## Follow-ups
 
-- Description-sharpness cases under YAN-1114 (the 3 quarantined cases plus
-  any new shaky cases that go red twice in a row).
+- Description-sharpness work for any shaky case that goes red twice in a row.
 - Cross-model runs once the suites are stable.
 
 ## Cost
 
-The earlier 39-case baseline (`--runs 1`, one arm) cost $4.59; the 36-case default run should be cheaper, but it has not been re-measured. the
-script's ceiling defaults to $8 to leave headroom. One in-flight run can
-still overrun the ceiling; see `claude plugin eval --help`.
+The earlier 39-case baseline (`--runs 1`, one arm) cost $4.59; the current 39-case
+default run has not been re-measured. The script's ceiling defaults to $8 to leave
+headroom. One in-flight run can still overrun the ceiling; see
+`claude plugin eval --help`.
