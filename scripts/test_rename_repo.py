@@ -43,7 +43,7 @@ ALLOWLIST_SPECS: list[tuple[str, int, str, bool, bytes | None]] = [
     (".claude-plugin/marketplace.json", 0o644, "\n", True, None),
     (".github/ISSUE_TEMPLATE/config.yml", 0o644, "\n", True, None),
     ("docs/install/codex.md", 0o644, "\n", True, b"# raw \xff\xfe bytes, not UTF-8"),
-    ("install.sh", 0o755, "\n", False, None),
+    ("scripts/lib/install/usage.sh", 0o644, "\n", False, None),
     ("scripts/codex_install.py", 0o755, "\r\n", False, None),
     ("scripts/generate_codex_plugin.py", 0o755, "\n", True, None),
     ("scripts/generate_opencode_package.py", 0o644, "\n", True, None),
@@ -96,6 +96,7 @@ OUTSIDE_FILES = [
     "ycc/mods/README.md",
     "scripts/other_tool.py",
     "CONTRIBUTING.md",
+    "install.sh",
     ".git/config",
     ".claude/worktrees/foo/README.md",
     ".claude/worktrees/foo/install.sh",
@@ -282,10 +283,10 @@ class ApplyTests(RenameRepoTestCase):
         readme = (root / "README.md").read_bytes()
         self.assertIn(b"\r\n", readme)
         self.assertEqual(readme.count(b"\n"), readme.count(b"\r\n"))
-        self.assertFalse((root / "install.sh").read_bytes().endswith(b"\n"))
+        self.assertFalse((root / "scripts/lib/install/usage.sh").read_bytes().endswith(b"\n"))
         self.assertFalse((root / "scripts/codex_install.py").read_bytes().endswith(b"\n"))
         self.assertIn(b"\xff\xfe", (root / "docs/install/codex.md").read_bytes())
-        self.assertTrue(os.access(root / "install.sh", os.X_OK))
+        self.assertTrue(os.access(root / "scripts/codex_install.py", os.X_OK))
 
     def test_apply_is_idempotent_and_reversible(self) -> None:
         root = self.make_root()
