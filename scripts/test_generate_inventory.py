@@ -77,6 +77,24 @@ class BodyLeadTestCase(unittest.TestCase):
         body = "# Title\n\n```\ncode line\n```\n\n- item\n> quote\n\nFirst prose\nline two.\n\nSecond.\n"
         self.assertEqual(gi.body_lead(body), "First prose line two.")
 
+    def test_skips_ordered_list_with_continuation_lines(self) -> None:
+        body = "# Title\n\n1. Gather inputs.\n   continued here.\n2) Confirm scope.\n\nBuilds a validated plan.\n"
+        self.assertEqual(gi.body_lead(body), "Builds a validated plan.")
+        self.assertEqual(
+            gi.short_description("Use when planning.", body),
+            "Builds a validated plan.",
+        )
+
+    def test_skips_bullet_continuation_lines(self) -> None:
+        body = "- item one\n  wraps onto here.\n\nReal prose.\n"
+        self.assertEqual(gi.body_lead(body), "Real prose.")
+
+    def test_prose_directly_under_heading_is_kept(self) -> None:
+        self.assertEqual(gi.body_lead("# Title\nProse right below.\n"), "Prose right below.")
+
+    def test_digit_led_prose_is_kept(self) -> None:
+        self.assertEqual(gi.body_lead("2026 brought new plans.\n"), "2026 brought new plans.")
+
     def test_empty_body_returns_empty(self) -> None:
         self.assertEqual(gi.body_lead(""), "")
 

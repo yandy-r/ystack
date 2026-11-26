@@ -194,6 +194,7 @@ def parse_frontmatter(text: str) -> dict[str, Any]:
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 _TRIGGER_LEAD = re.compile(r"^use when\b", re.IGNORECASE)
+_ORDERED_ITEM = re.compile(r"^\d+[.)](\s|$)")
 
 
 def _sentences(text: str) -> list[str]:
@@ -223,6 +224,7 @@ def body_lead(body: str) -> str:
     """
     paragraph: list[str] = []
     in_fence = False
+    skipping_block = False
     for raw in body.splitlines():
         line = raw.strip()
         if line.startswith("```"):
@@ -233,8 +235,18 @@ def body_lead(body: str) -> str:
         if not line:
             if paragraph:
                 break
+            skipping_block = False
             continue
-        if not paragraph and not line[0].isalnum():
+        if paragraph:
+            paragraph.append(line)
+            continue
+        if line.startswith("#"):
+            # A heading is one line; prose may follow it directly.
+            continue
+        if skipping_block or not line[0].isalnum() or _ORDERED_ITEM.match(line):
+            # Skip the whole block (list items plus continuation lines,
+            # callouts, tables, quotes, HTML) up to the next blank line.
+            skipping_block = True
             continue
         paragraph.append(line)
     return " ".join(" ".join(paragraph).split())
