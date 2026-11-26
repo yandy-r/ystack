@@ -192,21 +192,88 @@ def parse_frontmatter(text: str) -> dict[str, Any]:
     return data
 
 
-def short_description(full: str) -> str:
-    """Return a single-line short form of a description for the README table."""
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+_TRIGGER_LEAD = re.compile(r"^use when\b", re.IGNORECASE)
+
+
+def _sentences(text: str) -> list[str]:
+    """Split whitespace-collapsed *text* into sentences on terminal punctuation."""
+    return [s for s in _SENTENCE_END.split(text) if s]
+
+
+def _is_trigger(sentence: str) -> bool:
+    """Return True when *sentence* is a "Use when ..." trigger clause."""
+    return bool(_TRIGGER_LEAD.match(sentence))
+
+
+def _fit(sentences: list[str], start: int) -> str:
+    """Return sentence *start* if it fits the limit, else truncate from *start*."""
+    candidate = sentences[start]
+    if len(candidate) <= SHORT_DESC_LIMIT:
+        return candidate
+    rest = " ".join(sentences[start:])
+    return rest[:SHORT_DESC_LIMIT].rstrip() + "..."
+
+
+def body_lead(body: str) -> str:
+    """Return the first prose paragraph of a Markdown body, whitespace-collapsed.
+
+    Headings, emphasis-led callouts, lists, tables, quotes, HTML and code fences
+    are skipped so the result is the opening statement of what the file does.
+    """
+    paragraph: list[str] = []
+    in_fence = False
+    for raw in body.splitlines():
+        line = raw.strip()
+        if line.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if not line:
+            if paragraph:
+                break
+            continue
+        if not paragraph and not line[0].isalnum():
+            continue
+        paragraph.append(line)
+    return " ".join(" ".join(paragraph).split())
+
+
+def short_description(full: str, body: str = "") -> str:
+    """Return a single-line capability summary of a description for the README table.
+
+    Prefers the first description sentence that is not a "Use when ..." trigger
+    clause. When every description sentence is a trigger, uses the first sentence
+    of the first prose paragraph in *body* (the SKILL.md body), then falls back to
+    the first description sentence.
+    """
     if not full:
         return ""
     # Collapse newlines and extra whitespace
     single = re.sub(r"\s+", " ", str(full)).strip()
-    # Take text up to the first sentence-ending punctuation
-    m = re.search(r"([.!?])\s", single)
-    if m:
-        candidate = single[: m.start() + 1]
-        if len(candidate) <= SHORT_DESC_LIMIT:
-            return candidate
-    if len(single) <= SHORT_DESC_LIMIT:
-        return single
-    return single[:SHORT_DESC_LIMIT].rstrip() + "..."
+    sentences = _sentences(single)
+    if not sentences:
+        return ""
+    for index, sentence in enumerate(sentences):
+        if not _is_trigger(sentence):
+            return _fit(sentences, index)
+    lead = _sentences(body_lead(body))
+    if lead and not _is_trigger(lead[0]):
+        return _fit(lead, 0)
+    return _fit(sentences, 0)
+
+
+def skill_body(name: str) -> str:
+    """Return the Markdown body (after frontmatter) of skill *name*, or ""."""
+    skill_md = SKILLS_DIR / name / "SKILL.md"
+    if not skill_md.is_file():
+        return ""
+    text = _strip_preamble(skill_md.read_text(encoding="utf-8"))
+    if not text.startswith("---\n"):
+        return ""
+    end = text.find("\n---\n", 4)
+    return "" if end == -1 else text[end + 5 :]
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +395,7 @@ def render_commands_region(commands: list[dict[str, str]]) -> str:
     rows: list[tuple[str, str]] = []
     for cmd in commands:
         col1 = f"`/ycc:{cmd['name']}`"
-        col2 = short_description(cmd["description"])
+        col2 = short_description(cmd["description"], skill_body(cmd["name"]))
         rows.append((col1, col2))
 
     w1 = max(len(headers[0]), *(len(r[0]) for r in rows))

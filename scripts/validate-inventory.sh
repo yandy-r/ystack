@@ -13,6 +13,9 @@ fi
 echo "== Sync check (generator --check) =="
 python3 "${REPO_ROOT}/scripts/generate_inventory.py" --check
 
+echo "== Purpose summary unit tests =="
+python3 "${REPO_ROOT}/scripts/test_generate_inventory.py"
+
 echo "== JSON validity =="
 python3 -m json.tool "${INVENTORY_JSON}" > /dev/null
 echo "OK: docs/inventory.json is valid JSON."
