@@ -26,7 +26,7 @@ ALLOWLIST_FILES: tuple[str, ...] = (
     ".github/ISSUE_TEMPLATE/config.yml",
     "README.md",
     "docs/install/codex.md",
-    "install.sh",
+    "scripts/lib/install/usage.sh",
     "scripts/codex_install.py",
     "scripts/generate_codex_plugin.py",
     "scripts/generate_opencode_package.py",
