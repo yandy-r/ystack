@@ -88,12 +88,11 @@ check_python_home() {
   out=$( (
     # shellcheck source=lib/omp-harness-common.sh
     source "$LIB"
-    sandbox=$mode
     # Simulate the selected sandbox's visibility without requiring namespaces:
     # default to denying the probe; an empty wrapper exposes the fixture unchanged.
     wrap=(/bin/false)
     if [[ $want == visible ]]; then wrap=(); fi
-    omp_h_check_python_home "$python_home" "$path:$NOBWRAP" "$@"
+    sandbox=$mode omp_h_check_python_home "$python_home" "$path:$NOBWRAP" "$@"
   ) 2>&1) || rc=$?
   if [[ $want != reject && $rc == 0 ]] ||
     [[ $want == reject && $rc == 1 && $out == 'ERROR: '* &&
