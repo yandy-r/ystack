@@ -6,6 +6,7 @@
 # Argument parsing
 # ---------------------------------------------------------------------------
 TARGET=""
+# shellcheck disable=SC2034  # shared with steps.sh and install.sh's target dispatch.
 TARGETS=()
 MODE="local"
 MODE_SET=0
