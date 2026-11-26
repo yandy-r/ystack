@@ -8,8 +8,8 @@ usage() {
     '                       [--quarantine] [--max-cost-usd USD] [--model MODEL]' \
     '                       [--keep-temp]' \
     "Runs one arm once, with a suite-wide \$8 cost ceiling by default" \
-    "(the 39-case pre-restructure baseline measured \$4.59). --quarantine runs only the known-failing" \
-    'YAN-1114 cases in ycc/evals-quarantine/. Paid, local-only; not part of CI.' \
+    "(the earlier 39-case baseline measured \$4.59). --quarantine runs whatever cases" \
+    'are in ycc/evals-quarantine/ instead of ycc/evals/. Paid, local-only; not part of CI.' \
     'See ycc/evals/README.md.'
 }
 fail() { echo "eval.sh: $*" >&2; exit 1; }
