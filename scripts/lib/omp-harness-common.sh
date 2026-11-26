@@ -109,9 +109,12 @@ omp_h_check_python_home() {
   for python in "$python" ${explicit:+"$explicit"}; do
     entry=$(realpath -- "$(dirname -- "$python")")/${python##*/}
     target=$(realpath -- "$python")
-    if [[ "$python" == "$real_home"/* || "$entry" == "$real_home"/* || "$target" == "$real_home"/* ]]; then
-      omp_h_die "python3 ($python) resolves under the real home, which bubblewrap hides; put the system python3 first on PATH"
-    fi
+    [[ "$python" == "$real_home"/* || "$entry" == "$real_home"/* || "$target" == "$real_home"/* ]] || continue
+    # An existing read-only bind (e.g. Pi's Node prefix) can keep the path visible.
+    # Inspect it inside the selected sandbox without running the interpreter.
+    timeout -k 2 10 env -i PATH=/usr/bin:/bin ${wrap[@]+"${wrap[@]}"} \
+      /bin/sh -c 'test -x "$1"' omp-python-preflight "$python" >/dev/null 2>&1 ||
+      omp_h_die "python3 ($python) resolves under the real home and is unavailable inside bubblewrap; put the system python3 first on PATH"
   done
 }
 

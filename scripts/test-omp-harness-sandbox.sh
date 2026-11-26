@@ -89,9 +89,13 @@ check_python_home() {
     # shellcheck source=lib/omp-harness-common.sh
     source "$LIB"
     sandbox=$mode
+    # Simulate the selected sandbox's visibility without requiring namespaces:
+    # default to denying the probe; an empty wrapper exposes the fixture unchanged.
+    wrap=(/bin/false)
+    if [[ $want == visible ]]; then wrap=(); fi
     omp_h_check_python_home "$python_home" "$path:$NOBWRAP" "$@"
   ) 2>&1) || rc=$?
-  if [[ $want == allow && $rc == 0 ]] ||
+  if [[ $want != reject && $rc == 0 ]] ||
     [[ $want == reject && $rc == 1 && $out == 'ERROR: '* &&
       $out == *'put the system python3 first on PATH'* ]]; then
     ok "$name"
@@ -107,6 +111,7 @@ check_python_home 'symlinked bin directory under the real home is hidden' reject
 check_python_home 'outside shim targets Python under the real home' reject bwrap-netns "$SCRATCH/shims"
 check_python_home 'Python outside the real home passes (including same-prefix sibling)' allow bwrap-netns "$python_outside"
 check_python_home 'env-i does not hide the real home' allow env-i "$python_home/.venv/bin" "$python_home/.venv/bin/python3"
+check_python_home 'Python already visible through an existing sandbox mount passes' visible bwrap-netns "$python_home"
 
 bwrap_bin=$(command -v bwrap || true)
 if [[ -n "$bwrap_bin" ]] &&
