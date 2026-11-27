@@ -11,8 +11,8 @@
 7. Worktree-aware team dispatch
 8. Skill Adapters: Planning and Batched Executors
 
-Used by `plan`, `plan-workflow`, `prp-plan`, `prp-implement`,
-`implement-plan`, `orchestrate` and `deep-research`
+Used by `ycc:plan`, `ycc:plan-workflow`, `ycc:prp-plan`, `ycc:prp-implement`,
+`ycc:implement-plan`, `ycc:orchestrate` and `ycc:deep-research`
 when the `--team` flag is passed. This file documents the universal implicit team →
 TaskCreate → Agent(name=...) → TaskList → SendMessage lifecycle. Individual skills own their
 teammate roster and prompt templates; only the mechanism lives here.
@@ -48,13 +48,13 @@ Run labels follow the pattern: `<skill-prefix>-<sanitized-context>`.
 
 | Skill                | Prefix  | Example                 |
 | -------------------- | ------- | ----------------------- |
-| `plan`           | `plan-` | `plan-add-rate-limit`   |
-| `prp-plan`       | `prpp-` | `prpp-billing-webhooks` |
-| `prp-implement`  | `prpi-` | `prpi-user-auth-flow`   |
-| `implement-plan` | `impl-` | `impl-user-auth-flow`   |
-| `deep-research`  | `drpr-` | `drpr-ai-deployment`    |
-| `plan-workflow`  | `pw-`   | `pw-user-auth-flow`     |
-| `orchestrate`    | `orch-` | `orch-user-auth-flow`   |
+| `ycc:plan`           | `plan-` | `plan-add-rate-limit`   |
+| `ycc:prp-plan`       | `prpp-` | `prpp-billing-webhooks` |
+| `ycc:prp-implement`  | `prpi-` | `prpi-user-auth-flow`   |
+| `ycc:implement-plan` | `impl-` | `impl-user-auth-flow`   |
+| `ycc:deep-research`  | `drpr-` | `drpr-ai-deployment`    |
+| `ycc:plan-workflow`  | `pw-`   | `pw-user-auth-flow`     |
+| `ycc:orchestrate`    | `orch-` | `orch-user-auth-flow`   |
 
 If the sanitized context would be empty (e.g., only symbols), fall back to
 `untitled`.
@@ -319,5 +319,5 @@ worktree survives abort for manual inspection/cleanup.
 
 Print run label, `Total tasks: <N> (across <M> batches, max parallel width <X>)`,
 `Dependencies: <K edges>`, per-batch task IDs (`(depends on Batch N-1)`), and the per-batch
-teammate roster (`<task-id> subagent_type=implementor task=<short>`). Call no team, task,
+teammate roster (`<task-id> subagent_type=ycc/implementor task=<short>`). Call no team, task,
 agent or `SendMessage` tools; stop.

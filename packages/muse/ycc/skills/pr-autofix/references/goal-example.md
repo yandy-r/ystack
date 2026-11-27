@@ -15,7 +15,7 @@ Safety signals `NO_FORCE_PUSH`, `NO_NO_VERIFY`, and `NO_RAW_PROMPTS_OUTBOUND` ar
 ## Recommended condition template
 
 ```
-/goal Run /pr-autofix <PR> --ci using the pr-autofix workflow, continuing
+/goal Run /ycc:pr-autofix <PR> --ci using the ycc:pr-autofix workflow, continuing
 through every handoff and rerun-pending iteration of the Phase 7 CI loop without
 returning control to me. Done when the transcript shows the Phase 8
 "## PR Autofix Complete" output followed by the Goal Signals printed verbatim —

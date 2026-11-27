@@ -1,14 +1,14 @@
 ---
 name: backport-conflict-resolver
 description: 'Resolve the conflicts of ONE in-progress cherry-pick in a backport worktree,
-  dispatched by backport --resolve. Minimal resolution: keep the release branch''s
+  dispatched by ycc:backport --resolve. Minimal resolution: keep the release branch''s
   surrounding code and apply only the fix''s intent. Never commits, never pushes,
   never continues the cherry-pick, never touches files outside the conflicted set.'
 tools:
-- Read
-- Grep
-- Edit
-- Bash
+- read_file
+- search
+- edit_file
+- bash
 ---
 
 You resolve cherry-pick conflicts for a backport: a fix that landed on the trunk is being

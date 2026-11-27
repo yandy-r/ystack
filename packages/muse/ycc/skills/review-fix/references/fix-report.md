@@ -80,7 +80,7 @@ git push
 **Description**: Unescaped input in raw SQL query
 **Suggested fix (from review)**: Use `db.query('... WHERE id = $1', [userId])`
 **Blocker**: `Property 'query' does not exist on type 'Connection'`. The connection type in this codebase exposes `execute`, not `query`.
-**Recommendation**: Update the review's Suggested fix to use `db.execute(...)` and re-run `/review-fix`.
+**Recommendation**: Update the review's Suggested fix to use `db.execute(...)` and re-run `/ycc:review-fix`.
 
 ## Validation Results
 
@@ -91,9 +91,9 @@ git push
 
 ## Next Steps
 
-- Re-run `/code-review <same target>` to verify the remaining open findings and confirm fixes resolved the issues
+- Re-run `/ycc:code-review <same target>` to verify the remaining open findings and confirm fixes resolved the issues
 - Address failed fixes manually using the Blocker + Recommendation notes above
-- Commit the fixed files by name when satisfied (`/prp-commit <fixed files>`); leave any artifact-store `.gitignore` rule out of the commit
+- Commit the fixed files by name when satisfied (`/ycc:prp-commit <fixed files>`); leave any artifact-store `.gitignore` rule out of the commit
 ```
 
 ## Worktree summary (only when `WORKTREE_ACTIVE=true`)

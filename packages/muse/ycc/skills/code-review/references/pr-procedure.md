@@ -201,7 +201,7 @@ Write the artifact to `$OUT`, resolved in SKILL.md "Review destination" with kin
 
 Use the shared Review Artifact Format at
 `~/.local/share/ycc/muse/ycc/ycc-shared/references/review-artifact-format.md`.
-The artifact must include finding IDs and `Status: Open` on every finding so that `/review-fix` can later update the file in place.
+The artifact must include finding IDs and `Status: Open` on every finding so that `/ycc:review-fix` can later update the file in place.
 
 - **Note** (local mode): the artifact will be committed to the PR branch (see commit step below). If you do not want the review record on the PR branch, add `docs/prps/reviews/` to `.gitignore` — the skill detects this and skips the commit.
 
@@ -318,7 +318,7 @@ Next steps:
 - **Diverged branches**: Suggest `git fetch origin && git rebase origin/<base>` before review.
 - **Large PRs (>50 files)**: Warn about review scope. Focus on source changes first, then tests, then config/docs.
 - **Stale PR head (default worktree mode)**: the worktree is a snapshot of the PR head at SETUP time. If new commits land on the PR after the review starts, re-run to resync.
-- **Concurrent runs**: two `/code-review <N>` invocations on different PR numbers never collide (each gets its own `<repo>-pr-<N>/` directory). Two invocations on the SAME PR number share the same parent worktree (idempotent), which is by design.
+- **Concurrent runs**: two `/ycc:code-review <N>` invocations on different PR numbers never collide (each gets its own `<repo>-pr-<N>/` directory). Two invocations on the SAME PR number share the same parent worktree (idempotent), which is by design.
 - **Cleanup**: worktrees are removed automatically after the review is posted (Phase 7 Worktree Cleanup). Pass `--keep-worktree` to retain the worktree. If the worktree is dirty, cleanup is skipped and you are told where to inspect. Use `--no-worktree` for the previous behavior (no worktree created or removed).
 
 ---

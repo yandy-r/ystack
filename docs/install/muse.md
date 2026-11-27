@@ -5,9 +5,12 @@ with `install.sh`.
 
 > **Status: experimental.** The packages were checked against the `muse`
 > 1.4.25 CLI: `muse plugins validate` reports no diagnostics and every skill,
-> agent and MCP server as supported, and `muse plugins install`, `approve` and
-> `remove` were run end to end. A live, signed-in session (`muse login`) has
-> not yet been tested. Report anything that does not load. The findings and
+> command, agent and MCP server as supported, and `muse plugins install`,
+> `approve` and `remove` were run end to end. In live `muse exec` sessions, a
+> ycc skill ran its `ycc-shared` helper, a `ycc/<agent>` subagent was spawned,
+> and an HTTP (context7) and a stdio (playwright) ycc-mcp server were called.
+> In the interactive TUI, `/ycc:plan` loaded and ran the skill. Report
+> anything that does not load. The findings and
 > decisions behind this target are in
 > [`muse-runtime-contract.md`](../internal/spikes/muse-runtime-contract.md).
 
@@ -16,16 +19,17 @@ with `install.sh`.
 `./scripts/sync.sh --only muse` generates three plugins under `packages/muse/`
 from the Claude-facing `ycc/` source:
 
-| Plugin      | Manifest                                         | Contents                                                                                                                                                                                                                                                   |
-| ----------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ycc`       | `.claude-plugin/plugin.json` (Claude-compatible) | Every public skill (`skills/<name>/SKILL.md`, shown in Muse as `plugin:ycc:<name>`), one command entrypoint per public skill (`commands/<name>.md`), the shared helpers (`ycc-shared/`) and the custom agents (`agents/<name>.md`, shown as `ycc/<name>`). |
-| `ycc-mcp`   | `.muse-plugin/plugin.json` (native)              | The ycc MCP servers. HTTP servers use `transport: http`. Each stdio server starts through a generated `mcp/<id>.sh` launcher, because Muse treats any command argument that contains `/` as a file in the plugin.                                          |
-| `ycc-rules` | `.muse-plugin/plugin.json` (native)              | The ycc language and common rules, each as a skill (`rules/<rule>/SKILL.md`) whose description is the rule's trigger plus its file globs. Muse plugins have no rules family, so Muse loads each rule when it is relevant.                                  |
+| Plugin      | Manifest                                         | Contents                                                                                                                                                                                                                  |
+| ----------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ycc`       | `.claude-plugin/plugin.json` (Claude-compatible) | Every public skill (`skills/<name>/SKILL.md`, run in Muse as the slash command `/ycc:<name>`), the shared helpers (`ycc-shared/`) and the custom agents (`agents/<name>.md`, shown as `ycc/<name>`).                      |
+| `ycc-mcp`   | `.muse-plugin/plugin.json` (native)              | The ycc MCP servers. HTTP servers use `transport: http`. Each stdio server starts through a generated `mcp/<id>.sh` launcher, because Muse treats any command argument that contains `/` as a file in the plugin.         |
+| `ycc-rules` | `.muse-plugin/plugin.json` (native)              | The ycc language and common rules, each as a skill (`rules/<rule>/SKILL.md`) whose description is the rule's trigger plus its file globs. Muse plugins have no rules family, so Muse loads each rule when it is relevant. |
 
 The `ycc` plugin uses the Claude-compatible manifest because Muse's native
-manifest cannot carry agents. Agents keep their Claude tool names, which Muse
-maps onto its own tools. Muse has no equivalent of `Glob`, so it is dropped
-(`Grep` covers searching). `color` is never set, because a color Muse does not
+manifest cannot carry agents. Agent `tools` use Muse's own tool names
+(`read_file`, `search`, `write_file`, `edit_file`, `bash`, `web_fetch` and `web_search`). Muse's validator accepts Claude names
+such as `Read`, but its runtime refuses to spawn an agent that uses them.
+`Glob` and `Grep` both become `search`. `color` is never set, because a color Muse does not
 recognize quietly disables the agent. MCP server ids use kebab-case:
 `openaiDeveloperDocs` becomes `openai-developer-docs`.
 
@@ -42,7 +46,8 @@ Not shipped:
   plugin.
 - Always-on rules. Rules reach Muse as relevance-loaded skills; add `--rules`
   for the always-on `AGENTS.md`.
-- Settings and the Claude mods.
+- Settings and the Claude mods. Separate `commands/` wrappers are not needed:
+  Muse already lists every skill as `/ycc:<name>`.
 
 ## Prerequisites
 
@@ -56,7 +61,7 @@ Not shipped:
 
 ```bash
 ./install.sh install --target muse                           # ycc, ycc-mcp, ycc-rules
-./install.sh install --target muse --package ycc             # skills, commands and agents only
+./install.sh install --target muse --package ycc             # skills and agents only
 ./install.sh install --target muse --project                 # Muse project scope
 ./install.sh install --target muse --dry-run                 # preview; no writes
 ./install.sh sync    --target muse --intent base,rules       # plugins + AGENTS.md link
@@ -108,6 +113,20 @@ Overrides:
 | `YCC_MUSE_CONFIG_DIR`  | The folder that receives the `AGENTS.md` link.                                          |
 | `YCC_MUSE_APPROVE=0`   | Skip `muse plugins approve`.                                                            |
 
+## Troubleshooting
+
+- **A stdio MCP server is skipped ("the transport closed unexpectedly").** Muse
+  starts stdio servers with only a small part of your environment (`HOME`,
+  `PATH`, `USER`, `LANG` and a few others). A version manager shim such as
+  mise or asdf then needs a global tool version: run, for example,
+  `mise use -g node@lts` so `npx` resolves without a project config.
+- **"`skills_catalog` was trimmed to fit its size limit".** With `ycc`
+  and `ycc-rules` installed, Muse shortens some skill descriptions in its
+  catalog. Every skill still loads. Install `--package ycc,ycc-mcp` if you
+  prefer full descriptions over the rule skills.
+- **Remote servers ask for a sign-in.** Run the `muse mcp login ...` command
+  Muse prints for that server, then restart Muse.
+
 ## Verify
 
 ```bash
@@ -117,5 +136,5 @@ muse skills list --source plugin       # plugin:ycc:<name> skills
 python3 scripts/muse_install.py status # ycc's ownership view
 ```
 
-In a Muse session, run a skill such as `/plan`, or ask Muse to use one of the
-`ycc/<agent>` subagents.
+In a Muse session, run a skill such as `/ycc:plan`, or ask Muse to use one of
+the `ycc/<agent>` subagents.

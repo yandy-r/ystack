@@ -35,7 +35,7 @@ Vendor-neutral counterpart to `coderabbit:autofix`. Pulls every comment surface 
 1. FETCH — `scripts/fetch-pr-comments.sh` to JSONL.
 2. FILTER — state, author, severity, in-progress, report.
 3. DISPLAY & APPROVE — table, approval gate, plan.
-4. DISPATCH — batch, send to `pr-comment-fixer`.
+4. DISPATCH — batch, send to `ycc/pr-comment-fixer`.
 5. COMMIT & PUSH — validated commits, push unless `--no-push`.
 6. THREAD CLOSURE — resolve/reply via `scripts/resolve-thread.sh`.
 7. CI LOOP (optional, `--ci`) — bounded auto-fix loop.
@@ -81,7 +81,7 @@ Extract flags from `$ARGUMENTS`; the remainder is the PR selector.
 | `--severity <min>`                | Minimum severity to fix: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`. Default `LOW` (process everything).                                |
 | `--yes` / `-y`                    | Skip per-comment approval; apply all eligible.                                                                                   |
 | `--dry-run`                       | Print the fix plan; do NOT edit files, mutate threads, or push.                                                                  |
-| `--parallel`                      | Dispatch `pr-comment-fixer` agents in parallel per batch. Default: sequential.                                               |
+| `--parallel`                      | Dispatch `ycc/pr-comment-fixer` agents in parallel per batch. Default: sequential.                                               |
 | `--no-resolve`                    | Do NOT resolve threads after fix. Default: resolve on Fixed.                                                                     |
 | `--no-reply-on-skip`              | Do NOT post a reply when skipping. Default: reply with reason then resolve.                                                      |
 | `--no-push`                       | Apply and commit, but do NOT push. Exclusive with `--ci`.                                                                        |
@@ -123,7 +123,7 @@ Record `HEAD_BRANCH`, `BASE_BRANCH`, `STATE`.
 
 ### Provider detection
 
-Before the GitHub checks, detect the provider on `origin` (`forge_detect_provider origin`, see `forge-detection.md`). If not `github`, stop gracefully: "`/pr-autofix` is GitHub-only. Provider `<provider>` lacks the GraphQL review-thread resolution and per-comment harvesting this skill requires (Forgejo/Gitea expose only the REST v1 API). Resolve threads in the `<provider>` UI, or use local review tooling." Do not proceed to FETCH.
+Before the GitHub checks, detect the provider on `origin` (`forge_detect_provider origin`, see `forge-detection.md`). If not `github`, stop gracefully: "`/ycc:pr-autofix` is GitHub-only. Provider `<provider>` lacks the GraphQL review-thread resolution and per-comment harvesting this skill requires (Forgejo/Gitea expose only the REST v1 API). Resolve threads in the `<provider>` UI, or use local review tooling." Do not proceed to FETCH.
 
 ### Preflight refusals
 
@@ -193,7 +193,7 @@ For each `Apply` entry, sanitize the body per `references/prompt-injection-safet
 
 ### Dispatch modes
 
-- **Sequential (default)**: one `pr-comment-fixer` per group in order; wait for its `STATUS:` report before the next.
+- **Sequential (default)**: one `ycc/pr-comment-fixer` per group in order; wait for its `STATUS:` report before the next.
 - **Parallel (`--parallel`, `--commit-style one` only)**: per batch, dispatch all fixers in a single message with multiple `Agent` tool calls (standalone dispatch per `standalone-dispatch.md`); wait for all before the next batch. `per-comment` overrides `--parallel` with sequential single-comment dispatch and immediate commits.
 
 Each fixer returns `STATUS: Fixed` or `STATUS: Failed` per comment, with `CHANGES:` and (on failure) `BLOCKER` + `RECOMMENDATION` (contract: `ycc/agents/pr-comment-fixer.md`). Track results in a status map keyed by comment index. Never auto-retry a Failed fix.
@@ -255,7 +255,7 @@ Every reply body passes through the sanitizer (`references/prompt-injection-safe
 
 Trigger: `--ci` passed AND at least one fixer returned `Fixed` AND the Phase 5 push succeeded. Otherwise skip silently.
 
-A thin wrapper over the loop shared with `/prp-pr` Phase 7 and `/git-workflow` Phase 6. The policy lives in `~/.local/share/ycc/muse/ycc/ycc-shared/references/ci-monitoring.md`; do not restate it here. Read `references/ci-loop.md` (templates and commands) before entering this phase:
+A thin wrapper over the loop shared with `/ycc:prp-pr` Phase 7 and `/ycc:git-workflow` Phase 6. The policy lives in `~/.local/share/ycc/muse/ycc/ycc-shared/references/ci-monitoring.md`; do not restate it here. Read `references/ci-loop.md` (templates and commands) before entering this phase:
 
 1. Authorization prompt (skip if `--ci-yes`). On `no`, exit cleanly: fixes were pushed but not monitored.
 2. Initialize one audit log path under `~/.claude/session-data/ci-watch/`, reused every iteration.

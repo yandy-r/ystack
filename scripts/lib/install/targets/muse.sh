@@ -36,8 +36,8 @@ muse_dry_run_steps() { muse_valid_steps; }
 # muse_intent_steps <intent> — steps <intent> maps to; empty means no-op.
 muse_intent_steps() {
     case "$1" in
-        # The ycc, ycc-mcp and ycc-rules plugins carry skills, commands, agents,
-        # MCP servers and rules;
+        # The ycc, ycc-mcp and ycc-rules plugins carry skills (Muse lists each as
+        # /ycc:<name>), agents, MCP servers and rules;
         # registering them is the install itself.
         base|skills|agents|commands|mcp|plugins) echo "base" ;;
         rules) echo "rules" ;;

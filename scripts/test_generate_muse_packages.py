@@ -70,19 +70,21 @@ class GeneratorTests(unittest.TestCase):
         plan = self.text("ycc/skills/plan/SKILL.md")
         self.assertIn("~/.local/share/ycc/muse/ycc/ycc-shared/", plan)
         self.assertNotIn("${CLAUDE_PLUGIN_ROOT}", plan)
-        self.assertNotRegex(plan, r"/ycc:[a-z]")
         self.assertFalse(any(rel.parts[:3] == ("ycc", "skills", "_shared") for rel in self.tree))
 
-    def test_commands_wrap_every_public_skill(self) -> None:
-        commands = sorted(rel.stem for rel in self.tree if rel.parts[:2] == ("ycc", "commands"))
-        skills = sorted(
-            rel.parts[2] for rel in self.tree if rel.parts[:2] == ("ycc", "skills") and rel.name == "SKILL.md"
+    def test_no_command_wrappers(self) -> None:
+        # Muse lists every plugin skill as /ycc:<name>; a commands/ wrapper would duplicate it.
+        self.assertFalse(any(rel.parts[:2] == ("ycc", "commands") for rel in self.tree))
+
+    def test_namespace_follows_muse_ids(self) -> None:
+        plan = self.text("ycc/skills/plan/SKILL.md")
+        self.assertRegex(plan, r"/ycc:[a-z]")  # Muse invokes plugin skills as /ycc:<name>
+        self.assertIn("ycc/planner", plan)  # Muse agent ids are ycc/<agent>
+        self.assertNotRegex(plan, r"(?<![/\w])ycc:planner\b")
+        self.assertEqual(
+            gen.muse_namespace("Run /ycc:plan or spawn ycc:planner; see ycc:init.", {"planner": "planner"}),
+            "Run /ycc:plan or spawn ycc/planner; see ycc:init.",
         )
-        self.assertEqual(commands, [name for name in skills if gen.public_skill(name)])
-        plan = self.text("ycc/commands/plan.md")
-        self.assertIn("`plugin:ycc:plan`", plan)
-        self.assertTrue(plan.rstrip().endswith("$ARGUMENTS"))
-        self.assertLessEqual(set(frontmatter(plan)), {"description", "argument-hint"})
 
     def test_rules_ship_as_relevance_loaded_skills(self) -> None:
         manifest = json.loads(self.text("ycc-rules/.muse-plugin/plugin.json"))
@@ -113,14 +115,18 @@ class GeneratorTests(unittest.TestCase):
             tools = data["tools"]
             assert isinstance(tools, list)
             self.assertLessEqual(set(tools), gen.MUSE_TOOLS)
-            self.assertNotIn("Glob", tools)
+            # Muse only spawns agents whose tools use its native names (Claude names validate
+            # but are refused at spawn time as agent_definition_unavailable).
+            self.assertFalse(set(tools) & set(gen.TOOL_MAP), tools)
         finder = frontmatter(self.text("ycc/agents/code-finder.md"))
-        self.assertEqual(finder["tools"], ["Read", "Grep", "WebFetch", "WebSearch"])
+        self.assertEqual(finder["tools"], ["read_file", "search", "web_fetch", "web_search"])
 
     def test_tool_map_fails_closed(self) -> None:
         with self.assertRaises(ValueError):
             gen.map_tools(["Teleport"], "demo")
-        self.assertEqual(gen.map_tools(["Bash(git:*)", "Bash", "Glob", "Grep", "mcp__x__y"], "demo"), ["Bash", "Grep"])
+        self.assertEqual(
+            gen.map_tools(["Bash(git:*)", "Bash", "Glob", "Grep", "mcp__x__y"], "demo"), ["bash", "search"]
+        )
 
     def test_invalid_agent_name_fails(self) -> None:
         with self.assertRaises(ValueError):

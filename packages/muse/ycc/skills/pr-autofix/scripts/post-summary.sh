@@ -7,7 +7,7 @@
 # works on any provider).
 #
 # Purpose:
-#   At the end of a pr-autofix run, render and post one summary comment to
+#   At the end of a ycc:pr-autofix run, render and post one summary comment to
 #   the PR conversation. Built only from local counters — never echoes raw
 #   reviewer text back into the comment.
 #
@@ -183,7 +183,7 @@ Thread state:
 
 This summary was built from local run state only — reviewer prompts and suggestion blocks were treated as untrusted input and are not echoed back here.
 
-— posted by /pr-autofix
+— posted by /ycc:pr-autofix
 EOF
 )
 

@@ -42,7 +42,7 @@ Planning artifacts default to Linear storage. Local mode keeps the existing loca
 | Planning skills and validators              | YAN-1154 | Migrated       |
 | Implementation skills and validators        | YAN-1155 | Migrated       |
 | Review and report skills                    | YAN-1156 | Migrated       |
-| Generators, capability matrix, `init`   | YAN-1157 | Shipped        |
+| Generators, capability matrix, `ycc:init`   | YAN-1157 | Shipped        |
 | Existing `docs/plans` and `docs/prps` trees | YAN-1158 | Leave in place |
 
 ## Kinds
@@ -55,7 +55,7 @@ Planning artifacts default to Linear storage. Local mode keeps the existing loca
 | research                       | One Document per lens on the feature Project                        | `research/research-<lens>.md`   |
 | shared-context                 | Document on the feature Project                                     | `shared.md`                     |
 | plan-workflow / parallel-plan  | Document, plus one Issue per task                                   | `parallel-plan.md`              |
-| prp-plan / `plan --visual` | Document, plus one Issue per task                                   | `prp-plan.md`                   |
+| prp-plan / `ycc:plan --visual` | Document, plus one Issue per task                                   | `prp-plan.md`                   |
 | review                         | One Document per review, attached to the issue or feature Project   | `reviews/<review-id>-review.md` |
 | review-fixes                   | Document beside its review, with the same parent                    | `reviews/<review-id>-fixes.md`  |
 | report                         | Project status update, plus a Document when long                    | `report.md`                     |
@@ -109,7 +109,7 @@ In local mode, write `$OUT` at the existing local path, without identity frontma
 | `prp-prd`           | `prd`                                                                                                                                                                                                                                                                         |
 | `prp-spec`          | `spec`                                                                                                                                                                                                                                                                        |
 | `prp-plan`          | `prp-plan`; research backstops use `prp-research` and remain local-only                                                                                                                                                                                                       |
-| `plan --visual` | Forced source plan uses `prp-plan`                                                                                                                                                                                                                                            |
+| `ycc:plan --visual` | Forced source plan uses `prp-plan`                                                                                                                                                                                                                                            |
 | `plan-workflow`     | Research uses `research-<lens>`, shared context uses `shared`, analysis uses `analysis-<name>`, and the final plan uses `parallel-plan`                                                                                                                                       |
 | `parallel-plan`     | `parallel-plan`; prerequisites use the same research/shared/analysis kinds as `plan-workflow`                                                                                                                                                                                 |
 | `shared-context`    | `shared`, with `research-<lens>` inputs                                                                                                                                                                                                                                       |
@@ -136,7 +136,7 @@ Completion messages in linear mode print the implementation command with the fea
 
 ## Implementation skills
 
-`implement-plan`, `prp-implement` and `orchestrate` consume planning artifacts through this store. The orchestrating skill alone talks to Linear; implementor subagents (`implementor`) read the hydrated cache file and never call a Linear MCP, tracker tool, or edit the plan or its frontmatter.
+`implement-plan`, `prp-implement` and `orchestrate` consume planning artifacts through this store. The orchestrating skill alone talks to Linear; implementor subagents (`ycc/implementor`) read the hydrated cache file and never call a Linear MCP, tracker tool, or edit the plan or its frontmatter.
 
 ### Inputs
 
@@ -190,7 +190,7 @@ The orchestrator moves issues by state type, not team-specific state names:
 
 ## Review and report skills
 
-These skills follow Planning skills for `STORE_FLAG`, printing the mode, the Linear call gate, and `--ensure`, and resolve every path with the helper. Exception: local-only kinds (`pr-autofix-report-<id>`) make no Linear calls and therefore skip the Linear call gate; they still print the mode. `<N>` is a PR number ≥ 1; the helper rejects any other id. Local mode keeps today's paths and commits, anchored at the checkout toplevel even when run from a subdirectory; printed local paths and `/review-fix` commands use the toplevel-relative form (`docs/prps/...`), as before.
+These skills follow Planning skills for `STORE_FLAG`, printing the mode, the Linear call gate, and `--ensure`, and resolve every path with the helper. Exception: local-only kinds (`pr-autofix-report-<id>`) make no Linear calls and therefore skip the Linear call gate; they still print the mode. `<N>` is a PR number ≥ 1; the helper rejects any other id. Local mode keeps today's paths and commits, anchored at the checkout toplevel even when run from a subdirectory; printed local paths and `/ycc:review-fix` commands use the toplevel-relative form (`docs/prps/...`), as before.
 
 | Kind                     | Id                                                             | Linear cache                        | Local path                              |
 | ------------------------ | -------------------------------------------------------------- | ----------------------------------- | --------------------------------------- |
@@ -283,7 +283,7 @@ Linear mode stores a gitignored cache:
 
 `blueprint.md` is a sibling of `shared.md`. The `deep-research/` directory contains the skill's local-only objective, findings, synthesis, evidence, and working report; only the final report is uploaded as research lens `deep-research`.
 
-`plan-workflow` and `parallel-plan` both write `parallel-plan.md`; there is no plan-workflow `plan.md`. `prp-plan` and the forced file from `plan --visual` use `prp-plan.md`. Feature-research and PRP specs remain distinct. Analysis files and PRP research backstops keep their current basenames under the slug directory but are never pushed.
+`plan-workflow` and `parallel-plan` both write `parallel-plan.md`; there is no plan-workflow `plan.md`. `prp-plan` and the forced file from `ycc:plan --visual` use `prp-plan.md`. Feature-research and PRP specs remain distinct. Analysis files and PRP research backstops keep their current basenames under the slug directory but are never pushed.
 
 | Cache file (linear)                                     | Today's path (local)                                                  |
 | ------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -422,7 +422,7 @@ If the MCP fails during step 4 or 5, keep the local file and follow Offline.
 
 An invalid value at the selected level does not fall through. An explicit resolve prints an error and returns 1; sourced auto-resolution prints `WARNING`, unsets every `ARTIFACT_*` variable, and does not fail the caller.
 
-The default is `linear`. Opt out with `--store=local`, `store: local` in `.plans-config`, or `store: local` in the global config; local mode needs no Linear MCP. Pin a repo to Linear for fresh clones with `init --artifact-store=linear` or `artifact-store-pointer.sh` (see Fresh clone). Resolution never writes files, whichever store is selected.
+The default is `linear`. Opt out with `--store=local`, `store: local` in `.plans-config`, or `store: local` in the global config; local mode needs no Linear MCP. Pin a repo to Linear for fresh clones with `ycc:init --artifact-store=linear` or `artifact-store-pointer.sh` (see Fresh clone). Resolution never writes files, whichever store is selected.
 
 The `store` and `linear_*` walks compare physical paths (`pwd -P`) and stop after the start directory's physical Git toplevel, or physical `PLANS_ROOT` without Git. Symlinked paths therefore cannot escape the boundary. The original start directory still goes to `resolve_plans_dir`, whose upward/topmost `PLANS_*` behavior is unchanged.
 
@@ -541,7 +541,7 @@ A `!` line is relevant when it may re-include `.ycc/artifacts/**` paths the prob
 
 Matches from a global `core.excludesFile` or `.git/info/exclude` do not count because they are not portable; the repository rule is still appended. A negated (`!`) rule that re-includes one of those probe paths, from any source, refuses rather than being overridden. A `!` line in any `.gitignore` under `.ycc/`, in the working tree or the index (after an optional UTF-8 BOM), also refuses: `check-ignore` cannot attribute it, and the deeper file overrides the root rule.
 
-Otherwise append `.ycc/artifacts/`, creating `.gitignore` if needed and adding a missing trailing newline before the entry. Skills call `--ensure` after the Linear gate and before the first cache write or pull; `artifact-store-pointer.sh` (run by `init --artifact-store=linear`) applies the same rule when it writes the committed pointer.
+Otherwise append `.ycc/artifacts/`, creating `.gitignore` if needed and adding a missing trailing newline before the entry. Skills call `--ensure` after the Linear gate and before the first cache write or pull; `artifact-store-pointer.sh` (run by `ycc:init --artifact-store=linear`) applies the same rule when it writes the committed pointer.
 
 ## Fresh clone
 
@@ -557,7 +557,7 @@ linear_label: repo:ystack
 
 A fixed-Project repo uses `linear_project: <id-or-slug>` instead of `linear_label`. No `scope: local` is needed: a nested worktree uses its own Git toplevel for the linear cache even when a higher config determines `PLANS_ROOT`.
 
-The generated `AGENTS.md` carries this section, rendered by `init` from the `IF_ARTIFACT_STORE` block of its `AGENTS.md.tmpl` when Phase 5.6 succeeds with a linear pointer (or the root pointer is already linear and tracked):
+The generated `AGENTS.md` carries this section, rendered by `ycc:init` from the `IF_ARTIFACT_STORE` block of its `AGENTS.md.tmpl` when Phase 5.6 succeeds with a linear pointer (or the root pointer is already linear and tracked):
 
 ```text
 ## Planning artifacts
@@ -565,7 +565,7 @@ The generated `AGENTS.md` carries this section, rendered by `init` from the `IF_
 Planning artifacts live in Linear (see `.plans-config`); `.ycc/artifacts/` is a gitignored local cache. If it's missing, pull from Linear.
 ```
 
-The pointer is written and committed by `artifact-store-pointer.sh`, which `init --artifact-store=linear` runs once and Save offers when no committed pointer exists:
+The pointer is written and committed by `artifact-store-pointer.sh`, which `ycc:init --artifact-store=linear` runs once and Save offers when no committed pointer exists:
 
 ```bash
 bash "${HOME}/.local/share/ycc/muse/ycc/ycc-shared/scripts/artifact-store-pointer.sh" --store=linear|local [--linear-workspace=<slug>] [--linear-team=<KEY>] [--linear-label=<label> | --linear-project=<id-or-slug>] [--dry-run] [--no-commit] [--force] [<dir>]

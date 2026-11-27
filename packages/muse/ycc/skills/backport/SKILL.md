@@ -31,7 +31,7 @@ from `origin/release/X.Y`, then one PR per target into `release/X.Y` with `Backp
 | `<PR#>`                 | Backport this merged trunk PR (digits, `#N`, or a GitHub PR URL).                         |
 | `--to release/X.Y`      | Target branch. Repeatable. Without it, targets come from labels (see Phase 2).            |
 | `--pending`             | Backport every merged PR with a backport label that has no backport PR yet.               |
-| `--resolve`             | On a conflict, dispatch `backport-conflict-resolver`, show the diff, ask to continue. |
+| `--resolve`             | On a conflict, dispatch `ycc/backport-conflict-resolver`, show the diff, ask to continue. |
 | `--ci`                  | After each backport PR opens, watch CI and run the bounded auto-fix loop (Phase 5).       |
 | `--dry-run`             | Print the plan and every command that would run. No worktree, no push, no PR.             |
 | `--audit [release/X.Y]` | Read-only pre-tag check for one line, or every active line (Phase 2A).                    |
@@ -61,7 +61,7 @@ Validation — stop with the usage line on failure:
    # open a PR into release/X.Y: original title, body "Backport of #<N>"
    ```
 
-   Explain: `/backport` automates GitHub only (`gh` PR queries and creation). With
+   Explain: `/ycc:backport` automates GitHub only (`gh` PR queries and creation). With
    `--audit`, print step 0 of the project's `RELEASING.md` patch steps instead of the
    cherry-pick steps.
 
@@ -73,8 +73,8 @@ Validation — stop with the usage line on failure:
 
    | Result                                  | Action                                                                                                                                        |
    | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-   | exit 2 (malformed block)                | Stop. Show the parse error and point at `/release-model --audit`. Never guess branches.                                                   |
-   | `present=0`                             | Stop. Explain that backports need a `RELEASING.md` using the `release-branches` model; offer `/release-model` (or `--upgrade`) to add it. |
+   | exit 2 (malformed block)                | Stop. Show the parse error and point at `/ycc:release-model --audit`. Never guess branches.                                                   |
+   | `present=0`                             | Stop. Explain that backports need a `RELEASING.md` using the `release-branches` model; offer `/ycc:release-model` (or `--upgrade`) to add it. |
    | `model=trunk-only` or empty maintenance | Stop. "This project ships every release from the trunk; there is nothing to backport."                                                        |
    | otherwise                               | Record `TRUNK`, `MAINTENANCE` (comma list), `LATEST_MAINTENANCE`, `BACKPORT_LABEL` (e.g. `backport:{X.Y}`).                                   |
 
@@ -95,12 +95,12 @@ rows, statuses, and the check itself: `branching-model.md#before-tagging-a-patch
 script header. Report per line: a table of the non-`ok` rows (status, PR, title,
 detail), the count of `ok` rows, and the `since=` window. Then the next steps:
 
-- `missing` → `/backport --pending --to release/X.Y`. A `backport #M closed unmerged`
-  row is not pending for `--pending`; retry it with `/backport <PR#> --to release/X.Y`.
+- `missing` → `/ycc:backport --pending --to release/X.Y`. A `backport #M closed unmerged`
+  row is not pending for `--pending`; retry it with `/ycc:backport <PR#> --to release/X.Y`.
 - `in-review` → review and merge the named backport PR.
 - `unlabelled` → decide per PR: `gh pr edit <PR#> --add-label <label>` and backport it,
   or leave it (trunk-only fix).
-- Clean on every line → "release/X.Y is ready for a patch tag (`/releaser`)."
+- Clean on every line → "release/X.Y is ready for a patch tag (`/ycc:releaser`)."
 
 Stop after the report; Phases 2–5 do not run.
 
@@ -190,7 +190,7 @@ alternatively they delete the branch and worktree (`git worktree remove <worktre
 the older code, the rule is a separate PR against `release/X.Y` (see
 `branching-model.md#backporting`).
 
-**With `--resolve`:** dispatch one `backport-conflict-resolver` agent for the
+**With `--resolve`:** dispatch one `ycc/backport-conflict-resolver` agent for the
 conflicted row (contract: `ycc/agents/backport-conflict-resolver.md`) with this prompt:
 
 ```
@@ -262,14 +262,14 @@ Print one row per work item: PR, target, result (`opened #M <url>`, `conflict (w
 
 - Review and squash-merge each backport PR into `release/X.Y` (a human does this).
 - After the merge, remove the worktree: `git worktree remove <worktree>`.
-- Patch releases are cut from `release/X.Y` with `/releaser`, which re-runs the
+- Patch releases are cut from `release/X.Y` with `/ycc:releaser`, which re-runs the
   `--audit` check and refuses the tag until every backport has merged.
 
 ## Phase 5 — CI (`--ci` only)
 
 For each opened backport PR, run the loop documented in
 `~/.local/share/ycc/muse/ycc/ycc-shared/references/ci-monitoring.md` (section "Loop
-Protocol"), exactly as `/pr-autofix` Phase 7 does — policy is not restated here:
+Protocol"), exactly as `/ycc:pr-autofix` Phase 7 does — policy is not restated here:
 
 ```bash
 bash "${HOME}/.local/share/ycc/muse/ycc/ycc-shared/scripts/ci-monitor.sh" \
@@ -280,7 +280,7 @@ bash "${HOME}/.local/share/ycc/muse/ycc/ycc-shared/scripts/ci-monitor.sh" \
 
 - Ask the one-time authorization prompt from `ci-monitoring.md` before the first loop.
 - `handoff` → apply the fix inside the backport worktree (formatter for `lint`/`format`;
-  a `pr-comment-fixer` agent with the log excerpt for `type-check`/`unit-test`/`build`),
+  a `ycc/pr-comment-fixer` agent with the log excerpt for `type-check`/`unit-test`/`build`),
   commit with a Conventional Commit validated by
   `~/.local/share/ycc/muse/ycc/skills/git-workflow/scripts/validate-commit.sh`, push the backport
   branch, re-invoke.

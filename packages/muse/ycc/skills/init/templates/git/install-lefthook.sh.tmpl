@@ -25,7 +25,7 @@ REPO_ROOT="$(repo_root)"
 cd "$REPO_ROOT"
 
 if [[ ! -f "$REPO_ROOT/lefthook.yml" && ! -f "$REPO_ROOT/lefthook.yaml" ]]; then
-    die "no lefthook.yml / lefthook.yaml found at $REPO_ROOT. Run this from a repo scaffolded with 'init --git'."
+    die "no lefthook.yml / lefthook.yaml found at $REPO_ROOT. Run this from a repo scaffolded with 'ycc:init --git'."
 fi
 
 # -----------------------------------------------------------------------------

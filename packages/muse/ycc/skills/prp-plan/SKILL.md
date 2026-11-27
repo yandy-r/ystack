@@ -10,7 +10,7 @@ argument-hint: '[--parallel | --team] [--enhanced] [--no-worktree] [--visual] [-
 
 Create a detailed, self-contained implementation plan that captures all codebase patterns, conventions, and context needed to implement a feature in a single pass.
 
-**Operational context:** Detect PRD versus free-form input, discover codebase patterns through prp-researcher with optional external research, and write the resolved `prp-plan` artifact for /prp-implement.
+**Operational context:** Detect PRD versus free-form input, discover codebase patterns through ycc/prp-researcher with optional external research, and write the resolved `prp-plan` artifact for /ycc:prp-implement.
 
 > Adapted from PRPs-agentic-eng by Wirasm. Part of the PRP workflow series.
 
@@ -33,8 +33,8 @@ Extract flags from `$ARGUMENTS`:
 | `--worktree`            | (legacy — now default; safe to omit) Worktree annotations are emitted by default. Accepted as a silent no-op so existing pipelines continue to work.                                                                                                                                                                         |
 | `--no-worktree`         | Opt out of worktree annotations. The plan will not contain a `## Worktree Setup` section or per-task `**Worktree**:` annotations.                                                                                                                                                                                            |
 | `--dry-run`             | Only valid with `--team`. Prints the team name and teammate roster, then exits without spawning any teammates.                                                                                                                                                                                                               |
-| `--enhanced`            | Enhanced research mode: grow the research fan-out from 3 to 7 specialized researchers (api/business/tech/ux/security/practices/recommendations — same coverage as feature-research). Output is still a single PRP-compliant plan file. Composes with --parallel (default), --team (Claude Code only), and --no-worktree. |
-| `--visual`              | Render the finished plan as an Agent-Native visual artifact (MDX) via `visual-plan`; local-files by default, hosted shareable link requires `--share`.                                                                                                                                                                   |
+| `--enhanced`            | Enhanced research mode: grow the research fan-out from 3 to 7 specialized researchers (api/business/tech/ux/security/practices/recommendations — same coverage as ycc:feature-research). Output is still a single PRP-compliant plan file. Composes with --parallel (default), --team (Claude Code only), and --no-worktree. |
+| `--visual`              | Render the finished plan as an Agent-Native visual artifact (MDX) via `ycc:visual-plan`; local-files by default, hosted shareable link requires `--share`.                                                                                                                                                                   |
 | `--store=local\|linear` | Artifact-store override; strip it before interpreting the feature description or input path and forward it to every resolver and visual-plan call.                                                                                                                                                                           |
 
 Strip the flags. Set `PARALLEL_MODE=true|false`, `AGENT_TEAM_MODE=true|false`, `DRY_RUN=true|false`. Default `WORKTREE_MODE=true`; set false for `--no-worktree`. `--worktree` is a legacy no-op. Parse and strip the store override as below; reject invalid `--store=` values or conflicting overrides rather than including them in the description. Only the remaining text is the feature description or PRD/spec path.
@@ -149,7 +149,7 @@ Read `~/.local/share/ycc/muse/ycc/ycc-shared/references/standalone-dispatch.md` 
 
 ### Path A — Sequential (default)
 
-Dispatch a single `prp-researcher` agent via the `Agent` tool, in codebase mode, to cover all 8 categories and 5 traces. Use the discovery table for the plan's Patterns to Mirror section.
+Dispatch a single `ycc/prp-researcher` agent via the `Agent` tool, in codebase mode, to cover all 8 categories and 5 traces. Use the discovery table for the plan's Patterns to Mirror section.
 
 **IMPORTANT — Researcher prompt constraints**: Tell the researcher to keep code snippets to **5 lines max** per finding and limit the total response to the discovery table format only — no prose summaries.
 
@@ -159,7 +159,7 @@ By default (`WORKTREE_MODE=true`), append the following directive to the researc
 
 ### Path B — Parallel sub-agents (`PARALLEL_MODE=true`)
 
-Dispatch **3 `prp-researcher` agents in a SINGLE message** as **standalone
+Dispatch **3 `ycc/prp-researcher` agents in a SINGLE message** as **standalone
 sub-agents** using the **`Agent`** tool (omit `name`):
 
 | Researcher          | Categories                             | Traces                  |
@@ -182,7 +182,7 @@ After all 3 return: merge tables, de-duplicate, verify all 8 categories covered.
 
 - Replace the 3-row researcher table above with the 7-row roster from `~/.local/share/ycc/muse/ycc/skills/prp-plan/references/enhanced-researchers.md`.
 - Before dispatch, ensure `prp-research` after the Linear gate when applicable, then create `$RESEARCH_DIR` with `mkdir -p`. Dispatch in a **SINGLE message** with **SEVEN `Agent` tool calls** (standalone — no `name`). Wait for all researcher results, whether returned directly or delivered asynchronously, before synthesis.
-- Each call uses `subagent_type: "prp-researcher"` with `description` set to the role name (`api-researcher`, `business-analyzer`, `tech-designer`, `ux-researcher`, `security-researcher`, `practices-researcher`, `recommendations-agent`) and the role-specific prompt from `enhanced-researchers.md`. Substitute `{{RESEARCH_DIR}}` with the resolved absolute directory in every prompt. Each role writes `${RESEARCH_DIR}/<role-name>.md` in addition to returning the same content inline.
+- Each call uses `subagent_type: "ycc/prp-researcher"` with `description` set to the role name (`api-researcher`, `business-analyzer`, `tech-designer`, `ux-researcher`, `security-researcher`, `practices-researcher`, `recommendations-agent`) and the role-specific prompt from `enhanced-researchers.md`. Substitute `{{RESEARCH_DIR}}` with the resolved absolute directory in every prompt. Each role writes `${RESEARCH_DIR}/<role-name>.md` in addition to returning the same content inline.
 - The 5-line snippet cap and discovery-table-only constraints used in the 3-researcher path apply unchanged.
 
 ### Path C — Agent team (`AGENT_TEAM_MODE=true`, Claude Code only)
@@ -202,9 +202,9 @@ Print (when `ENHANCED_MODE=false`):
 ```
 Team name:   prpp-<sanitized-feature>
 Teammates:   3
-  - patterns-research  subagent_type=prp-researcher  task=Similar Implementations, Naming, Types | Entry Points, Contracts
-  - quality-research   subagent_type=prp-researcher  task=Error Handling, Logging, Tests | State Changes, Patterns
-  - infra-research     subagent_type=prp-researcher  task=Configuration, Dependencies | Data Flow
+  - patterns-research  subagent_type=ycc/prp-researcher  task=Similar Implementations, Naming, Types | Entry Points, Contracts
+  - quality-research   subagent_type=ycc/prp-researcher  task=Error Handling, Logging, Tests | State Changes, Patterns
+  - infra-research     subagent_type=ycc/prp-researcher  task=Configuration, Dependencies | Data Flow
 Batches:     1  (batch 1: patterns-research, quality-research, infra-research)
 Dependencies: none  (flat graph)
 ```
@@ -214,13 +214,13 @@ Print (when `ENHANCED_MODE=true`):
 ```
 Team name:      prpp-<sanitized-feature>
 Teammates:      7
-  - api-researcher         subagent_type=prp-researcher  task=External APIs, libraries, integration patterns
-  - business-analyzer      subagent_type=prp-researcher  task=Requirements, user stories, business rules
-  - tech-designer          subagent_type=prp-researcher  task=Architecture, data models, API design
-  - ux-researcher          subagent_type=prp-researcher  task=User experience, workflows, accessibility
-  - security-researcher    subagent_type=prp-researcher  task=Security analysis, dependency risks, secure coding
-  - practices-researcher   subagent_type=prp-researcher  task=Modularity, code reuse, KISS, engineering best practices
-  - recommendations-agent  subagent_type=prp-researcher  task=Ideas, improvements, risks
+  - api-researcher         subagent_type=ycc/prp-researcher  task=External APIs, libraries, integration patterns
+  - business-analyzer      subagent_type=ycc/prp-researcher  task=Requirements, user stories, business rules
+  - tech-designer          subagent_type=ycc/prp-researcher  task=Architecture, data models, API design
+  - ux-researcher          subagent_type=ycc/prp-researcher  task=User experience, workflows, accessibility
+  - security-researcher    subagent_type=ycc/prp-researcher  task=Security analysis, dependency risks, secure coding
+  - practices-researcher   subagent_type=ycc/prp-researcher  task=Modularity, code reuse, KISS, engineering best practices
+  - recommendations-agent  subagent_type=ycc/prp-researcher  task=Ideas, improvements, risks
 Batches:        1  (batch 1: all 7 researchers)
 Dependencies:   none  (flat graph)
 ```
@@ -251,7 +251,7 @@ Complete shared lifecycle cleanup before continuing to Phase 3, even on partial 
 
 - Team name stays `prpp-<sanitized-feature>`.
 - Register 7 tasks instead of 3 via `TaskCreate`, using the role names from `~/.local/share/ycc/muse/ycc/skills/prp-plan/references/enhanced-researchers.md` (`api-researcher`, `business-analyzer`, `tech-designer`, `ux-researcher`, `security-researcher`, `practices-researcher`, `recommendations-agent`).
-- Before spawning, ensure `prp-research` after the Linear gate when applicable and create `$RESEARCH_DIR` with `mkdir -p`. Spawn 7 teammates in a **single message** with `name=`, all using `subagent_type: "prp-researcher"` with the role-specific prompt from `enhanced-researchers.md`. Substitute `{{RESEARCH_DIR}}` with the retained absolute `RESEARCH_DIR` in every prompt; each role must write its backstop there as well as returning findings inline.
+- Before spawning, ensure `prp-research` after the Linear gate when applicable and create `$RESEARCH_DIR` with `mkdir -p`. Spawn 7 teammates in a **single message** with `name=`, all using `subagent_type: "ycc/prp-researcher"` with the role-specific prompt from `enhanced-researchers.md`. Substitute `{{RESEARCH_DIR}}` with the retained absolute `RESEARCH_DIR` in every prompt; each role must write its backstop there as well as returning findings inline.
 - Apply shared lifecycle to all seven teammates.
 - Failure policy: a single teammate failure → continue with a stub note in synthesis ("{role} did not complete — {section} may be incomplete"); ≥4 teammate failures → abort, shut down survivors via `SendMessage`, fall back to suggesting the user re-run with `--enhanced --parallel`.
 
@@ -259,7 +259,7 @@ Complete shared lifecycle cleanup before continuing to Phase 3, even on partial 
 
 ## Phase 3 — RESEARCH
 
-If the feature involves external libraries/APIs, dispatch `prp-researcher` in external mode. Keep findings to KEY_INSIGHT / APPLIES_TO / GOTCHA / SOURCE format.
+If the feature involves external libraries/APIs, dispatch `ycc/prp-researcher` in external mode. Keep findings to KEY_INSIGHT / APPLIES_TO / GOTCHA / SOURCE format.
 
 If only internal patterns are used, skip: "No external research needed."
 
@@ -335,7 +335,7 @@ Use the feature slug resolved in Phase 1 for `<feature-slug>` (never derive it f
 
 All tasks — parallel and sequential — share this one feature worktree path. No `**Children**:` list and no per-task `**Worktree**:` annotation lines are emitted.
 
-> **Plan-file handoff**: in local mode, leave `$OUT` in the current checkout; the implementor (`prp-implement`) will **move** it into the feature worktree once created — do not pre-write or copy it there (see `worktree-strategy.md` §7). In linear mode, never move the cache; the implementor loads the plan from it via `/prp-implement --store=linear {resolved cached plan path or Linear Document URL}`.
+> **Plan-file handoff**: in local mode, leave `$OUT` in the current checkout; the implementor (`ycc:prp-implement`) will **move** it into the feature worktree once created — do not pre-write or copy it there (see `worktree-strategy.md` §7). In linear mode, never move the cache; the implementor loads the plan from it via `/ycc:prp-implement --store=linear {resolved cached plan path or Linear Document URL}`.
 
 Follow `~/.local/share/ycc/muse/ycc/ycc-shared/references/worktree-strategy.md` for the full naming scheme and annotation contract.
 
@@ -381,7 +381,7 @@ After the validation/fix pass, Save the final `$OUT` in linear mode through arti
 
 This step runs after the plan is written (Phase 6) and validated (Phase 6.5), regardless of the dispatch path taken (`--parallel`, `--team`, or sequential):
 
-- If `VISUAL_MODE=true` and `--dry-run` is NOT set, invoke `visual-plan ${STORE_FLAG} <plan-path>` — passing the resolved absolute `$OUT` and the retained override — and capture its printed link.
+- If `VISUAL_MODE=true` and `--dry-run` is NOT set, invoke `ycc:visual-plan ${STORE_FLAG} <plan-path>` — passing the resolved absolute `$OUT` and the retained override — and capture its printed link.
 - If `--dry-run` is set, print `visual generation would run` and skip the invocation.
 
 ---
@@ -390,7 +390,7 @@ This step runs after the plan is written (Phase 6) and validated (Phase 6.5), re
 
 This skill exposes the shared `--visual` decorator. The canonical contract lives at `~/.local/share/ycc/muse/ycc/ycc-shared/references/visual-mode.md` — follow it for composition, timing, and hand-off rules.
 
-When `VISUAL_MODE` is set and `--dry-run` is NOT, invoke `visual-plan ${STORE_FLAG} <absolute-plan-path>` after Phase 6.5 with the resolved absolute `$OUT`. It resolves the store-specific `visual/` output directory and prints the link; surface it in the Report block. When `--dry-run` is set, print `visual generation would run` and skip — no visual artifacts, directories, or links are produced.
+When `VISUAL_MODE` is set and `--dry-run` is NOT, invoke `ycc:visual-plan ${STORE_FLAG} <absolute-plan-path>` after Phase 6.5 with the resolved absolute `$OUT`. It resolves the store-specific `visual/` output directory and prints the link; surface it in the Report block. When `--dry-run` is set, print `visual generation would run` and skip — no visual artifacts, directories, or links are produced.
 
 ---
 
@@ -417,11 +417,11 @@ Update the phase status from `pending` to `in-progress` and add the actual resol
 - **Research Dispatch**: [Sequential | Parallel sub-agents | Agent team | Enhanced (7 researchers)]
 - **Execution Mode**: [Sequential | Parallel (N batches, max width X)]
 - **Worktree Mode**: [Enabled (default) — plan includes ## Worktree Setup (single feature worktree — **Parent**: line only) | Disabled via --no-worktree]
-- **Visual Artifact**: [Generated via visual-plan | n/a (--visual not set)]
+- **Visual Artifact**: [Generated via ycc:visual-plan | n/a (--visual not set)]
 - **Visual Link**: [hosted URL | http://127.0.0.1:PORT/... | local files only | n/a (--visual not set)]
 
-> Next step (local mode only): Run `/prp-implement {resolved absolute OUT path}` to execute this plan.
-> In linear mode replace that command with: Run `/prp-implement --store=linear {resolved cached plan path or Linear Document URL}` to execute this plan.
+> Next step (local mode only): Run `/ycc:prp-implement {resolved absolute OUT path}` to execute this plan.
+> In linear mode replace that command with: Run `/ycc:prp-implement --store=linear {resolved cached plan path or Linear Document URL}` to execute this plan.
 ```
 
 ---
@@ -452,11 +452,11 @@ The `validate-prp-plan.sh` script The script checks:
 
 ## Next Steps
 
-- Local mode: run `/prp-implement <plan-path>` to execute this plan. Linear mode: run `/prp-implement --store=linear <cached plan path or Linear Document URL>`.
-- Run `/plan` for quick conversational planning without artifacts
-- Run `/plan-workflow` for the heavyweight parallel-agent planning track
+- Local mode: run `/ycc:prp-implement <plan-path>` to execute this plan. Linear mode: run `/ycc:prp-implement --store=linear <cached plan path or Linear Document URL>`.
+- Run `/ycc:plan` for quick conversational planning without artifacts
+- Run `/ycc:plan-workflow` for the heavyweight parallel-agent planning track
 
 **Entry points into this skill** — `prp-spec` and `prp-prd` are parallel paths, not sequential:
 
-- Run `/prp-spec` for a lightweight single-pass spec when the problem is clear
-- Run `/prp-prd` for interactive hypothesis-driven discovery when the problem is unclear
+- Run `/ycc:prp-spec` for a lightweight single-pass spec when the problem is clear
+- Run `/ycc:prp-prd` for interactive hypothesis-driven discovery when the problem is unclear

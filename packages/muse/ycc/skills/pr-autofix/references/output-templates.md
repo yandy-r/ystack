@@ -148,7 +148,7 @@ Gitignore: <linear mode only, when --ensure added it: .gitignore gained the .ycc
 
 ### Next steps
   gh pr view <N> --web    # inspect PR
-  /pr-autofix <N>     # re-run after new comments
+  /ycc:pr-autofix <N>     # re-run after new comments
 
 ### Goal Signals (machine-readable — printed verbatim for /goal)
 EVERY_THREAD_HANDLED: <PASS|FAIL>

@@ -10,7 +10,7 @@
 
 ## Fixer prompt (all paths)
 
-Use `review-fixer` with its Finding spec: Shape A for one finding, Shape B
+Use `ycc/review-fixer` with its Finding spec: Shape A for one finding, Shape B
 for a same-file group sorted by line descending. Include the full ID, severity,
 file, line, category, description, and unchanged Suggested fix, plus:
 
@@ -27,7 +27,7 @@ git commands (`reset`, `clean`, `checkout`). Do not pass `isolation: "worktree"`
 ### Path A — Sequential Execution (default)
 
 Process batches in order; within a batch, one finding or same-file group at a
-time. For each: dispatch a single `review-fixer` (Shape A or B), wait for
+time. For each: dispatch a single `ycc/review-fixer` (Shape A or B), wait for
 its report, then `Edit` the finding's `**Status**: Open` line to `Fixed` on
 `STATUS: Fixed` or `Failed` on `STATUS: Failed`. Track `[done] F042 — Fixed` /
 `[failed] F043 — Failed: <blocker>` in todos. Continue after a failure so the
@@ -45,7 +45,7 @@ Process batches sequentially; within each batch, dispatch all review-fixer agent
 For each batch:
 
 1. **Dispatch review-fixer agents in parallel** — Use a **single message** with **multiple `Agent` tool calls**, one per finding or same-file group in the batch:
-   - `subagent_type`: `"review-fixer"`
+   - `subagent_type`: `"ycc/review-fixer"`
    - `description`: e.g., `"Fix F042: missing null check in payments.ts"`
    - `prompt`: The Finding spec (Shape A or Shape B) plus `SOURCE REVIEW FILE` and `PROJECT TYPE-CHECK COMMAND`
 
@@ -72,7 +72,7 @@ For each batch:
 
 ### Handling failures
 
-If a `review-fixer` agent returns `STATUS: Failed`:
+If a `ycc/review-fixer` agent returns `STATUS: Failed`:
 
 - **Do not retry** the same fix automatically. The agent already judged the Suggested fix to be incompatible.
 - Mark the finding as `Failed` in the review file.
@@ -130,8 +130,8 @@ Dependencies: none  (batches are orchestrator-controlled; task graph is flat)
 
 Per-batch teammate roster:
   Batch 1 (<severity>, <count> fixes):
-    - <task-id-1>  subagent_type=review-fixer  finding=<F###: short>
-    - <task-id-2>  subagent_type=review-fixer  finding=<F###: short>
+    - <task-id-1>  subagent_type=ycc/review-fixer  finding=<F###: short>
+    - <task-id-2>  subagent_type=ycc/review-fixer  finding=<F###: short>
   Batch 2 (...):
     ...
 ```
@@ -169,7 +169,7 @@ For each batch `B1, B2, ... BN` in order (from the Phase 3 plan):
 
 2. **Spawn batch teammates** — Single message, multiple `Agent` tool calls, one per finding or same-file group in the batch. Every call must include:
    - `name`: the task ID (e.g., `"f042"`, `"f004-f005"`) — must match the `TaskCreate` subject prefix
-   - `subagent_type`: `"review-fixer"`
+   - `subagent_type`: `"ycc/review-fixer"`
    - `description`: One-line fix title (e.g., `"Fix F042: missing null check in api.ts"`)
    - `prompt`: The Finding spec (Shape A or Shape B) plus `SOURCE REVIEW FILE`, `PROJECT TYPE-CHECK COMMAND`, and a directive that the teammate shares a task list with sibling fixers (list their task IDs) and may `SendMessage` them if a related finding becomes relevant, and must call `TaskUpdate` to mark its task complete before returning.
 

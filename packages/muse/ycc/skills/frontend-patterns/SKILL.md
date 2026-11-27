@@ -63,4 +63,4 @@ Paths are relative to this SKILL.md's directory. Read only the file matching the
 
 ## Related ycc Skills
 
-- `frontend-design` — visual direction, typography, color, and motion intent to pair with these implementation patterns
+- `ycc:frontend-design` — visual direction, typography, color, and motion intent to pair with these implementation patterns

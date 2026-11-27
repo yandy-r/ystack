@@ -12,7 +12,7 @@ applications and libraries. TypeScript is JavaScript with a layered type system;
 this skill covers language-level idioms, the type system, modules, async,
 cross-runtime concerns, and the Vite + Vitest toolchain stack. Framework-agnostic —
 for Next.js, React components, or Node backend architecture, defer to
-`nextjs-ux-ui-expert`, `frontend-ui-developer`, or `nodejs-backend-architect`.
+`ycc/nextjs-ux-ui-expert`, `ycc/frontend-ui-developer`, or `ycc/nodejs-backend-architect`.
 
 ## Critical Rules
 

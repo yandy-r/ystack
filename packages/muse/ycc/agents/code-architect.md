@@ -4,8 +4,8 @@ description: Designs feature architectures by analyzing existing codebase patter
   and conventions, then providing implementation blueprints with concrete files, interfaces,
   data flow, and build order.
 tools:
-- Read
-- Grep
+- read_file
+- search
 ---
 
 # Code Architect Agent

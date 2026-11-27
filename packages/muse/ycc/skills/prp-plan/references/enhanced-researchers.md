@@ -1,4 +1,4 @@
-# Enhanced Researcher Prompts (7-agent fan-out for prp-plan --enhanced)
+# Enhanced Researcher Prompts (7-agent fan-out for ycc:prp-plan --enhanced)
 
 ## Contents
 
@@ -11,7 +11,7 @@
 - Prompt: practices-researcher
 - Prompt: recommendations-agent
 
-> **Contract**: Each of these 7 researchers feeds the `prp-plan` synthesizer in Phase 6. They are dispatched standalone via `Agent` or as teammates in Path C enhanced. Each returns findings inline as structured rows for the PRP template, **AND** writes the same table to `{{RESEARCH_DIR}}/<role-name>.md` using `Write`. On EVERY dispatch path (including `--team --enhanced`), the caller MUST replace every `{{RESEARCH_DIR}}` with its retained absolute `prp-research` directory, ensure it after the Linear call gate when applicable, and create it with `mkdir -p` before spawning. Never send an unsubstituted placeholder. Backstops are local-only in both stores. All 7 use `subagent_type: "prp-researcher"`, distinguished by role description and prompt below (omit `name` for standalone calls). Teammates use the shared lifecycle.
+> **Contract**: Each of these 7 researchers feeds the `ycc:prp-plan` synthesizer in Phase 6. They are dispatched standalone via `Agent` or as teammates in Path C enhanced. Each returns findings inline as structured rows for the PRP template, **AND** writes the same table to `{{RESEARCH_DIR}}/<role-name>.md` using `Write`. On EVERY dispatch path (including `--team --enhanced`), the caller MUST replace every `{{RESEARCH_DIR}}` with its retained absolute `prp-research` directory, ensure it after the Linear call gate when applicable, and create it with `mkdir -p` before spawning. Never send an unsubstituted placeholder. Backstops are local-only in both stores. All 7 use `subagent_type: "ycc/prp-researcher"`, distinguished by role description and prompt below (omit `name` for standalone calls). Teammates use the shared lifecycle.
 
 ## Roster
 
@@ -30,7 +30,7 @@
 ## Prompt: api-researcher
 
 ```
-You are feeding the `prp-plan` synthesizer. Return findings inline as
+You are feeding the `ycc:prp-plan` synthesizer. Return findings inline as
 structured rows that map to the named plan section(s) below, AND write the
 same content to the backstop file named in Constraints below.
 
@@ -81,7 +81,7 @@ Constraints:
 ## Prompt: business-analyzer
 
 ```
-You are feeding the `prp-plan` synthesizer. Return findings inline as
+You are feeding the `ycc:prp-plan` synthesizer. Return findings inline as
 structured rows that map to the named plan section(s) below, AND write the
 same content to the backstop file named in Constraints below.
 
@@ -129,7 +129,7 @@ Constraints:
 ## Prompt: tech-designer
 
 ```
-You are feeding the `prp-plan` synthesizer. Return findings inline as
+You are feeding the `ycc:prp-plan` synthesizer. Return findings inline as
 structured rows that map to the named plan section(s) below, AND write the
 same content to the backstop file named in Constraints below.
 
@@ -188,7 +188,7 @@ Constraints:
 ## Prompt: ux-researcher
 
 ```
-You are feeding the `prp-plan` synthesizer. Return findings inline as
+You are feeding the `ycc:prp-plan` synthesizer. Return findings inline as
 structured rows that map to the named plan section(s) below, AND write the
 same content to the backstop file named in Constraints below.
 
@@ -241,7 +241,7 @@ Constraints:
 ## Prompt: security-researcher
 
 ```
-You are feeding the `prp-plan` synthesizer. Return findings inline as
+You are feeding the `ycc:prp-plan` synthesizer. Return findings inline as
 structured rows that map to the named plan section(s) below, AND write the
 same content to the backstop file named in Constraints below.
 
@@ -299,7 +299,7 @@ Constraints:
 ## Prompt: practices-researcher
 
 ```
-You are feeding the `prp-plan` synthesizer. Return findings inline as
+You are feeding the `ycc:prp-plan` synthesizer. Return findings inline as
 structured rows that map to the named plan section(s) below, AND write the
 same content to the backstop file named in Constraints below.
 
@@ -361,7 +361,7 @@ Constraints:
 ## Prompt: recommendations-agent
 
 ```
-You are feeding the `prp-plan` synthesizer. Return findings inline as
+You are feeding the `ycc:prp-plan` synthesizer. Return findings inline as
 structured rows that map to the named plan section(s) below, AND write the
 same content to the backstop file named in Constraints below.
 

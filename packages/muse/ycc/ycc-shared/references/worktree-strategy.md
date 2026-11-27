@@ -11,9 +11,9 @@
 - 7. Plan-artifact handoff
 - 8. Native harness integration
 
-Used by `plan`, `prp-plan`, `parallel-plan`, `plan-workflow`,
-`prp-implement`, `orchestrate`, and `implement-plan` for default
-worktree isolation. Also used by `code-review` and `review-fix` — with
+Used by `ycc:plan`, `ycc:prp-plan`, `ycc:parallel-plan`, `ycc:plan-workflow`,
+`ycc:prp-implement`, `ycc:orchestrate`, and `ycc:implement-plan` for default
+worktree isolation. Also used by `ycc:code-review` and `ycc:review-fix` — with
 one twist: `code-review` in PR mode checks out an **existing** PR head branch
 (see `--base-ref` below) instead of creating a new `feat/<feature>` branch from
 `HEAD`.
@@ -37,15 +37,15 @@ Worktree isolation is **on by default** for all nine worktree-aware skills:
 
 | Skill                       | Default                        | Opt out with    |
 | --------------------------- | ------------------------------ | --------------- |
-| `code-review` (PR mode) | worktree on                    | `--no-worktree` |
-| `review-fix`            | worktree on                    | `--no-worktree` |
-| `plan`                  | annotations emitted            | `--no-worktree` |
-| `prp-plan`              | annotations emitted            | `--no-worktree` |
-| `parallel-plan`         | annotations emitted            | `--no-worktree` |
-| `plan-workflow`         | annotations emitted            | `--no-worktree` |
-| `prp-implement`         | worktree on (auto-detect)      | `--no-worktree` |
-| `implement-plan`        | worktree on (auto-detect)      | `--no-worktree` |
-| `orchestrate`           | worktree on for parallel tasks | `--no-worktree` |
+| `ycc:code-review` (PR mode) | worktree on                    | `--no-worktree` |
+| `ycc:review-fix`            | worktree on                    | `--no-worktree` |
+| `ycc:plan`                  | annotations emitted            | `--no-worktree` |
+| `ycc:prp-plan`              | annotations emitted            | `--no-worktree` |
+| `ycc:parallel-plan`         | annotations emitted            | `--no-worktree` |
+| `ycc:plan-workflow`         | annotations emitted            | `--no-worktree` |
+| `ycc:prp-implement`         | worktree on (auto-detect)      | `--no-worktree` |
+| `ycc:implement-plan`        | worktree on (auto-detect)      | `--no-worktree` |
+| `ycc:orchestrate`           | worktree on for parallel tasks | `--no-worktree` |
 
 The legacy `--worktree` flag remains accepted on every skill as a silent no-op
 (it now matches the default). Existing pipelines and documentation that pass
@@ -62,12 +62,12 @@ the review artifact _into the active worktree_ at
 `<worktree>/docs/prps/reviews/pr-<N>-review.md`, then commits and pushes it to
 the PR's head branch. Linear store mode writes the gitignored cache
 `<worktree>/.ycc/artifacts/<slug>/reviews/pr-<N>-review.md`, saves it as a
-Linear Document, and never commits it. See the `code-review` skill
+Linear Document, and never commits it. See the `ycc:code-review` skill
 (`SKILL.md`) for the full lifecycle (draft→ready promotion, artifact
 commit+push, post-review worktree removal, opt-outs `--keep-draft` and
 `--keep-worktree`).
 
-`review-fix` follows: it discovers the artifact in the active worktree's
+`ycc:review-fix` follows: it discovers the artifact in the active worktree's
 review location (`docs/prps/reviews/` or `.ycc/artifacts/*/reviews/`) first,
 then falls back to the main repo for in-flight artifacts written under the
 previous contract.
@@ -176,7 +176,7 @@ hooks` installs), which defaults to
 
 By default the feature worktree is placed on a new `feat/<feature>` branch
 created from `HEAD`. Skills that need to isolate an **existing** branch (e.g.,
-`code-review` checking out a PR head) pass `--base-ref`:
+`ycc:code-review` checking out a PR head) pass `--base-ref`:
 
 ```bash
 # Default — new branch from HEAD
@@ -300,9 +300,9 @@ location of the plan becomes ambiguous.
 
 Artifacts covered by the always-move rule:
 
-- `docs/prps/plans/<name>.plan.md` (from `prp-plan`)
-- `docs/plans/<feature>/parallel-plan.md` (from `parallel-plan` / `plan-workflow`)
-- `docs/plans/<feature>/shared.md` (from `plan-workflow`)
+- `docs/prps/plans/<name>.plan.md` (from `ycc:prp-plan`)
+- `docs/plans/<feature>/parallel-plan.md` (from `ycc:parallel-plan` / `ycc:plan-workflow`)
+- `docs/plans/<feature>/shared.md` (from `ycc:plan-workflow`)
 - Any companion research artifact emitted in the same `docs/plans/<feature>/`
   directory before commit
 

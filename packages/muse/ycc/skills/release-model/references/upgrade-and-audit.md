@@ -5,7 +5,7 @@
 - Upgrade
 - Audit
 
-Detailed procedures for `release-model --upgrade` and `--audit`. `$STATE`, `$UPDATE`,
+Detailed procedures for `ycc:release-model --upgrade` and `--audit`. `$STATE`, `$UPDATE`,
 `$SIGNALS`, and `$TEMPLATE` are the paths defined in `SKILL.md`.
 
 ## Upgrade
@@ -96,8 +96,8 @@ Read-only. Gather: `$STATE --repo "$ROOT" get` (exit code included),
 | 3   | Trunk and maintenance exist on origin     | parsed                          | error    | `git push origin <tag>^{commit}:refs/heads/<branch>` or remove it from the state                                 |
 | 4   | Each maintenance `X.Y` has a tag          | release-branches                | warn     | Tag `vX.Y.0` was never cut: freeze the branch (`$UPDATE --freeze`) or tag it                                     |
 | 5   | Newest minor tag has a maintenance branch | release-branches                | error    | Cut-over commands (SKILL.md Phase 7) for the newer `X.Y`, then `$UPDATE --add-maintenance`                       |
-| 6   | Every `release/*` is in the state         | release-branches                | warn     | `$UPDATE --add-maintenance <branch>` or retire it (`/git-cleanup`)                                           |
-| 7   | Trunk-only still fits                     | trunk-only                      | info     | `older_line_patched=1` or `release_branches` set → `/release-model --upgrade`                                |
+| 6   | Every `release/*` is in the state         | release-branches                | warn     | `$UPDATE --add-maintenance <branch>` or retire it (`/ycc:git-cleanup`)                                           |
+| 7   | Trunk-only still fits                     | trunk-only                      | info     | `older_line_patched=1` or `release_branches` set → `/ycc:release-model --upgrade`                                |
 | 8   | No long-lived branches                    | `long_lived_branches` set       | warn     | Land the work in small PRs behind a flag (`branching-model.md#rules`, rule 2)                                    |
 | 9   | No sync merges on the trunk               | `sync_merges_recent > 0`        | warn     | List them with `git log --first-parent --merges -n 200 --format='%h %s' origin/<trunk>`; stop the habit (rule 3) |
 | 10  | Backport labels exist                     | release-branches, gh usable     | warn     | `gh label create "<label>" --description "Cherry-pick to release/X.Y"`                                           |

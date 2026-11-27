@@ -5,7 +5,7 @@
 - Sequential prompt (`PARALLEL_MODE=false` — default)
 - Parallel prompt (`PARALLEL_MODE=true`)
 
-Use the Agent tool with `subagent_type: "planner"`. In the prompt, include:
+Use the Agent tool with `subagent_type: "ycc/planner"`. In the prompt, include:
 
 - The user's original request (verbatim)
 - Any file paths or context they referenced

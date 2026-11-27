@@ -1,6 +1,6 @@
 # Signals and proposal
 
-How `release-model` turns `collect-signals.sh` output into a proposal. The script
+How `ycc:release-model` turns `collect-signals.sh` output into a proposal. The script
 header documents every key; this file covers how the skill uses them.
 
 ## Model suggestion

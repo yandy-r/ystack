@@ -29,7 +29,7 @@ R9 and R10 apply only when the repo has a `RELEASING.md`
 (`~/.local/share/ycc/muse/ycc/ycc-shared/scripts/release-state.sh get` prints
 `present=1`). Without one, R1–R8 are the whole rule set. A malformed state block
 (exit 2) stops the audit before any rule runs: show the parse error and point at
-`/release-model --audit`.
+`/ycc:release-model --audit`.
 
 ---
 
@@ -263,7 +263,7 @@ into maintenance lines, and make backports unreviewable.
 branch, commit hash and subject. It never changes a candidate's
 classification, never blocks a deletion, and never produces a cleanup
 command. The suggested fix is to rebase topic branches onto
-`origin/<trunk>` and to move fixes between lines with `/backport`.
+`origin/<trunk>` and to move fixes between lines with `/ycc:backport`.
 
 ---
 

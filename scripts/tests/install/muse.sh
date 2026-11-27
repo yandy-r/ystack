@@ -79,6 +79,11 @@ echo "== install.sh: muse --package and a missing CLI =="
 
 home="$(new_home)"
 stub_muse "${home}"
+install_must_succeed "${home}" install --target muse --package ycc
+assert_contains "$(cat "${home}/muse-calls.log")" "plugins install ${home}/.local/share/ycc/muse/ycc --scope user" "muse --package ycc installs the skills, commands and agents plugin"
+unset YCC_MUSE_BIN
+home="$(new_home)"
+stub_muse "${home}"
 install_must_succeed "${home}" install --target muse --package ycc-mcp
 assert_contains "$(cat "${home}/muse-calls.log")" "plugins install ${home}/.local/share/ycc/muse/ycc-mcp" "muse --package ycc-mcp installs that plugin"
 assert_not_contains "$(cat "${home}/muse-calls.log")" "muse/ycc --scope" "muse --package installs only the named plugin"

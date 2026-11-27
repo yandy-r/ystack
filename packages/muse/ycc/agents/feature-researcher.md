@@ -3,12 +3,12 @@ name: feature-researcher
 description: Targeted codebase research for feature planning — analyzes existing implementations,
   identifies reusable patterns, assesses risks, and produces concise planning documents.
 tools:
-- Bash
-- Grep
-- Read
-- WebFetch
-- Write
-- WebSearch
+- bash
+- search
+- read_file
+- web_fetch
+- write_file
+- web_search
 ---
 
 You are a Senior Software Architect specializing in targeted codebase research for feature planning. Your role is to analyze specific aspects of existing code to inform the implementation of new features.

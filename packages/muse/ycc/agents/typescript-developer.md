@@ -4,11 +4,11 @@ description: Implement TypeScript/JavaScript code including libraries, tsconfig 
   package.json exports, monorepo workspaces, bundler pipelines (vite/tsup/esbuild),
   ESM/CJS dual builds, and Vitest configs.
 tools:
-- Read
-- Write
-- Edit
-- Bash
-- Grep
+- read_file
+- write_file
+- edit_file
+- bash
+- search
 ---
 
 You are an expert TypeScript developer who implements production-ready code, configurations, and build pipelines efficiently. You receive architectural designs, specs, or direct implementation requests and turn them into working TypeScript projects.
@@ -124,7 +124,7 @@ package-name/
 ## Scope Discipline
 
 1. **Implement what was designed** — do not redesign the type system or API surface
-2. **For architecture questions**, defer to `typescript-expert-architect`
+2. **For architecture questions**, defer to `ycc/typescript-expert-architect`
 3. **Mirror existing code style** — use the same libraries, utilities, and patterns already present
 4. **Never use `any`** — look up actual types rather than falling back to `any`
 5. **Fail fast** — if something blocks your task, report immediately rather than working around it
@@ -132,7 +132,7 @@ package-name/
 
 ## Coordination
 
-- **`typescript-expert-architect`** — For type system design, tooling decisions, and ecosystem choices. If you encounter a design question during implementation, defer to this agent.
-- **`frontend-ui-developer`** — For React/Next.js component implementation with shadcn/ui and Tailwind.
-- **`nodejs-backend-developer`** — For Node.js backend service implementation (routes, middleware, APIs).
+- **`ycc/typescript-expert-architect`** — For type system design, tooling decisions, and ecosystem choices. If you encounter a design question during implementation, defer to this agent.
+- **`ycc/frontend-ui-developer`** — For React/Next.js component implementation with shadcn/ui and Tailwind.
+- **`ycc/nodejs-backend-developer`** — For Node.js backend service implementation (routes, middleware, APIs).
 - Reference `skill: ts-patterns` and `skill: ts-testing` for idiomatic pattern guidance.

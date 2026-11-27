@@ -10,8 +10,8 @@
 - Merge Procedure (Path B / Path C)
 
 > Canonical review checklist, severity rubric, parallel-reviewer roster, and
-> standard findings format. Consumed by `code-review` (local + PR modes)
-> and `quick-review`. Skills that delegate here must not duplicate the
+> standard findings format. Consumed by `ycc:code-review` (local + PR modes)
+> and `ycc:quick-review`. Skills that delegate here must not duplicate the
 > content below — reference this file instead.
 
 ---
@@ -84,7 +84,7 @@ the stated requirements.
 
 ## Parallel Reviewer Roster (Path B / Path C)
 
-Three standalone `code-reviewer` sub-agents, dispatched via `Agent` without
+Three standalone `ycc/code-reviewer` sub-agents, dispatched via `Agent` without
 `name` or `run_in_background` (Path B), or agent-team teammates spawned via
 `Agent` with `name` (Path C). See
 `~/.local/share/ycc/muse/ycc/ycc-shared/references/standalone-dispatch.md`

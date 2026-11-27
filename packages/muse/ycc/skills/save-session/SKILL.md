@@ -158,5 +158,5 @@ Then test with Postman — the response should include a `Set-Cookie` header.
 
 - Each session gets its own file — never append to a previous session's file
 - The "What Did NOT Work" section is the most critical — future sessions will blindly retry failed approaches without it
-- The file is meant to be read by Claude at the start of the next session via `/resume-session`
+- The file is meant to be read by Claude at the start of the next session via `/ycc:resume-session`
 - Store, filename form, and file format are owned by `~/.local/share/ycc/muse/ycc/ycc-shared/references/session-state.md` — follow it for any new session file

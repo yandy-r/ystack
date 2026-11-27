@@ -21,7 +21,7 @@ The helper echoes the prepared branch name on success.
 | _(RELEASING.md)_ Fetch fails, or plan-only dirty files block it    | Warns on stderr and falls back to `git checkout -b feat/<slug>` from HEAD                                                                              |
 | _(RELEASING.md)_ On `release/*`                                    | Exits 2 asking whether this is a release-only fix; `--allow-existing-feature-branch` does not bypass it                                                |
 | _(RELEASING.md)_ On `release/*` with `--allow-release-branch`      | Switches to an existing local `feat/<slug>`, else `git checkout -b feat/<slug>` from the release branch (no fetch)                                     |
-| _(RELEASING.md)_ Malformed state block (`release-state.sh` exit 2) | Exits 1 with the parse error; fix it with `/release-model --audit`                                                                                 |
+| _(RELEASING.md)_ Malformed state block (`release-state.sh` exit 2) | Exits 1 with the parse error; fix it with `/ycc:release-model --audit`                                                                                 |
 | On another feature branch                                          | Exits 2; re-run with `--allow-existing-feature-branch` after confirming with the user                                                                  |
 | On trunk with unrelated dirty files                                | Exits 1; stop and ask the user to stash or commit first                                                                                                |
 

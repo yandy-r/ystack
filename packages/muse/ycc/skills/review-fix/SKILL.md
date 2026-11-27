@@ -9,8 +9,8 @@ argument-hint: '[--parallel | --team] [--severity <level>] [--no-worktree] [--dr
 
 # Review Fix
 
-Apply fixes for saved `/code-review` artifacts: filter findings, group
-into dependency-safe batches, dispatch `review-fixer` agents, update the
+Apply fixes for saved `/ycc:code-review` artifacts: filter findings, group
+into dependency-safe batches, dispatch `ycc/review-fixer` agents, update the
 artifact's Status fields in place, write a fix report. Adapted from
 PRPs-agentic-eng by Wirasm. The artifact is the source of truth; never modify
 a finding's `Suggested fix` — mark it `Failed` and let the human decide.
@@ -23,7 +23,7 @@ Extract flags from `$ARGUMENTS` before treating the remainder as the input:
 
 | Flag                 | Effect                                                                                                                             |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `--parallel`         | Standalone `review-fixer` sub-agents in parallel per batch; fail-stop between batches                                          |
+| `--parallel`         | Standalone `ycc/review-fixer` sub-agents in parallel per batch; fail-stop between batches                                          |
 | `--team`             | Claude Code only; same fan-out via implicit agent team (flat task graph, per-batch spawn + shutdown)                               |
 | `--severity <level>` | Minimum severity: CRITICAL/HIGH/MEDIUM/LOW; default HIGH                                                                           |
 | `--dry-run`          | Print the fix plan and stop. No dispatch, no file changes. With `--team` also print team name and per-batch roster (no tool calls) |
@@ -106,7 +106,7 @@ path in local mode (Phase 6); in linear mode abort here, before any write:
 
 Error paths:
 
-- Nothing found: `Error: No review artifact found.` + `Run /code-review first to produce a review artifact.`
+- Nothing found: `Error: No review artifact found.` + `Run /ycc:code-review first to produce a review artifact.`
 - Missing explicit path: `Error: review file not found: <path>`
 - Unparseable: stop with
   `Error: Review file has no parseable findings or is not in the expected format.`
@@ -163,11 +163,11 @@ Scan for `^## Worktree Setup`:
   `PARENT_PATH` (parent worktree, `- **Parent**: <path> (branch: <branch>)`)
   and `PARENT_BRANCH`. Missing directory:
   `Error: parent worktree <path> is declared in the review artifact but does not exist.` +
-  `Re-run /code-review --worktree <N> to recreate it, then retry.`
+  `Re-run /ycc:code-review --worktree <N> to recreate it, then retry.`
 - Absent + `WORKTREE_MODE=false` → `WORKTREE_ACTIVE=false`; continue.
 - Absent + forced `--worktree`: for `pr-<N>-review.md` resolve PR head and run
   `setup-worktree.sh parent <repo> pr-<N> --base-ref <head>`. For
-  `local-*-review.md`: `Error: --worktree cannot be force-applied to a local review artifact that was produced without worktree isolation. Re-run /code-review --worktree to regenerate.`
+  `local-*-review.md`: `Error: --worktree cannot be force-applied to a local review artifact that was produced without worktree isolation. Re-run /ycc:code-review --worktree to regenerate.`
 
 ## Phase 2 — FILTER
 
@@ -196,7 +196,7 @@ If `DRY_RUN=true` and `AGENT_TEAM_MODE=false`, stop here. Print a reminder:
 
 ```
 Dry run complete. To apply fixes, re-run without --dry-run:
-  /review-fix ${STORE_FLAG} $REVIEW_SELECTOR [--parallel | --team] [--severity <level>]
+  /ycc:review-fix ${STORE_FLAG} $REVIEW_SELECTOR [--parallel | --team] [--severity <level>]
 ```
 
 If `DRY_RUN=true` and `AGENT_TEAM_MODE=true`, defer the final exit to Phase 4 C.2 so the team name and per-batch teammate roster can be printed alongside the fix plan. Do NOT proceed to any team/task/agent tool calls.
@@ -283,8 +283,8 @@ Start the output with this literal heading:
 
 Report source path, report path, mode, eligible/fixed/failed/skipped/open
 counts, updated statuses, validation results, next steps
-(`/code-review <target>` re-review, then commit the fixed files by name:
-`/prp-commit <fixed files>`, never a stage-everything commit). Linear mode:
+(`/ycc:code-review <target>` re-review, then commit the fixed files by name:
+`/ycc:prp-commit <fixed files>`, never a stage-everything commit). Linear mode:
 when the rule-only `.gitignore` check (artifact-store.md > Reviews) holds for
 `<checkout>`, print
 `Note: <checkout>/.gitignore gained the .ycc/artifacts/ rule from the artifact store; leave it out of PR commits.`
@@ -314,7 +314,7 @@ Also print an `Open remaining: <M - X - Y>` line.
   note `stale line — file modified since review`.
 - Interrupted runs resume cleanly: statuses update incrementally; re-runs skip
   Fixed/Failed.
-- No recursive new-finding scan; re-run `/code-review` after fixes.
+- No recursive new-finding scan; re-run `/ycc:code-review` after fixes.
 
 ## /goal pairing
 

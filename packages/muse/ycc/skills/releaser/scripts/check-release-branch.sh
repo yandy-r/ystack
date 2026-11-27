@@ -13,7 +13,7 @@
 #   --branch NAME  branch being released (default: git rev-parse --abbrev-ref HEAD)
 #
 # Rules (see the shared branching-model reference, "Models"):
-#   no RELEASING.md   no check; a note on stderr suggests /release-model
+#   no RELEASING.md   no check; a note on stderr suggests /ycc:release-model
 #   trunk-only        every release is cut from the trunk
 #   release-branches  X.Y.0 (minor/major, incl. pre-releases) from the trunk;
 #                     X.Y.Z with Z > 0 from release/X.Y, which must be listed
@@ -97,7 +97,7 @@ fi
 UPDATE_SCRIPT="$(cd "$SHARED_SCRIPTS" && pwd)/release-state-update.sh"
 # Single-quoted: the Codex generator rewrites this to its own skill syntax, which
 # must stay literal rather than expand as a shell variable.
-RELEASE_MODEL_CMD='/release-model'
+RELEASE_MODEL_CMD='/ycc:release-model'
 
 VERSION_RE='^v?([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
 if [[ ! "$VERSION" =~ $VERSION_RE ]]; then

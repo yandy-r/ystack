@@ -11,7 +11,7 @@ argument-hint: '[--team] [--description "..."] [--dry-run] [--store=local|linear
 
 Deep research skill for application features. Goes beyond codebase analysis to research external APIs, business logic, technical specifications, UX considerations, and generate actionable recommendations. Dispatches 7 researchers in parallel — standalone sub-agents by default, or an agent team with `--team` (Claude Code only) where teammates share findings with each other.
 
-**Operational context:** Dispatch api-researcher, business-analyzer, tech-designer, ux-researcher, security-researcher, practices-researcher, and recommendations-agent; write seven research-*.md files plus feature-spec.md at paths resolved through the artifact store, never docs/prps/. Linear mode (default) uses `.ycc/artifacts/[feature-name]/`; local mode keeps `docs/plans/[feature-name]/`. Use /prp-spec for lightweight single-pass PRP specs.
+**Operational context:** Dispatch api-researcher, business-analyzer, tech-designer, ux-researcher, security-researcher, practices-researcher, and recommendations-agent; write seven research-*.md files plus feature-spec.md at paths resolved through the artifact store, never docs/prps/. Linear mode (default) uses `.ycc/artifacts/[feature-name]/`; local mode keeps `docs/plans/[feature-name]/`. Use /ycc:prp-spec for lightweight single-pass PRP specs.
 
 ## Workflow Integration
 
@@ -410,9 +410,9 @@ Each research file should: focus on its specific domain, include concrete exampl
 
 2. **Do NOT output to `docs/prps/`**: Write only to the resolved feature directory (`docs/plans/[feature-name]/` in local mode, `.ycc/artifacts/[feature-name]/` in linear mode). The `docs/prps/` tree belongs to the PRP workflow (`prp-prd`, `prp-spec`, `prp-plan`, `prp-implement`). Even if the user's working directory is `docs/prps/` or any subdirectory, always use the resolver-selected output path.
 
-3. **Do NOT generate a single file**: The minimum correct output is 8 files (7 research + 1 spec). If about to write only one file, STOP — the user likely wants the lightweight PRP spec skill. Redirect them to `/prp-spec`.
+3. **Do NOT generate a single file**: The minimum correct output is 8 files (7 research + 1 spec). If about to write only one file, STOP — the user likely wants the lightweight PRP spec skill. Redirect them to `/ycc:prp-spec`.
 
-4. **Do NOT conflate with PRP spec generation**: If the user wants a lightweight single-pass spec without the 7-researcher pipeline, they want `/prp-spec`, not this skill. This skill is the heavyweight multi-agent research track regardless of dispatch mode.
+4. **Do NOT conflate with PRP spec generation**: If the user wants a lightweight single-pass spec without the 7-researcher pipeline, they want `/ycc:prp-spec`, not this skill. This skill is the heavyweight multi-agent research track regardless of dispatch mode.
 
 ## Important Notes
 

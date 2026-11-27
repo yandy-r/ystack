@@ -17,7 +17,7 @@ conventional commits, plans platform/architecture artifacts, and — on request 
 generates a GitHub Actions release workflow or audits an existing one. It emits the
 exact `git tag`, `git push`, and `gh release create` commands the user runs.
 
-> **Not for this bundle.** For `ycc` bundle releases use `bundle-release`, which is
+> **Not for this bundle.** For `ycc` bundle releases use `ycc:bundle-release`, which is
 > scoped to this repo's `plugin.json` + `marketplace.json` version-parity contract.
 
 ## Hard Safety (non-negotiable)
@@ -55,7 +55,7 @@ Parse `$ARGUMENTS`:
 - **--ci-config** / **--ci-config=generate** — scaffold
   `.github/workflows/release.yml`. Fails if one already exists unless
   `--ci-config=audit` is also requested.
-- **--ci-config=audit** — invoke the `releaser` agent to read existing release
+- **--ci-config=audit** — invoke the `ycc/releaser` agent to read existing release
   workflow(s) and emit an optimization report. Read-only.
 - **--platform=\<name\>** — explicit toolchain override (`node`, `python`, `go`,
   `rust`, `docker`, `generic`). Skips auto-detection. Useful for monorepos.
@@ -106,7 +106,7 @@ branch and backport detail covers `references/release-branches.md`.
 Three modes: `--ci-config=generate` fails on an existing release-like workflow, else
 copies the language template from `references/ci-templates/` (quality gate
 `references/ci-optimization-checklist.md`) and writes the required workflow README
-entry; `--ci-config=audit` delegates to the `releaser` agent with workflow paths,
+entry; `--ci-config=audit` delegates to the `ycc/releaser` agent with workflow paths,
 detected language/build system, expected matrix, and the full checklist inline in
 the prompt, then saves the report to `docs/prps/reviews/ci-release-audit.md`; no flag
 skips with the reminder that this is separate from `--ci`. Read

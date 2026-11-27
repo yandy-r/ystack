@@ -68,7 +68,7 @@ Local mode: read the stripped plan path (`PLAN_PATH`) exactly as before; extract
 
 ```
 Error: Plan file not found or invalid.
-Run /prp-plan <feature-description> to create a plan first.
+Run /ycc:prp-plan <feature-description> to create a plan first.
 ```
 
 Linear mode: follow artifact-store.md **Implementation skills > Resolve and hydrate** for kind `prp-plan` before branch preparation (`resolve-artifact-store.sh ${STORE_FLAG} --shell`, reading `ARTIFACT_STORE=`; Linear call gate; Lookup; Load); set `PLAN_PATH` to the absolute cache path and read its `tasks` map (rebuilt in memory when missing). If `DRY_RUN=true`, do not use `--ensure`, write the cache, or run Load's push/Conflict steps: reuse an existing cache file read-only, or fetch the body into a `mktemp` file outside the repository and use that as `PLAN_PATH`. A missing plan follows Lookup step 7 (ask, listing what was tried) — never report "not found" without querying Linear. Parse the selected file as above.
@@ -105,7 +105,7 @@ git pull --rebase origin $(git branch --show-current) 2>/dev/null || true
 
 ## Phase 3 — EXECUTE
 
-Branch on `EXECUTION_MODE` chosen in Phase 1. In linear mode, read `references/linear-sync.md` now and apply it (orchestrator only; `implementor` subagents never call Linear).
+Branch on `EXECUTION_MODE` chosen in Phase 1. In linear mode, read `references/linear-sync.md` now and apply it (orchestrator only; `ycc/implementor` subagents never call Linear).
 
 ### Path A — Sequential Execution
 
@@ -119,7 +119,7 @@ Process each task from Step-by-Step Tasks in order:
 ### Parallel Batch Execution
 
 For standalone parallel execution, use common batching from standalone-dispatch.md §9; the plan's `Batches` table and task `BATCH: BN` fields select tasks. Read `references/agent-task-prompt.md` once before dispatch for the full ACTION/IMPLEMENT/MIRROR/IMPORTS/GOTCHA/VALIDATE prompt and Patterns to Mirror excerpt.
-Dispatch one `Agent` call per task in one parallel message: `subagent_type="implementor"`, `description="<task title>"`, `prompt="<complete task spec and Patterns to Mirror excerpt>"`. Use the shared foreground result contract for the batch.
+Dispatch one `Agent` call per task in one parallel message: `subagent_type="ycc/implementor"`, `description="<task title>"`, `prompt="<complete task spec and Patterns to Mirror excerpt>"`. Use the shared foreground result contract for the batch.
 Every prompt includes `Working directory: ${WT_PARENT_PATH}` when `WORKTREE_ACTIVE=true`, otherwise `Working directory: ${REPO_ROOT}`. Apply standalone-dispatch §8.3 working-directory rules; no per-agent worktree isolation.
 With `--team`, use agent-team-dispatch.md §8.2 instead, with the same prompt and working directory.
 
@@ -189,7 +189,7 @@ Read `references/validation-and-failures.md` when any type-check, test, lint, bu
 
 ## /goal pairing and Next Steps
 
-Read `references/report-output.md` (Goal pairing) for the condition template; read `~/.local/share/ycc/muse/ycc/ycc-shared/references/goal-pairing.md` before relying on a `/goal` loop. Done conditions use printed signals, not file paths. Next: `/code-review`, `/prp-commit`, `/prp-pr`, or `/prp-plan <next-phase>`.
+Read `references/report-output.md` (Goal pairing) for the condition template; read `~/.local/share/ycc/muse/ycc/ycc-shared/references/goal-pairing.md` before relying on a `/goal` loop. Done conditions use printed signals, not file paths. Next: `/ycc:code-review`, `/ycc:prp-commit`, `/ycc:prp-pr`, or `/ycc:prp-plan <next-phase>`.
 
 ## References — read when
 

@@ -1,13 +1,13 @@
 # Bootstrap Mapping
 
 Canonical mapping from the blueprint's machine-readable **Bootstrap** section to
-`/init` and `/formatters` flags. This is the single source of truth shared by the
+`/ycc:init` and `/ycc:formatters` flags. This is the single source of truth shared by the
 `blueprint` GENERATE phase and any future `--from-spec` reader. Keep it in sync with the
 flag surfaces of `ycc/skills/init/SKILL.md` and `ycc/skills/formatters/SKILL.md`.
 
 ## Key → Flag Table
 
-| Bootstrap key         | Values                                                          | `/init` flag            | `/formatters` flag                                       | Notes                                                                       |
+| Bootstrap key         | Values                                                          | `/ycc:init` flag            | `/ycc:formatters` flag                                       | Notes                                                                       |
 | --------------------- | --------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------- |
 | `profile`             | `rust \| ts-node \| python \| go \| mixed \| empty`             | `--profile=<value>`         | `--profile=<value>`                                          | The only language vocabulary `init` accepts. Coerce out-of-vocab answers.   |
 | `secondary_languages` | comma list (e.g. `python, shell`)                               | (informs `mixed`)           | per-stack flags (below)                                      | Drives multi-stack gitignore / style activation.                            |
@@ -40,26 +40,26 @@ orchestrated `--profile=<value>` call cannot fail.
 
 The interview asks: _"Will older versions need patches after a newer release ships?"_
 
-| Answer                                          | `release_model`    | `/init` flag                   |
+| Answer                                          | `release_model`    | `/ycc:init` flag                   |
 | ----------------------------------------------- | ------------------ | ---------------------------------- |
 | No — fixes ship in the next release             | `trunk-only`       | `--release-model=trunk-only`       |
 | Yes — users stay on older minors that need them | `release-branches` | `--release-model=release-branches` |
 | Not sure yet                                    | `undecided`        | `--release-model`                  |
 
 `init` handles the flag in its **Phase 5.5**: with a value it runs
-`release-model --model <value> --yes`; bare, it runs `release-model` so the skill
+`ycc:release-model --model <value> --yes`; bare, it runs `ycc:release-model` so the skill
 proposes a model and confirms it. Either way `init` skips the step when `RELEASING.md`
 already exists. Rules behind both models:
 `~/.local/share/ycc/muse/ycc/ycc-shared/references/branching-model.md`.
 
 ## init Already Chains formatters
 
-`/init --formatters` invokes the `formatters` skill at its **Phase 6.5**, passing
+`/ycc:init --formatters` invokes the `ycc:formatters` skill at its **Phase 6.5**, passing
 through `--dry-run` and `--force`. Therefore:
 
-- The single line `/init --profile=<p> --templates --git --formatters` is usually enough
+- The single line `/ycc:init --profile=<p> --templates --git --formatters` is usually enough
   to scaffold docs + GitHub + git + a baseline formatter bundle.
-- Emit a **separate** `/formatters …` line only when you need richer formatter options
+- Emit a **separate** `/ycc:formatters …` line only when you need richer formatter options
   that `init` does not forward — `--ci`, specific stack flags, or `--hooks`.
 
 ## Worked Example
@@ -82,6 +82,6 @@ release_model    = trunk-only
 Derived commands:
 
 ```bash
-/init --profile=ts-node --templates --git --formatters --release-model=trunk-only
-/formatters --profile=ts-node --ts --python --shell --ci --hooks
+/ycc:init --profile=ts-node --templates --git --formatters --release-model=trunk-only
+/ycc:formatters --profile=ts-node --ts --python --shell --ci --hooks
 ```

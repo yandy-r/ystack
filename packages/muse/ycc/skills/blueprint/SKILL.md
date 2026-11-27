@@ -12,7 +12,7 @@ argument-hint: '[project idea] (blank = start with questions) [--update] [--dry-
 > The whole-software charter. Sits at the top of the funnel — upstream of `prp-prd`, `prp-spec`, and every other planning
 > skill. Produces ONE durable source-of-truth spec for an entire piece of software, then bootstraps the project from it.
 
-**Operational context:** Write the whole-project source of truth to the resolved `blueprint` artifact through Foundation, Grounding, Scope, Tech Stack, Architecture, and Generate gates; its machine-readable Bootstrap section drives /init and /formatters. This is upstream of per-feature prp-prd and prp-spec.
+**Operational context:** Write the whole-project source of truth to the resolved `blueprint` artifact through Foundation, Grounding, Scope, Tech Stack, Architecture, and Generate gates; its machine-readable Bootstrap section drives /ycc:init and /ycc:formatters. This is upstream of per-feature prp-prd and prp-spec.
 
 **Input**: `$ARGUMENTS`
 
@@ -39,14 +39,14 @@ Parse from `$ARGUMENTS`:
 
 - `--update` — re-run over the existing resolved blueprint; diff-and-merge instead of overwrite.
 - `--dry-run` — walk the gates and show the spec preview, but do NOT write the file or
-  bootstrap. If set, also pass `--dry-run` through to any orchestrated `/init` call.
+  bootstrap. If set, also pass `--dry-run` through to any orchestrated `/ycc:init` call.
 - `--store=local|linear` — parse and strip before interpreting the project idea; retain the exact override as `STORE_FLAG` (empty when absent), reject invalid/conflicting overrides, and forward `${STORE_FLAG}` to every resolver call.
 
 ```
 DETECT → INITIATE → FOUNDATION → GROUNDING → SCOPE → TECH STACK → ARCHITECTURE → GENERATE → HANDOFF
 ```
 
-Each phase builds on previous answers. Grounding uses the `prp-researcher` agent for
+Each phase builds on previous answers. Grounding uses the `ycc/prp-researcher` agent for
 dual-mode (market + codebase) discovery. Every `[GATE]` means: present the questions via
 `AskUserQuestion`, then WAIT for the user before proceeding. Do not batch gates together.
 
@@ -142,7 +142,7 @@ Ask (present all at once):
 
 ## Phase 3: GROUNDING — Market & Context
 
-Dispatch **`prp-researcher`** via the **`Agent`** tool, in **dual (market + codebase) mode**, to investigate:
+Dispatch **`ycc/prp-researcher`** via the **`Agent`** tool, in **dual (market + codebase) mode**, to investigate:
 
 - Comparable products/systems and how they're typically built (their stacks are useful
   priors for the Tech Stack phase)
@@ -188,7 +188,7 @@ Ask:
 ## Phase 5: TECH STACK — Decisions That Drive Bootstrap
 
 > This phase is gated on its own because its answers are the ONLY ones that map 1:1 to
-> `/init` and `/formatters` flags. They must be unambiguous. Use the Phase 3
+> `/ycc:init` and `/ycc:formatters` flags. They must be unambiguous. Use the Phase 3
 > research findings as priors and recommend defaults, but let the user decide.
 
 Ask:
@@ -196,18 +196,18 @@ Ask:
 > **Tech Stack:**
 >
 > 1. **Primary language**: one of `rust | ts-node | python | go | mixed | empty`
->    (these are the values `/init` understands — pick the closest fit).
+>    (these are the values `/ycc:init` understands — pick the closest fit).
 > 2. **Secondary languages** (for mixed stacks): e.g. shell, python alongside ts.
 > 3. **Package manager**: e.g. pnpm/npm/yarn, uv/poetry/pip, cargo, go mod.
 > 4. **Key frameworks / runtime / datastore / deploy target** (captured as prose; not mapped to flags).
-> 5. **CI from day one?** (yes → `/formatters --ci`, `/init --templates`)
+> 5. **CI from day one?** (yes → `/ycc:formatters --ci`, `/ycc:init --templates`)
 > 6. **Formatter/lint stacks to enable** (defaults follow the language: ts/python/rust/go/docs/shell).
 > 7. **GitHub conventions**: issue + PR templates? (`--templates`)
 > 8. **Git conventions**: conventional commits + pre-commit hooks? (`--git`, `--hooks`)
 > 9. **Release model**: Will older versions need patches after a newer release ships?
 >    `trunk-only` (no — every release, fixes included, ships from the trunk) |
 >    `release-branches` (yes — each minor gets a `release/X.Y` branch for patches) |
->    `undecided` (let `/release-model` propose one from the repo). (`--release-model`)
+>    `undecided` (let `/ycc:release-model` propose one from the repo). (`--release-model`)
 
 **Coercion rule**: if the primary-language answer is outside
 `rust | ts-node | python | go | mixed | empty`, coerce to the nearest valid value and record
@@ -336,7 +336,7 @@ target — each with a one-line rationale. Note any reconciliation with a detect
 
 ## Bootstrap
 
-<!-- MACHINE-CONSUMABLE: drives /init and /formatters. -->
+<!-- MACHINE-CONSUMABLE: drives /ycc:init and /ycc:formatters. -->
 <!-- See references/bootstrap-mapping.md for the canonical key→flag table. -->
 
 | Key                 | Value                                     | Maps to                               |
@@ -355,8 +355,8 @@ target — each with a one-line rationale. Note any reconciliation with a detect
 ### Derived Commands
 
 ```bash
-{e.g. /init --profile=ts-node --templates --git --formatters --release-model=trunk-only}
-{e.g. /formatters --profile=ts-node --ts --python --shell --ci --hooks}
+{e.g. /ycc:init --profile=ts-node --templates --git --formatters --release-model=trunk-only}
+{e.g. /ycc:formatters --profile=ts-node --ts --python --shell --ci --hooks}
 ```
 
 ## Research Summary
@@ -371,9 +371,9 @@ _Status: source of truth_
 ````
 
 When filling the Bootstrap table and Derived Commands, follow
-`references/bootstrap-mapping.md`. Note that `/init --formatters` already chains
-`formatters` at its Phase 6.5, so the single `init` line is usually sufficient; emit the
-explicit `/formatters …` line only when richer formatter flags (`--ci`, specific stacks,
+`references/bootstrap-mapping.md`. Note that `/ycc:init --formatters` already chains
+`ycc:formatters` at its Phase 6.5, so the single `init` line is usually sufficient; emit the
+explicit `/ycc:formatters …` line only when richer formatter flags (`--ci`, specific stacks,
 `--hooks`) are wanted.
 
 ---
@@ -386,15 +386,15 @@ Otherwise ask via `AskUserQuestion`:
 
 > **Bootstrap this project now?**
 >
-> - **(a) Run it** — invoke `/init` (+ `formatters`) with the derived flags.
+> - **(a) Run it** — invoke `/ycc:init` (+ `formatters`) with the derived flags.
 > - **(b) Show commands** — print the derived commands; I'll run them myself.
 > - **(c) Skip** — just keep the blueprint.
 
-- **On (a)**: invoke the **`init`** skill, passing the derived flags from the Bootstrap
+- **On (a)**: invoke the **`ycc:init`** skill, passing the derived flags from the Bootstrap
   section (e.g. `--profile=ts-node --templates --git --formatters --release-model=trunk-only`).
-  `init` chains `release-model` via its Phase 5.5 and `formatters` via its Phase 6.5.
+  `init` chains `ycc:release-model` via its Phase 5.5 and `ycc:formatters` via its Phase 6.5.
   If the blueprint run was `--dry-run`, pass `--dry-run` through. If `init` or `formatters` errors, **record the failure and continue** — then emit the
-  manual recovery command (`/formatters …`). Never report full success on partial failure.
+  manual recovery command (`/ycc:formatters …`). Never report full success on partial failure.
 - **On (b)**: print the Derived Commands block and stop.
 
 ### Output Summary
@@ -410,13 +410,13 @@ Otherwise ask via `AskUserQuestion`:
 
 ### Bootstrap
 
-{One of: "Ran /init … (init: ok, formatters: ok)", the derived commands, or "Skipped".}
+{One of: "Ran /ycc:init … (init: ok, formatters: ok)", the derived commands, or "Skipped".}
 
 ### Next Steps
 
 - In local mode, reference the repo-relative `docs/blueprint.md` as the canonical project description in `AGENTS.md`, never the absolute machine path above. In linear mode, reference the Linear Document `<slug> · blueprint` (with its URL), never the gitignored cache path.
-- Per module in the breakdown, run `/prp-spec` (or `/prp-prd` for fuzzy ones)
-  to produce a feature spec, then `/prp-plan` → `/prp-implement`.
+- Per module in the breakdown, run `/ycc:prp-spec` (or `/ycc:prp-prd` for fuzzy ones)
+  to produce a feature spec, then `/ycc:prp-plan` → `/ycc:prp-implement`.
 ```
 
 ---
@@ -426,11 +426,11 @@ Otherwise ask via `AskUserQuestion`:
 `blueprint` is the **charter altitude** — upstream of all feature work:
 
 ```
-IDEA → /blueprint → resolved blueprint artifact
-            └─Bootstrap→ /init [--profile --templates --git --formatters --release-model]
-                                 ├─Phase 5.5→ /release-model [--model <m> --yes] → RELEASING.md
-                                 └─Phase 6.5→ /formatters [--ci --hooks --<stack>]
-       per-module → /prp-prd | /prp-spec → /prp-plan → /prp-implement
+IDEA → /ycc:blueprint → resolved blueprint artifact
+            └─Bootstrap→ /ycc:init [--profile --templates --git --formatters --release-model]
+                                 ├─Phase 5.5→ /ycc:release-model [--model <m> --yes] → RELEASING.md
+                                 └─Phase 6.5→ /ycc:formatters [--ci --hooks --<stack>]
+       per-module → /ycc:prp-prd | /ycc:prp-spec → /ycc:prp-plan → /ycc:prp-implement
 ```
 
 - `blueprint` answers "what is this whole software and how do we stand it up?" ONCE per project.
@@ -444,5 +444,5 @@ IDEA → /blueprint → resolved blueprint artifact
 - **SCOPE_BOUNDED**: Explicit MVP, capabilities, and non-goals.
 - **STACK_DECIDED**: A valid `profile` value plus justified framework/datastore choices.
 - **DECOMPOSED**: Modules with responsibilities and a high-level data flow.
-- **BOOTSTRAP_ACTIONABLE**: The Bootstrap section yields a runnable `/init` command.
+- **BOOTSTRAP_ACTIONABLE**: The Bootstrap section yields a runnable `/ycc:init` command.
 - **HONEST**: Unknowns marked `TBD — needs research`, not invented.

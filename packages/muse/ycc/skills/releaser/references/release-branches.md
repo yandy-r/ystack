@@ -9,7 +9,7 @@
 - Forward-porting a patch's CHANGELOG entry
 - Release CI fixes on a release branch
 
-How `releaser` applies a project's release model. The rules themselves (trunk-only
+How `ycc/releaser` applies a project's release model. The rules themselves (trunk-only
 vs. release-branches, maintenance and frozen branches, backport labels) live in
 `~/.local/share/ycc/muse/ycc/ycc-shared/references/branching-model.md`; this file only
 covers what the releaser does with them. Without a `RELEASING.md`, none of this applies
@@ -55,14 +55,14 @@ Stdout is one `<status>\t<pr>\t<merge_sha>\t<title>\t<detail>` row per PR checke
 | Result                   | Action                                                                                                                                               |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | exit 0                   | Print `Backport gate: clean (<n> backported PRs verified, fixes since <ref> reviewed)` and continue.                                                 |
-| exit 3, `missing` rows   | STOP. The fix is labelled for this line but not on `release/X.Y`. Next step: `/backport --pending --to release/X.Y`, merge, re-run the releaser. |
+| exit 3, `missing` rows   | STOP. The fix is labelled for this line but not on `release/X.Y`. Next step: `/ycc:backport --pending --to release/X.Y`, merge, re-run the releaser. |
 | exit 3, `in-review` rows | STOP. The backport PR is open. Next step: review and merge it, then re-run the releaser.                                                             |
 | exit 3, `unlabelled`     | Ask (below). Handle them after any `missing`/`in-review` rows are resolved.                                                                          |
 | exit 1                   | STOP with its stderr. When `gh` is missing or not authenticated, also show step 0 of the project's patch steps in `RELEASING.md` (below).            |
 | exit 2                   | STOP, as for a malformed state in Phase 0.                                                                                                           |
 
 `--pending` skips a `missing` row whose detail is `backport #M closed unmerged`; retry
-that one with `/backport <PR#> --to release/X.Y`.
+that one with `/ycc:backport <PR#> --to release/X.Y`.
 
 For `unlabelled` rows, ask once (AskUserQuestion), listing every row:
 
@@ -74,7 +74,7 @@ Do any of them affect vX.Y?
 
 - **None; they only fix trunk code** → continue. Record the answer in the Phase 9 summary.
 - **Some do; stop** → STOP and print, per PR the user names:
-  `gh pr edit <pr> --add-label <label>`, then `/backport --pending --to release/X.Y`.
+  `gh pr edit <pr> --add-label <label>`, then `/ycc:backport --pending --to release/X.Y`.
 
 A STOP can be overridden only by an explicit user instruction to ship without specific
 PRs. Ask again with those PR numbers listed, and name them under "Deferred backports" in
@@ -87,7 +87,7 @@ commands in step 0 of their `RELEASING.md` patch steps and confirms the result e
 `--dry-run` runs the audit, which is read-only, and puts its table in the plan without
 asking. The first gate on a line that was patched before this check existed should sweep
 the whole line: re-run with `--since vX.Y.0` when the user asks for it or when
-`RELEASING.md` has no step 0 (see `/release-model --audit`, check 13).
+`RELEASING.md` has no step 0 (see `/ycc:release-model --audit`, check 13).
 
 ## Previous tag and changelog range
 

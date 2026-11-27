@@ -51,7 +51,7 @@ PR_LIMIT=1000
 NAME="backport-audit"
 # Single-quoted: the Codex generator rewrites this to its own skill syntax, which
 # must stay literal rather than expand as a shell variable.
-RELEASE_MODEL_CMD='/release-model'
+RELEASE_MODEL_CMD='/ycc:release-model'
 
 _error() {
   echo "${NAME}: $*" >&2

@@ -47,7 +47,7 @@ Follow these rules exactly or the parser will misread cells:
 | capability        | claude    | cursor      | codex       | opencode    | omp         | pi          | antigravity | muse        |
 | ----------------- | --------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- |
 | SKILLS            | supported | supported   | supported   | supported   | partial     | unsupported | partial     | partial     |
-| COMMANDS          | supported | partial     | unsupported | supported   | partial     | unsupported | partial     | partial     |
+| COMMANDS          | supported | partial     | unsupported | supported   | partial     | unsupported | partial     | supported   |
 | AGENTS            | supported | partial     | supported   | supported   | partial     | unsupported | partial     | partial     |
 | HOOKS.PreToolUse  | supported | partial     | unsupported | partial     | unsupported | unsupported | unsupported | unsupported |
 | HOOKS.PostToolUse | supported | partial     | unsupported | partial     | unsupported | unsupported | unsupported | unsupported |
@@ -672,27 +672,28 @@ folder). `YCC_WORKTREE_ROOT` still overrides it. Source: `worktree-strategy.md` 
 Unsupported by design. The Claude Code mod API has no Antigravity equivalent.
 
 **SKILLS:muse**
-Partial (CLI-verified, not run in a live model session). The generated `ycc` plugin
+Partial. The generated `ycc` plugin
 (`packages/muse/ycc`, `.claude-plugin/plugin.json`) ships `skills/<name>/SKILL.md` with `name`,
 `description`, `disable-model-invocation` (listed by Muse as `user-invocable-only`) and
-`argument-hint`; Muse names them `plugin:ycc:<name>`, and `/ycc:<name>` references are rewritten to
-`/<name>`. Muse caches each install under a content digest, so `${CLAUDE_PLUGIN_ROOT}` paths are
+`argument-hint`; Muse ids are `plugin:ycc:<name>` and the TUI runs each as `/ycc:<name>`, so
+`/ycc:<name>` references are kept. A live session ran a skill and its `ycc-shared` helper. Partial
+because Muse caches each install under a content digest, so `${CLAUDE_PLUGIN_ROOT}` paths are
 rewritten to the ycc-owned copy `~/.local/share/ycc/muse/ycc/` (`_shared` ships as `ycc-shared/`).
 `allowed-tools` grants nothing on Muse and is dropped. Source:
 `docs/internal/spikes/muse-runtime-contract.md` decisions 2–5.
 
 **COMMANDS:muse**
-Partial. The `ycc` plugin ships one `commands/<skill>.md` entrypoint per public skill (Muse imports
-claude-compatible commands as supported); each tells Muse to load `plugin:ycc:<skill>` and follow it
-with `$ARGUMENTS`. Command invocation has not been run in a live session yet. Source: spike decision 4.
+Supported. Muse lists every plugin skill as the slash command `/ycc:<name>` (the Claude spelling,
+verified in the interactive TUI), so `/ycc:<skill>` references are kept and no separate `commands/`
+wrappers ship: they would list each command twice. Source: spike decision 4.
 
 **AGENTS:muse**
 Partial. Agents ship as `agents/<name>.md` through the claude-compatible manifest (the native one
-rejects `agents`) with `name`, `description` and `tools`; Muse names them `ycc/<name>` and holds
-them for review until `muse plugins approve ycc`, which the installer runs. Muse projects `Read`,
-`Grep`, `Write`, `Edit`, `Bash`, `WebFetch` and `WebSearch`; `Glob` has no projection and is dropped,
-`Bash(...)` becomes `Bash`, `mcp__*` tools are dropped, and `color` is never emitted (an unknown
-color silently disables an agent). `ycc/settings/models.json` `targets.muse.agentModels` maps every
+rejects `agents`) with `name`, `description` and `tools`; Muse names them `ycc/<name>` (skill text names them that way) and holds
+them for review until `muse plugins approve ycc`, which the installer runs. `tools` use Muse's
+native names (`read_file`, `search`, `write_file`, `edit_file`, `bash`, `web_fetch` and `web_search`); Claude names validate but are refused at spawn time
+(verified live). `Glob` and `Grep` map to `search`, `Bash(...)` to `bash`, `mcp__*` tools are
+dropped, and `color` is never emitted (an unknown color silently disables an agent). `ycc/settings/models.json` `targets.muse.agentModels` maps every
 model to `inherit`. Source: spike decision 6.
 
 **HOOKS.PreToolUse:muse**

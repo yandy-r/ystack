@@ -16,8 +16,8 @@
 - Release Mode
 - References
 
-Consumed by `git-workflow` (Phase 6), `prp-pr` (Phase 7), `pr-autofix`
-(Phase 7), and `releaser` (Phase 8.5) when the `--ci` flag is passed. This
+Consumed by `ycc:git-workflow` (Phase 6), `ycc:prp-pr` (Phase 7), `ycc:pr-autofix`
+(Phase 7), and `ycc/releaser` (Phase 8.5) when the `--ci` flag is passed. This
 document defines the policy, caps, failure classification, termination signals,
 audit schema, and loop protocol that all four skills implement.
 
@@ -158,7 +158,7 @@ Exit code 1 is reserved for argument/usage errors and never appears in the loop.
 
 ## Loop Protocol
 
-The SKILL.md files for `git-workflow` and `prp-pr` implement the
+The SKILL.md files for `ycc:git-workflow` and `ycc:prp-pr` implement the
 following LLM-side loop. The script is a single-shot checker; the loop lives in
 the skill.
 
@@ -347,7 +347,7 @@ auto-fixing is not converging.
 
 ## Release Mode
 
-Used by `releaser` Phase 8.5 (`--ci`) **only** after a successful
+Used by `ycc/releaser` Phase 8.5 (`--ci`) **only** after a successful
 `--publish --confirm` has actually created/edited the release on GitHub. The
 loop watches the release-event workflow run for the published tag, not a PR.
 
@@ -362,7 +362,7 @@ loop watches the release-event workflow run for the published tag, not a PR.
 | Default-branch refusal | Refuses if head == default branch     | N/A (release runs are not branch-scoped); but loop still refuses to push fixes to default branch when branch protection forbids it     |
 | Audit log key field    | `"pr": <number>`                      | `"tag": "<vX.Y.Z>"`                                                                                                                    |
 | Audit log path         | `~/.claude/session-data/ci-watch/`    | `~/.claude/session-data/release-ci-watch/`                                                                                             |
-| Fix-agent type         | `pr-comment-fixer`                | `release-fix-applier`                                                                                                              |
+| Fix-agent type         | `ycc/pr-comment-fixer`                | `ycc/release-fix-applier`                                                                                                              |
 
 All other contract surfaces — exit codes, `RESULT=` values, classification
 categories, signature computation, recurrence/timeout/push caps, JSONL schema
@@ -419,7 +419,7 @@ re-cut.
 - **Never edit release artifacts**: `CHANGELOG.md`, files under `docs/releases/`,
   and version manifests (`package.json` version field, `pyproject.toml` version,
   `Cargo.toml` version) are immutable for the lifetime of the loop. The fix
-  agent (`release-fix-applier`) refuses these paths.
+  agent (`ycc/release-fix-applier`) refuses these paths.
 - **Never edit `.github/workflows/*.yml`** unless the failed step is itself a
   workflow-file syntax error.
 - **Branch-protection check before push**: before committing on `main` (or

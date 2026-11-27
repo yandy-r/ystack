@@ -6,7 +6,7 @@
 # script emits a uniform unsupported notice and exits 2.
 #
 # Purpose:
-#   Single-source fetcher used by pr-autofix. Pulls every actionable
+#   Single-source fetcher used by ycc:pr-autofix. Pulls every actionable
 #   comment surface on a PR — review threads (file/line anchored) and
 #   top-level issue conversation comments — and emits one JSONL record per
 #   comment-of-interest.

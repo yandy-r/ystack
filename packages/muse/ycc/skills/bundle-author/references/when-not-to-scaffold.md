@@ -22,7 +22,7 @@ new one. If the name no longer fits the expanded scope, rename the directory.
 maintenance surface with no ongoing value.
 
 **Do this instead:** Run the task using a direct prompt. For read-only codebase
-questions, delegate directly to the `codebase-advisor` agent. Only scaffold when the
+questions, delegate directly to the `ycc/codebase-advisor` agent. Only scaffold when the
 same workflow will be reused repeatedly.
 
 ---

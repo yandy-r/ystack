@@ -138,7 +138,7 @@ plugins, mods):
               ycc, ycc-mcp and ycc-rules carry skills, agents, MCP and rules)
     muse      base, skills, agents, commands, mcp, plugins → base  rules→rules
               settings, hooks, mods → no-op (the plugins ycc, ycc-mcp and
-              ycc-rules carry skills, commands, agents, MCP servers and rules)
+              ycc-rules carry skills (/ycc:<name>), agents, MCP servers and rules)
 
 Remove ('remove' subcommand):
   Undoes what the selected steps installed, for every target and intent (same

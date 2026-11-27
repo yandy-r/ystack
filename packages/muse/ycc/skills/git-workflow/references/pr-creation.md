@@ -55,7 +55,7 @@ Follow `~/.local/share/ycc/muse/ycc/ycc-shared/references/pr-base-and-backport.m
 2. `bash "$GUARD" sync-check --base "$BASE"` — exit 3: do not create the PR; show the reason, cite `branching-model.md#rules`, stop (Phase 6 does not run).
 3. After the title is drafted (Step 25): `bash "$GUARD" backport-label --base "$BASE" --title "<title>"`; on `backport=1` ask `Backport to <branch>? (yes/no)` and remember the answer for Step 29.
 
-Exit 2 from any call (malformed `RELEASING.md`) stops Phase 5 with the parse error and `/release-model --audit`.
+Exit 2 from any call (malformed `RELEASING.md`) stops Phase 5 with the parse error and `/ycc:release-model --audit`.
 
 ## Steps 23–24: Template and context
 
@@ -213,7 +213,7 @@ Draft: same command with `--draft` added before `--web`. `--web` opens the PR in
 
 ## Step 29: Results
 
-**Success**: capture PR number and URL; show the link; note draft vs ready; if the Step 22b backport prompt was answered yes, add the `backport:X.Y` label and print `After #<N> merges, run /backport <N>` (see the shared reference).
+**Success**: capture PR number and URL; show the link; note draft vs ready; if the Step 22b backport prompt was answered yes, add the `backport:X.Y` label and print `After #<N> merges, run /ycc:backport <N>` (see the shared reference).
 
 **Failures**:
 

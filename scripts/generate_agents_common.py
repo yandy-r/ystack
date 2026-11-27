@@ -24,6 +24,7 @@ Key porting facts (vs Claude Code):
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from generate_codex_common import (
     expand_quoted_home,
@@ -110,6 +111,7 @@ def apply_agents_text_transforms(
     output_suffix: str = ".md",
     install_root: str = HOME_INSTALL_AGENTS_ROOT,
     worktree_default_line: str = WORKTREE_DEFAULT_AGENTS_LINE,
+    namespace_rewrite: Callable[[str], str] | None = None,
 ) -> str:
     """Apply the agents-target rewrite pass (minimal, tool-neutral subset).
 
@@ -119,6 +121,8 @@ def apply_agents_text_transforms(
     (see generate_codex_common.expand_quoted_home). ``install_root`` and
     ``worktree_default_line`` let another flat-skills bundle (Antigravity) reuse
     this pass with its own install location and worktree root.
+    ``namespace_rewrite`` replaces the default ``/ycc:foo -> /foo`` namespace strip
+    for a runtime that keeps its own ycc namespace (Muse).
     """
     text, verbatim_blocks = protect_marked_verbatim_blocks(text)
     output = fix_mcp_malformed_tokens(text)
@@ -145,7 +149,9 @@ def apply_agents_text_transforms(
     output = expand_quoted_home(output, quoted_home_root(install_root), output_suffix)
 
     # Slash-command and agent namespace references (/ycc:foo -> /foo).
-    if rewrite_runtime_aliases:
+    if rewrite_runtime_aliases and namespace_rewrite is not None:
+        output = namespace_rewrite(output)
+    elif rewrite_runtime_aliases:
         output = re.sub(
             r"/ycc:([a-zA-Z0-9-]+)",
             lambda match: f"/{map_namespaced_reference(match.group(1), aliases)}",
@@ -180,6 +186,7 @@ def transform_skill_markdown(
     worktree_default_line: str = WORKTREE_DEFAULT_AGENTS_LINE,
     optional_keys: tuple[str, ...] = AGENTS_SKILL_KEYS,
     emit_invocation_flag: bool = False,
+    namespace_rewrite: Callable[[str], str] | None = None,
 ) -> str:
     """Rewrite a SKILL.md with agentskills.io frontmatter: `name` + required
     `description` (compressed to <=1024 chars), optional `license`,
@@ -197,6 +204,7 @@ def transform_skill_markdown(
             aliases,
             install_root=install_root,
             worktree_default_line=worktree_default_line,
+            namespace_rewrite=namespace_rewrite,
         ).strip()
     )
     transformed_body = apply_agents_text_transforms(
@@ -204,6 +212,7 @@ def transform_skill_markdown(
         aliases,
         install_root=install_root,
         worktree_default_line=worktree_default_line,
+        namespace_rewrite=namespace_rewrite,
     )
 
     payload: dict[str, object] = {

@@ -3,11 +3,11 @@ name: implementor
 description: Implement specific software engineering tasks assigned from a master
   plan with planning documentation context. Receives a single task and executes it.
 tools:
-- Read
-- Write
-- Edit
-- Bash
-- Grep
+- read_file
+- write_file
+- edit_file
+- bash
+- search
 ---
 
 You are a focused software implementation specialist. Your sole purpose is to implement the exact changes specified in your assigned task - nothing more, nothing less.

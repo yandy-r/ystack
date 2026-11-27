@@ -44,7 +44,7 @@ Parse and strip `--parallel`, `--team`, `--enhanced`, `--dry-run`, `--no-worktre
 | `--dry-run`     | Prints selected standalone/team roster and exits without spawning. Requires --team or --enhanced.                                      |
 | `--no-worktree` | Suppresses Worktree Setup and per-task annotations. Default emits one shared feature path, no children.                                |
 | `--worktree`    | Legacy silent no-op.                                                                                                                   |
-| `--visual`      | After approval, writes otherwise-inline plan then renders via visual-plan. Dry-run prints intent only.                             |
+| `--visual`      | After approval, writes otherwise-inline plan then renders via ycc:visual-plan. Dry-run prints intent only.                             |
 
 `--parallel`, `--enhanced`, `--team`, `--no-worktree` compose independently. Enhanced alone works in every bundle; only team combinations need Claude Code.
 
@@ -61,7 +61,7 @@ Read request and referenced files. Ambiguous request: ask one focused question b
 
 | AGENT_TEAM_MODE | ENHANCED_MODE | Path                                                                                            |
 | --------------- | ------------- | ----------------------------------------------------------------------------------------------- |
-| false           | false         | A: single planner via Agent, with request/context and Plan Format confirmation instruction. |
+| false           | false         | A: single ycc/planner via Agent, with request/context and Plan Format confirmation instruction. |
 | false           | true          | C: five standalone personas.                                                                    |
 | true            | false         | B: three-persona team.                                                                          |
 | true            | true          | B enhanced: five-persona team.                                                                  |
@@ -103,7 +103,7 @@ Runs only after Step 4 confirmation, last; never substitutes for earlier phases.
 
 - Dry-run: print `visual generation would run`; no writes/invocation.
 - Otherwise derive `<slug>`: lowercase, replace non-[a-z0-9-] with hyphen, collapse/trim, cap 20, fallback untitled. Resolve the `prp-plan` artifact as below and write the confirmed plan verbatim to `$OUT`.
-- Invoke `visual-plan ${STORE_FLAG} <absolute-plan-path>`; surface its URL, localhost preview or `local files only`; do not derive output directory yourself.
+- Invoke `ycc:visual-plan ${STORE_FLAG} <absolute-plan-path>`; surface its URL, localhost preview or `local files only`; do not derive output directory yourself.
 
 1. Print the mode and read `ARTIFACT_STORE=` from stdout:
 
@@ -119,12 +119,12 @@ Runs only after Step 4 confirmation, last; never substitutes for earlier phases.
    mkdir -p "$(dirname "$OUT")"
    ```
 
-Shell state does not persist across tool calls; retain the printed mode and absolute path. Local mode keeps `docs/prps/plans/<slug>.plan.md` under the current checkout's git toplevel without identity frontmatter. Before writing in linear mode, follow artifact-store.md **Planning skills**: when document or task identity is missing, Lookup steps 3–6 and Load any hit, preserve identity and use Conflict before replacement, then Save with task sub-issues. Pass `$OUT` and `${STORE_FLAG}` to visual-plan. In linear mode print `/prp-implement --store=linear {resolved cached plan path or Linear Document URL}` as the next step.
+Shell state does not persist across tool calls; retain the printed mode and absolute path. Local mode keeps `docs/prps/plans/<slug>.plan.md` under the current checkout's git toplevel without identity frontmatter. Before writing in linear mode, follow artifact-store.md **Planning skills**: when document or task identity is missing, Lookup steps 3–6 and Load any hit, preserve identity and use Conflict before replacement, then Save with task sub-issues. Pass `$OUT` and `${STORE_FLAG}` to visual-plan. In linear mode print `/ycc:prp-implement --store=linear {resolved cached plan path or Linear Document URL}` as the next step.
 
 Read `~/.local/share/ycc/muse/ycc/ycc-shared/references/visual-mode.md` only when visual requested, for force-write-first terminal decorator contract.
 
 ## After approval
 
-Read `~/.local/share/ycc/muse/ycc/skills/plan/references/planning-tracks.md` when choosing execution/report/commit handoff or comparing planning tracks. Small parallel features can execute in conversation; rigorous report/validation/archive needs PRP-format file and `/prp-implement --parallel`. `implement-plan` consumes parallel-plan.md. Review via code-review; commit via git-workflow --commit or prp-commit.
+Read `~/.local/share/ycc/muse/ycc/skills/plan/references/planning-tracks.md` when choosing execution/report/commit handoff or comparing planning tracks. Small parallel features can execute in conversation; rigorous report/validation/archive needs PRP-format file and `/ycc:prp-implement --parallel`. `implement-plan` consumes parallel-plan.md. Review via code-review; commit via git-workflow --commit or prp-commit.
 
 Use plan for new features, architecture changes, complex refactors, multi-file work or ambiguous requirements. Internal-only changes can skip enhanced security/UX roster; exposure or user touchpoints justify it.

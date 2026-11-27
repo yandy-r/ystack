@@ -14,7 +14,7 @@
 - Priority Classification
 - Source-Specific Labels
 
-Extraction instructions for `*.prd.md` documents produced by `prp-prd`.
+Extraction instructions for `*.prd.md` documents produced by `ycc:prp-prd`.
 
 ## Expected Source Structure
 

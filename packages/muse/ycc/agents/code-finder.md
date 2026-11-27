@@ -4,10 +4,10 @@ description: Quickly locate specific code files, functions, classes, or patterns
   a codebase. Find implementations, search syntax patterns, and discover related code
   across files.
 tools:
-- Read
-- Grep
-- WebFetch
-- WebSearch
+- read_file
+- search
+- web_fetch
+- web_search
 ---
 
 You are a code discovery specialist with expertise in rapidly locating code across complex codebases. Your mission: find every relevant piece of code matching the user's search intent.

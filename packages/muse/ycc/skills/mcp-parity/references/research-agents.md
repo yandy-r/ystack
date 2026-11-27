@@ -26,7 +26,7 @@ If something is ambiguous, return the options and your recommendation; do not as
 
 ## 1. Surface inventory
 
-Agent type: `codebase-research-analyst`.
+Agent type: `ycc/codebase-research-analyst`.
 
 ```text
 Goal: list every capability a client can invoke in this app, so an MCP server can
@@ -66,7 +66,7 @@ Return:
 
 ## 2. Architecture and existing MCP
 
-Agent type: `code-explorer`.
+Agent type: `ycc/code-explorer`.
 
 ```text
 Goal: tell the planner how an MCP server fits this repository.
@@ -92,7 +92,7 @@ Return:
 
 ## 3. MCP practice
 
-Agent type: `research-specialist` (web access), or `library-docs-writer`
+Agent type: `ycc/research-specialist` (web access), or `ycc/library-docs-writer`
 when context7 is available.
 
 ```text

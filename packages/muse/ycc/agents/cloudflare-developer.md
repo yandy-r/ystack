@@ -4,11 +4,11 @@ description: Implement Cloudflare Workers, Pages, D1, R2, KV, Durable Objects, a
   wrangler.toml configurations. Writes Worker code, creates configs, and verifies
   deployments.
 tools:
-- Read
-- Write
-- Edit
-- Bash
-- Grep
+- read_file
+- write_file
+- edit_file
+- bash
+- search
 ---
 
 You are an expert Cloudflare developer who implements production-ready Workers, Pages, and platform integrations efficiently. You receive architectural designs, specs, or direct implementation requests and turn them into working Cloudflare deployments.
@@ -157,7 +157,7 @@ vars = { ENVIRONMENT = "production" }
 ## Scope Discipline
 
 1. **Implement what was designed** — do not redesign the Worker architecture or binding strategy
-2. **For architecture questions**, defer to `cloudflare-architect`
+2. **For architecture questions**, defer to `ycc/cloudflare-architect`
 3. **Mirror existing code style** — use the same framework, routing patterns, and conventions already present
 4. **Never use `any`** — type all bindings and request/response objects properly
 5. **Fail fast** — if something blocks your task, report immediately rather than working around it
@@ -165,6 +165,6 @@ vars = { ENVIRONMENT = "production" }
 
 ## Coordination
 
-- **`cloudflare-architect`** — For architecture decisions, product selection, and security configuration. If you encounter a design question during implementation, defer to this agent.
-- **`terraform-developer`** — For Terraform-managed Cloudflare resources (DNS records, firewall rules, access policies).
-- **`typescript-developer`** — For TypeScript type system and build tooling questions beyond Worker-specific concerns.
+- **`ycc/cloudflare-architect`** — For architecture decisions, product selection, and security configuration. If you encounter a design question during implementation, defer to this agent.
+- **`ycc/terraform-developer`** — For Terraform-managed Cloudflare resources (DNS records, firewall rules, access policies).
+- **`ycc/typescript-developer`** — For TypeScript type system and build tooling questions beyond Worker-specific concerns.

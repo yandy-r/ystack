@@ -40,7 +40,7 @@ You are a sharp product manager who:
 QUESTION SET 1 → GROUNDING → QUESTION SET 2 → RESEARCH → QUESTION SET 3 → GENERATE
 ```
 
-Each question set builds on previous answers. Grounding phases validate assumptions using the `prp-researcher` agent for dual-mode (codebase + market) discovery.
+Each question set builds on previous answers. Grounding phases validate assumptions using the `ycc/prp-researcher` agent for dual-mode (codebase + market) discovery.
 
 ---
 
@@ -78,7 +78,7 @@ Ask these questions (present all at once, user can answer together):
 
 ## Phase 3: GROUNDING — Market & Context Research
 
-After foundation answers, dispatch the **`prp-researcher`** agent via the **`Agent`** tool, in **market+codebase (dual) mode**, to investigate:
+After foundation answers, dispatch the **`ycc/prp-researcher`** agent via the **`Agent`** tool, in **market+codebase (dual) mode**, to investigate:
 
 - Similar products/features in the market
 - How competitors solve this problem
@@ -120,7 +120,7 @@ Based on foundation + research, ask:
 
 ## Phase 5: GROUNDING — Technical Feasibility
 
-Dispatch the **`prp-researcher`** agent again via the **`Agent`** tool, this time scoped to **technical feasibility**:
+Dispatch the **`ycc/prp-researcher`** agent again via the **`Agent`** tool, this time scoped to **technical feasibility**:
 
 - If a codebase exists, run two investigations:
   1. **Explore feasibility** — existing infrastructure that can be leveraged, similar patterns already implemented, integration points, dependencies, relevant config and type definitions
@@ -380,7 +380,7 @@ After generating, report:
 
 ### To Start Implementation
 
-Run: `/prp-plan {resolved absolute OUT path}`
+Run: `/ycc:prp-plan {resolved absolute OUT path}`
 
 This will automatically select the next pending phase and create an implementation plan.
 ```
@@ -402,7 +402,7 @@ This will automatically select the next pending phase and create an implementati
                           v
 +---------------------------------------------------------+
 |  GROUNDING: Market research, competitor analysis         |
-|  (dispatch prp-researcher dual-mode)                 |
+|  (dispatch ycc/prp-researcher dual-mode)                 |
 +---------------------------------------------------------+
                           |
                           v
@@ -413,7 +413,7 @@ This will automatically select the next pending phase and create an implementati
                           v
 +---------------------------------------------------------+
 |  GROUNDING: Technical feasibility, codebase exploration |
-|  (dispatch prp-researcher technical mode)            |
+|  (dispatch ycc/prp-researcher technical mode)            |
 +---------------------------------------------------------+
                           |
                           v
@@ -438,15 +438,15 @@ Path A (problem unclear): prp-prd  ──→ prp-plan → prp-implement
 Path B (problem clear):   prp-spec ──→ prp-plan → prp-implement
 ```
 
-Use `prp-prd` when the problem needs interactive discovery. Use `/prp-spec` when the problem is already clear and a lightweight, single-pass spec is sufficient.
+Use `prp-prd` when the problem needs interactive discovery. Use `/ycc:prp-spec` when the problem is already clear and a lightweight, single-pass spec is sufficient.
 
 After PRD generation:
 
-- Use `/prp-plan` to create implementation plans from PRD phases (this workflow is PRD-aware and will find the next pending phase)
-- Use `/prp-spec` for a lightweight single-pass spec when the problem is clear (parallel entry point — feeds into `prp-plan` directly)
-- Use `/plan` for simpler conversational planning without PRD structure
-- Use `/plan-workflow` for the heavyweight parallel-agent planning track instead
-- Use `/save-session` to preserve PRD context across sessions
+- Use `/ycc:prp-plan` to create implementation plans from PRD phases (this workflow is PRD-aware and will find the next pending phase)
+- Use `/ycc:prp-spec` for a lightweight single-pass spec when the problem is clear (parallel entry point — feeds into `prp-plan` directly)
+- Use `/ycc:plan` for simpler conversational planning without PRD structure
+- Use `/ycc:plan-workflow` for the heavyweight parallel-agent planning track instead
+- Use `/ycc:save-session` to preserve PRD context across sessions
 
 ## Success Criteria
 

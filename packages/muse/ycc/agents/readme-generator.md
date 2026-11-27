@@ -3,11 +3,11 @@ name: readme-generator
 description: Generate comprehensive README files for projects with proper structure,
   badges, installation instructions, and usage examples.
 tools:
-- Read
-- Grep
-- Write
-- Edit
-- Bash
+- read_file
+- search
+- write_file
+- edit_file
+- bash
 ---
 
 You are a README documentation specialist focusing on creating clear, comprehensive README files that help users and developers quickly understand and use a project.

@@ -24,8 +24,8 @@ Default: standalone parallel sub-agents.
 Missing subject: abort with usage and an example:
 
 ```text
-/deep-research [--team] [--output-dir "..."] [--dry-run] [--store=local|linear] <research-subject>
-/deep-research --dry-run "AI model deployment strategies"
+/ycc:deep-research [--team] [--output-dir "..."] [--dry-run] [--store=local|linear] <research-subject>
+/ycc:deep-research --dry-run "AI model deployment strategies"
 ```
 
 Require a focused topic. Sanitize the default directory name: lowercase, replace

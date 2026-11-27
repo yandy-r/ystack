@@ -120,9 +120,9 @@ suggestion to re-run with `--update`. See `flag-reference.md` for update semanti
 artifact.
 
 `has_releasing_md` is not part of that count. It drives the release-model phase: when it
-is `false`, the skill offers `release-model` (unless `--no-release-model`); when it
+is `false`, the skill offers `ycc:release-model` (unless `--no-release-model`); when it
 is `true`, the offer is skipped and the `AGENTS.md` "Branching & releases" section is
-rendered. The skill checks only that the file exists; `release-model --audit` validates
+rendered. The skill checks only that the file exists; `ycc:release-model --audit` validates
 its content.
 
 `artifact_store=linear|local|none` is the value of the first `store:` key in the project-root `.plans-config` (`none` when the file, the key, or a valid `linear`/`local` value is missing). Parsing strips `#` comments, trims surrounding spaces/tabs, then strips one matching pair of single or double quotes, like the resolver. It never strips carriage returns: a CRLF value remains invalid and reports `none`. The Bash 3.2 parser uses no pipelines. It reads only the root file, not parent directories or global config. Phase 5.6 skips setup only when this value is `linear` AND the root pointer is tracked (`git --literal-pathspecs -C <repo-root> ls-files --error-unmatch -- .plans-config`); otherwise `--artifact-store` / the offer decides, reusing existing hints. The "Planning artifacts" block is kept only for an already linear, tracked pointer or successful linear setup, not merely a file left by a failed run. The profile key is not part of the `--update` count.

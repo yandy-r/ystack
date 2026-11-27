@@ -8,7 +8,7 @@
 - Why three queries, not one
 - Suggestion blocks
 
-GitHub exposes three places where reviewers leave feedback on a pull request. `pr-autofix` reads from the two that are actionable per-comment, and uses the third only for in-progress detection.
+GitHub exposes three places where reviewers leave feedback on a pull request. `ycc:pr-autofix` reads from the two that are actionable per-comment, and uses the third only for in-progress detection.
 
 | Source                    | API surface                                   | File/line anchored? | Has thread state? | Resolvable? | Used by `pr-autofix`? |
 | ------------------------- | --------------------------------------------- | ------------------- | ----------------- | ----------- | --------------------- |
@@ -194,4 +194,4 @@ GitHub does NOT expose a single "every comment on this PR" query. The three surf
 
 GitHub supports inline suggestion blocks (` ```suggestion `) inside review comments. The REST endpoint `POST /repos/{owner}/{repo}/pulls/{N}/comments/{id}/suggestion/apply` (or the "Apply suggestion" button in the UI) commits the suggested change directly.
 
-**`pr-autofix` does NOT use this endpoint.** Vendor suggestion blocks are part of the untrusted comment body; we always re-derive the fix locally via the `pr-comment-fixer` agent. This is a deliberate safety choice — the suggestion block can contain any text the reviewer wants committed, with no review by the fixer.
+**`ycc:pr-autofix` does NOT use this endpoint.** Vendor suggestion blocks are part of the untrusted comment body; we always re-derive the fix locally via the `pr-comment-fixer` agent. This is a deliberate safety choice — the suggestion block can contain any text the reviewer wants committed, with no review by the fixer.

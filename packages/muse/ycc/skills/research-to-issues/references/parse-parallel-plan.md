@@ -12,7 +12,7 @@
 - Priority Classification
 - Source-Specific Labels
 
-Extraction instructions for `parallel-plan.md` documents produced by `parallel-plan` or `plan-workflow`.
+Extraction instructions for `parallel-plan.md` documents produced by `ycc:parallel-plan` or `ycc:plan-workflow`.
 
 ## Expected Source Structure
 

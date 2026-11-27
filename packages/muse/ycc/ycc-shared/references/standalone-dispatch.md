@@ -13,9 +13,9 @@
 9. Dependency Resolution and Batching
 10. Executing a Confirmed Plan
 
-Used by `prp-plan`, `deep-research`, `prp-implement`, `review-fix`,
-`quick-fix`, `orchestrate`, `feature-research`, `parallel-plan`,
-`shared-context`, `plan-workflow`, `clean`, and `git-workflow` for
+Used by `ycc:prp-plan`, `ycc:deep-research`, `ycc:prp-implement`, `ycc:review-fix`,
+`ycc:quick-fix`, `ycc:orchestrate`, `ycc:feature-research`, `ycc:parallel-plan`,
+`ycc:shared-context`, `ycc:plan-workflow`, `ycc:clean`, and `ycc:git-workflow` for
 **standalone** sub-agent fan-out (no shared team, no `--team` flag). This file documents
 the `Agent`-tool spawn/return contract. See `agent-team-dispatch.md` in this directory
 for the separate `Agent` with `name` lifecycle used by `--team`/Path C runs. Sections 8-10
@@ -97,7 +97,7 @@ For agents allowed to write a backstop artifact:
 3. Only if **both** the delivered report and the backstop artifact are empty/missing is the
    sub-agent considered to have failed (see §6).
 
-For **code-writing** sub-agents (e.g. `implementor`, `review-fixer`), there is no
+For **code-writing** sub-agents (e.g. `ycc/implementor`, `ycc/review-fixer`), there is no
 separate findings file — the "artifact" is the code changes already committed to disk,
 plus a final `STATUS:` line in the delivered report so the `Agent` result stays
 parseable (e.g. `STATUS: Fixed` / `STATUS: Failed: <reason>`).
@@ -280,6 +280,6 @@ rules (lowercase, non `[a-z0-9-]` to `-`, collapse, cap 20, fallback `untitled`)
 `prepare-feature-branch.sh`). The helper is idempotent, exits 1 on unrelated dirty tree, exits 2 on
 a different feature branch (`--allow-existing-feature-branch` after confirmation) or on `release/*`
 when `RELEASING.md` exists (`--allow-release-branch` for release-only fixes). Do not skip.
-Then process section 9 batches with one `implementor` `Agent` per step in one message; run the
+Then process section 9 batches with one `ycc/implementor` `Agent` per step in one message; run the
 project type-check and unit-test commands between batches; on failure stop and ask the user
 (`failure-recovery` class in `question-policy.md`).

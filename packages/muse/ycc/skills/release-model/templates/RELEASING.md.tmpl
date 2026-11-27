@@ -10,7 +10,7 @@ from somewhere else after the fact.
 ## Current state
 
 The block below is read by tools; the table is generated from it. Change both with
-`release-state-update.sh` (or `/release-model`), never by hand.
+`release-state-update.sh` (or `/ycc:release-model`), never by hand.
 
 {{STATE_BLOCK}}
 
@@ -35,7 +35,7 @@ The block below is read by tools; the table is generated from it. Change both wi
 {{#IF_TRUNK_ONLY}}
 4. **Every release comes from `{{TRUNK}}`.** Fixes ship in the next release; there are no
    maintenance branches and no backports. When an older version needs patches, upgrade the
-   model with `/release-model --upgrade` instead of branching ad hoc.
+   model with `/ycc:release-model --upgrade` instead of branching ad hoc.
 {{/IF_TRUNK_ONLY}}
 5. **No new long-lived branches.** Large work lands on `{{TRUNK}}` in small PRs. See
    [Unfinished work](#unfinished-work).
@@ -74,7 +74,7 @@ release that flips them.
 {{#IF_RELEASE_BRANCHES}}
 ## Backporting
 
-After the `{{TRUNK}}` PR is squash-merged, run `/backport <PR#>`, or by hand:
+After the `{{TRUNK}}` PR is squash-merged, run `/ycc:backport <PR#>`, or by hand:
 
 ```bash
 git fetch origin
@@ -115,7 +115,7 @@ Pre-releases of the next minor are tagged `vX.Y.0-beta.N` from `{{TRUNK}}`.
    labelled `backport:X.Y` needs a **merged** `Backport of #N` PR into `release/X.Y` (an
    open or closed one does not count). Every fix merged into `{{TRUNK}}` since the last
    `vX.Y.*` tag without the label gets a decision: backport it, or confirm it only fixes
-   trunk code. `/releaser` runs this check; `/backport --audit release/X.Y` runs it
+   trunk code. `/ycc:releaser` runs this check; `/ycc:backport --audit release/X.Y` runs it
    on its own. By hand:
 
    ```bash
@@ -145,7 +145,7 @@ Only the maintenance branches in the support window get patch releases.
 3. Publish the release notes.
 {{/IF_TRUNK_ONLY}}
 
-`/releaser` automates these steps and checks you are on the right branch.
+`/ycc:releaser` automates these steps and checks you are on the right branch.
 
 ## Planning
 

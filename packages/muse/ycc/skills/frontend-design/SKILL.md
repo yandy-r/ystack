@@ -146,6 +146,6 @@ Before delivering:
 
 ## Related ycc Skills
 
-- `frontend-patterns` — React/Next.js component, state, and animation patterns to back up the design
+- `ycc:frontend-patterns` — React/Next.js component, state, and animation patterns to back up the design
 
 **Remember**: Pick a direction, commit to it, and let typography and rhythm do the heavy lifting. Generic-looking UI is the failure mode — not "too bold."

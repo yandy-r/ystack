@@ -125,7 +125,7 @@ else
 fi
 if ! BASE_BRANCH=$("${BASE_CMD[@]}"); then
     echo -e "${RED}Error: could not resolve the PR base (see the RELEASING.md error above)${NC}" >&2
-    echo 'Fix the state block with /release-model --audit, or pass --base BRANCH.' >&2
+    echo 'Fix the state block with /ycc:release-model --audit, or pass --base BRANCH.' >&2
     exit 1
 fi
 

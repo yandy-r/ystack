@@ -24,12 +24,14 @@ Porting facts (vs Claude Code):
 - Skill frontmatter: ``name``, ``description``, ``disable-model-invocation``
   (Muse lists it as ``user-invocable-only``) and ``argument-hint``.
   ``allowed-tools`` is dropped: Muse grants nothing for it and warns.
-- Commands: the claude-compatible family imports ``commands/<name>.md``. Every
-  public skill (not ``user-invocable: false``) gets one thin entrypoint that tells
-  Muse to load ``plugin:ycc:<skill>`` and follow it with ``$ARGUMENTS``.
+- Namespace: Muse lists every plugin skill as the slash command ``/ycc:<name>``
+  (the Claude spelling), so ``/ycc:<skill>`` references stay as they are and no
+  ``commands/`` wrappers ship (they would duplicate each skill in the menu).
+  Muse agent ids are ``ycc/<agent>``, so ``ycc:<agent>`` references become that.
 - Agent frontmatter: ``name`` (``^[a-z]+(-[a-z]+)*$``), ``description``,
-  ``tools`` and an optional ``model``. Muse projects Claude tool names except
-  ``Glob`` (its ``search`` tool covers globbing, so ``Glob`` is dropped) and
+  ``tools`` and an optional ``model``. ``tools`` uses Muse's native names
+  (read_file, search, write_file, edit_file, bash, web_fetch, web_search): Claude
+  names validate but the runtime refuses to spawn the agent. Muse also
   silently refuses an agent whose ``color`` is outside its palette, so
   ``color`` is never emitted. ``model`` comes from models.json
   ``targets.muse.agentModels``; ``inherit`` omits it.
@@ -78,7 +80,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_ROOT = REPO_ROOT / "packages/muse"
 SOURCE_PLUGIN_PATH = REPO_ROOT / "ycc/.claude-plugin/plugin.json"
 SOURCE_AGENTS_DIR = REPO_ROOT / "ycc/agents"
-SOURCE_SKILLS_DIR = REPO_ROOT / "ycc/skills"
 SOURCE_MCP_PATH = REPO_ROOT / "mcp-configs/mcp.json"
 MODELS_PATH = REPO_ROOT / "ycc/settings/models.json"
 SOURCE_RULES_DIR = REPO_ROOT / "ycc/rules"
@@ -100,27 +101,38 @@ PACKAGES: dict[str, tuple[str, str]] = {
 CLAUDE_FAMILY = frozenset({"ycc"})
 
 MUSE_SKILL_KEYS = ("argument-hint",)
+_AGENT_REFERENCE = re.compile(r"(?<![/\w])ycc:([a-z0-9-]+)\b")
+
+
+def muse_namespace(text: str, aliases: Mapping[str, str]) -> str:
+    """Keep ``/ycc:<skill>`` (Muse's own spelling); ``ycc:<agent>`` -> ``ycc/<agent>``."""
+    return _AGENT_REFERENCE.sub(lambda m: f"ycc/{aliases[m.group(1)]}" if m.group(1) in aliases else m.group(0), text)
+
+
+AGENT_ALIASES = load_agent_aliases()
 SKILL_LAYOUT = SkillLayout(
     install_root=YCC_INSTALL_ROOT,
     worktree_default_line=WORKTREE_LINE,
     optional_keys=MUSE_SKILL_KEYS,
     emit_invocation_flag=True,
+    namespace_rewrite=lambda text: muse_namespace(text, AGENT_ALIASES),
 )
 
-# Claude tool -> the Claude tool names Muse projects onto its own tools
-# (read_file, search, write_file, edit_file, bash, web_fetch, web_search).
-# Closed map: an unknown source tool fails the run. Glob has no projection
-# (Muse's search covers globbing); scoped Bash(...) grants become plain Bash.
+# Claude tool -> Muse native tool names. Muse's validator also accepts Claude names
+# (it reports them as projected), but its runtime refuses to spawn such an agent
+# (`agent_definition_unavailable`), so the generated agents use native names only
+# (verified live on muse 1.4.25). Closed map: an unknown source tool fails the run.
+# Glob folds into search; scoped Bash(...) grants become plain bash.
 TOOL_MAP: dict[str, tuple[str, ...]] = {
-    "Read": ("Read",),
-    "Grep": ("Grep",),
-    "Glob": ("Grep",),
-    "Write": ("Write",),
-    "Edit": ("Edit",),
-    "NotebookEdit": ("Edit",),
-    "Bash": ("Bash",),
-    "WebFetch": ("WebFetch",),
-    "WebSearch": ("WebSearch",),
+    "Read": ("read_file",),
+    "Grep": ("search",),
+    "Glob": ("search",),
+    "Write": ("write_file",),
+    "Edit": ("edit_file",),
+    "NotebookEdit": ("edit_file",),
+    "Bash": ("bash",),
+    "WebFetch": ("web_fetch",),
+    "WebSearch": ("web_search",),
 }
 MUSE_TOOLS = frozenset(tool for tools in TOOL_MAP.values() for tool in tools)
 MUSE_MODELS = frozenset({"inherit", "opus", "sonnet", "haiku"})
@@ -233,7 +245,11 @@ def map_tools(tools: list[str], agent: str) -> list[str]:
 def muse_text(text: str, aliases: dict[str, str]) -> str:
     """The agents-target rewrite pass pointed at the owned Muse ycc copy."""
     return apply_agents_text_transforms(
-        text, aliases, install_root=YCC_INSTALL_ROOT, worktree_default_line=WORKTREE_LINE
+        text,
+        aliases,
+        install_root=YCC_INSTALL_ROOT,
+        worktree_default_line=WORKTREE_LINE,
+        namespace_rewrite=lambda value: muse_namespace(value, aliases),
     )
 
 
@@ -267,37 +283,6 @@ def agent_tree() -> Tree:
         tree[Path("agents") / path.name] = Payload(text.encode("utf-8"))
     if not tree:
         raise ValueError(f"{SOURCE_AGENTS_DIR}: no agents found")
-    return tree
-
-
-def public_skill(name: str) -> bool:
-    """True unless the source skill is ``_``-prefixed or ``user-invocable: false``."""
-    if name.startswith("_"):
-        return False
-    frontmatter, _body = parse_frontmatter((SOURCE_SKILLS_DIR / name / "SKILL.md").read_text(encoding="utf-8"))
-    return frontmatter.get("user-invocable") is not False
-
-
-def command_tree(skills: Tree) -> Tree:
-    """One ``commands/<skill>.md`` entrypoint per public skill."""
-    tree: Tree = {}
-    for rel, payload in sorted(skills.items()):
-        if rel.parts[0] != "skills" or rel.name != "SKILL.md" or len(rel.parts) != 3:
-            continue
-        name = rel.parts[1]
-        if not public_skill(name):
-            continue
-        frontmatter, _body = parse_frontmatter(payload.content.decode("utf-8"))
-        head: dict[str, object] = {"description": frontmatter["description"]}
-        if frontmatter.get("argument-hint"):
-            head["argument-hint"] = frontmatter["argument-hint"]
-        body = (
-            f"Load the `plugin:ycc:{name}` skill (`read_skill`) and follow its instructions"
-            " with these arguments:\n\n$ARGUMENTS\n"
-        )
-        tree[Path("commands") / f"{name}.md"] = Payload((dump_frontmatter(head) + "\n" + body).encode("utf-8"))
-    if not tree:
-        raise ValueError(f"{SOURCE_SKILLS_DIR}: no public skills found")
     return tree
 
 
@@ -424,8 +409,7 @@ def build() -> Tree:
     version = lockstep_version()
     servers, launchers = mcp_tree()
     tree: Tree = {Path("ycc/.claude-plugin/plugin.json"): json_payload(claude_manifest("ycc", version))}
-    skills = skill_tree()
-    for rel, payload in {**skills, **command_tree(skills), **agent_tree()}.items():
+    for rel, payload in {**skill_tree(), **agent_tree()}.items():
         tree[Path("ycc") / rel] = payload
     tree[Path("ycc-mcp/.muse-plugin/plugin.json")] = json_payload(native_manifest("ycc-mcp", version, servers))
     for rel, payload in launchers.items():

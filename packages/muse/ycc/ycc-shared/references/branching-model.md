@@ -11,7 +11,7 @@
 - How skills use this
 
 The canonical rules behind a project's `RELEASING.md`. Skills cite sections of this file
-instead of restating them. `release-model` generates `RELEASING.md` from these rules;
+instead of restating them. `ycc:release-model` generates `RELEASING.md` from these rules;
 `release-state.sh` reads the state block described in [State block](#state-block).
 
 ## Rules
@@ -50,7 +50,7 @@ These apply to both models.
   `backport:X.Y` label, and is cherry-picked to `release/X.Y` in its own PR.
 - Only branches inside the support window receive patches. Older ones are frozen.
 
-Upgrading from trunk-only to release-branches is `/release-model --upgrade`; it needs
+Upgrading from trunk-only to release-branches is `/ycc:release-model --upgrade`; it needs
 no history rewrite.
 
 ## Where does my change go?
@@ -78,12 +78,12 @@ git cherry-pick -x <squash-commit-sha-on-trunk>
 
 Open the PR into `release/X.Y` with the original title and `Backport of #N` in the body,
 then squash-merge it. Resolve conflicts minimally; if the fix needs real rework for the
-older code, write it as its own PR against `release/X.Y`. `/backport` automates this.
+older code, write it as its own PR against `release/X.Y`. `/ycc:backport` automates this.
 
 ### Before tagging a patch
 
 A patch `vX.Y.Z` is tagged only when `release/X.Y` has every fix meant for it. Right before
-the tag, `backport-audit.sh release/X.Y` (run by `/releaser` and `/backport --audit`)
+the tag, `backport-audit.sh release/X.Y` (run by `/ycc:releaser` and `/ycc:backport --audit`)
 checks two things:
 
 1. **Labelled:** every trunk PR with `backport:X.Y` has a **merged** twin in
@@ -143,10 +143,10 @@ human-owned and never rewritten.
 ## Missing or malformed state
 
 - **No `RELEASING.md`:** every skill behaves exactly as it did before this model existed.
-  Skills that pick branches or cut releases add one line suggesting `/release-model`.
-  `init`, `blueprint` and `releaser` offer to run it.
+  Skills that pick branches or cut releases add one line suggesting `/ycc:release-model`.
+  `ycc:init`, `ycc:blueprint` and `ycc/releaser` offer to run it.
 - **Malformed block** (`release-state.sh` exits 2): stop, show the parse error, and point
-  at `/release-model --audit`. Never guess a trunk from a broken block.
+  at `/ycc:release-model --audit`. Never guess a trunk from a broken block.
 - **A branch named in the state is missing on origin:** skills that need that branch
   (backport, a patch release) stop with the command that creates it; others continue.
 
@@ -160,4 +160,4 @@ human-owned and never rewritten.
 | `releaser`                  | `model`, `trunk`, `maintenance`  | Checks the release branch; creates `release/X.Y` on a minor; audits backports before a patch |
 | `backport`                  | `maintenance`, `backport_label`  | Cherry-picks labelled PRs to maintenance branches; `--audit` runs the pre-tag check          |
 | `git-cleanup`               | `trunk`, `maintenance`, `frozen` | Protects active branches; flags retired ones and sync merges                                 |
-| `init`, `blueprint`         | presence                         | Offer `release-model` when the file is missing                                           |
+| `init`, `blueprint`         | presence                         | Offer `ycc:release-model` when the file is missing                                           |

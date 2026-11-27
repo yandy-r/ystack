@@ -1,6 +1,6 @@
 # /goal pairing (--ci mode only)
 
-Pair this skill with the `/goal` session directive only in `--ci` mode. Without `--ci`, `/git-workflow` may stop after a local commit, push, or PR creation, and no long-running loop exists for `/goal` to drive. In `--ci` mode, Phase 6 runs the bounded CI auto-fix loop through the shared `ci-monitor.sh` contract, and `/goal` can keep the session moving through every `handoff` fix-and-push and `rerun-pending` flake retry.
+Pair this skill with the `/goal` session directive only in `--ci` mode. Without `--ci`, `/ycc:git-workflow` may stop after a local commit, push, or PR creation, and no long-running loop exists for `/goal` to drive. In `--ci` mode, Phase 6 runs the bounded CI auto-fix loop through the shared `ci-monitor.sh` contract, and `/goal` can keep the session moving through every `handoff` fix-and-push and `rerun-pending` flake retry.
 
 `RESULT=` markers tell the evaluator when to loop and when to stop:
 
@@ -11,7 +11,7 @@ Pair this skill with the `/goal` session directive only in `--ci` mode. Without 
 Recommended condition template (`--ci` mode):
 
 ```
-/goal Run /git-workflow --ci using the git-workflow workflow, continuing through
+/goal Run /ycc:git-workflow --ci using the ycc:git-workflow workflow, continuing through
 every handoff and rerun-pending iteration of the Phase 6 CI loop without returning control
 to me. Done when the transcript shows the final CI report with the PR number and URL,
 followed by the Goal Signals printed verbatim — PR_IN_SCOPE: PASS, PR_URL_PRINTED: PASS,

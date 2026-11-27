@@ -281,8 +281,8 @@ Milestones: {list with issue counts}
 | Unchanged | n     | -                   |
 
 Parity: {done + covered}/{tracked} capabilities exposed over MCP.
-Next: rerun /mcp-parity after API changes; implement issues with /prp-plan
-or /orchestrate.
+Next: rerun /ycc:mcp-parity after API changes; implement issues with /ycc:prp-plan
+or /ycc:orchestrate.
 ```
 
 Remove `$WORKDIR` unless `--keep-workdir`.

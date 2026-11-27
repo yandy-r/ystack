@@ -3,11 +3,11 @@ name: code-documenter
 description: Generate and maintain code documentation including inline comments, module-level
   docs, and architectural documentation.
 tools:
-- Read
-- Grep
-- Write
-- Edit
-- Bash
+- read_file
+- search
+- write_file
+- edit_file
+- bash
 ---
 
 You are a code documentation specialist focusing on adding high-quality inline documentation to source files. Your role is to improve code readability and maintainability through targeted documentation.

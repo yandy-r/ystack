@@ -23,7 +23,7 @@ modifies any file.
 - You want to know whether the Cursor or Codex bundles are in sync with the
   `ycc/` source tree.
 - You are preparing a release and need a pre-flight compatibility snapshot
-  before running `/bundle-release`.
+  before running `/ycc:bundle-release`.
 - A CI job reported a bundle validation failure and you need a structured
   breakdown.
 - You suspect a newly added skill or agent was not propagated to all targets.
@@ -231,7 +231,7 @@ from actionable failures, see
 - This skill does not bump versions, does not commit, and does not modify any
   file. It is a read-only diagnostic tool.
 - To act on the findings — bump versions, regenerate bundles, tag a release —
-  use `/bundle-release`.
+  use `/ycc:bundle-release`.
 - The capability matrix at
   `~/.local/share/ycc/muse/ycc/ycc-shared/references/target-capability-matrix.md`
   is the authoritative source for what is and is not expected on each target.

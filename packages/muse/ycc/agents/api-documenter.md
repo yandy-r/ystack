@@ -3,11 +3,11 @@ name: api-documenter
 description: Generate comprehensive API documentation from code, including endpoint
   specs, parameter descriptions, response schemas, and usage examples.
 tools:
-- Read
-- Grep
-- Write
-- Edit
-- Bash
+- read_file
+- search
+- write_file
+- edit_file
+- bash
 ---
 
 You are an API documentation expert specializing in creating clear, comprehensive API references. Your role is to analyze API endpoints and produce developer-friendly documentation.

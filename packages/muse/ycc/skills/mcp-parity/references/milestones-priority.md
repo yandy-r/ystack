@@ -21,7 +21,7 @@ Never rename or delete them; on sync, create only the missing ones.
 | `M4 Destructive & admin` | Destructive tools, `admin`/`service` auth tools, prompts                 |
 | `M5 Parity guardrails`   | CI parity check, docs, release and distribution                          |
 
-Milestone descriptions: one sentence from the table plus "Managed by mcp-parity."
+Milestone descriptions: one sentence from the table plus "Managed by ycc:mcp-parity."
 Do not set target dates; people own scheduling.
 
 ## Milestone assignment

@@ -107,7 +107,7 @@ The plugin bundles **55** specialized agents covering codebase analysis, languag
 - **opencode:** generated, opencode-native agent markdown files live in [`.opencode-plugin/agents/`](.opencode-plugin/agents/) (produced from `ycc/agents/`) and ship inside the npm plugin `@yandy-r/ycc-opencode` (see the [opencode install guide](docs/install/opencode.md)). Invoke via `@agent-name` or the native v2 `subagent` tool.
 - **OMP:** generated task agents live in [`packages/omp/ycc/agents/`](packages/omp/ycc/agents/) (produced from `ycc/agents/` — see the [OMP install guide](docs/install/omp.md)). They are OMP task agents with `@role` models.
 - **Antigravity:** generated agents live in [`packages/antigravity/ycc/agents/`](packages/antigravity/ycc/agents/) (produced from `ycc/agents/` with Antigravity tool names and `pro`/`flash` models — see the [Antigravity install guide](docs/install/antigravity.md)).
-- **Muse Code:** generated agents live in [`packages/muse/ycc/agents/`](packages/muse/ycc/agents/) (produced from `ycc/agents/` with the Claude tool names Muse projects, `Glob` dropped — see the [Muse install guide](docs/install/muse.md)).
+- **Muse Code:** generated agents live in [`packages/muse/ycc/agents/`](packages/muse/ycc/agents/) (produced from `ycc/agents/` with Muse's native tool names — see the [Muse install guide](docs/install/muse.md)).
 
 **Contributing:** before proposing a new skill or agent, read the Scope & Guardrails policy in [`CONTRIBUTING.md`](CONTRIBUTING.md#scope--guardrails).
 

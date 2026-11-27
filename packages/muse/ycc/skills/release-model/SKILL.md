@@ -46,7 +46,7 @@ Script paths used below:
 - `STATE=~/.local/share/ycc/muse/ycc/ycc-shared/scripts/release-state.sh`
 - `TARGETS=~/.local/share/ycc/muse/ycc/skills/release-model/scripts/pointer-targets.sh`
 - `UPDATE=~/.local/share/ycc/muse/ycc/ycc-shared/scripts/release-state-update.sh`
-- `POINTER=~/.local/share/ycc/muse/ycc/ycc-shared/scripts/rules-pointer.sh` — the single canonical `AGENTS.md`/`CLAUDE.md` pointer helper shared with `init`; `$TARGETS` delegates to it. Release-model only reads it: it never migrates a layout and never creates a missing rules file.
+- `POINTER=~/.local/share/ycc/muse/ycc/ycc-shared/scripts/rules-pointer.sh` — the single canonical `AGENTS.md`/`CLAUDE.md` pointer helper shared with `ycc:init`; `$TARGETS` delegates to it. Release-model only reads it: it never migrates a layout and never creates a missing rules file.
 - `TEMPLATE=~/.local/share/ycc/muse/ycc/skills/release-model/templates/RELEASING.md.tmpl`
 
 **Questions:** class `confirm-publish` (model questions, write after preview); headless (no question tool or chat turn) and without `--yes`: print the proposal and preview, write nothing, and print `rerun with --yes`. See `~/.local/share/ycc/muse/ycc/ycc-shared/references/question-policy.md`.
@@ -60,8 +60,8 @@ Script paths used below:
 | Result                   | Flag        | Mode                                                                                |
 | ------------------------ | ----------- | ----------------------------------------------------------------------------------- |
 | exit 0, `present=0`      | none        | create                                                                              |
-| exit 0, `present=0`      | `--audit`   | report "no RELEASING.md" and suggest `/release-model`; stop                     |
-| exit 0, `present=0`      | `--upgrade` | STOP: nothing to upgrade; suggest `/release-model --model release-branches`     |
+| exit 0, `present=0`      | `--audit`   | report "no RELEASING.md" and suggest `/ycc:release-model`; stop                     |
+| exit 0, `present=0`      | `--upgrade` | STOP: nothing to upgrade; suggest `/ycc:release-model --model release-branches`     |
 | exit 0, `present=1`      | none        | audit (say so: "RELEASING.md exists — auditing; use --upgrade to change the model") |
 | exit 0, `present=1`      | `--upgrade` | upgrade, unless `model=release-branches` already — then report that and audit       |
 | exit 0, `present=1`      | `--audit`   | audit                                                                               |
@@ -155,7 +155,7 @@ For each `POINTER_TARGET` below (every line `$TARGETS --repo "$ROOT"` prints: ex
 the pointer section in `references/pointer-and-labels.md#pointer-section` and add it unless
 a line matching `^## Branching & releases` is already present — then leave the file untouched
 and report "already present". Append it at the end of the file, separated by one blank line.
-When neither `CLAUDE.md` nor `AGENTS.md` exists, report that and suggest `/init`.
+When neither `CLAUDE.md` nor `AGENTS.md` exists, report that and suggest `/ycc:init`.
 
 ## Phase 5 — Labels doc (release-branches only)
 
@@ -182,7 +182,7 @@ expected when the trunk has not been pushed yet — report them, do not fix them
 Report: mode, model, trunk, support window, tracker, files written, `check` result, any
 unknown signals, and the advisory findings (long-lived branches, sync merges). Next steps:
 
-- Ship the change as a normal PR, e.g. `/git-workflow` (suggested commit:
+- Ship the change as a normal PR, e.g. `/ycc:git-workflow` (suggested commit:
   `docs: add RELEASING.md`). Nothing has been committed.
 - Under release-branches with no maintenance branch yet, print the cut-over commands for
   the latest tag's line (`X.Y` from `latest_tag`), for the maintainer to run:
@@ -197,7 +197,7 @@ unknown signals, and the advisory findings (long-lived branches, sync merges). N
   root variable.
 
   With no tags yet, say that `release/X.Y` is created when the first minor is tagged
-  (`/releaser` does this).
+  (`/ycc:releaser` does this).
 
 ## Mode: upgrade (trunk-only → release-branches)
 
@@ -231,5 +231,5 @@ Change nothing.
   never edits them by hand. Prose after the table end marker is human-owned.
 - A malformed block is never "fixed" by regenerating the file; audit reports the parse
   error and the maintainer decides.
-- This skill does not choose releases or versions; `/releaser` cuts releases and
-  `/backport` moves fixes to maintenance branches, both reading the state written here.
+- This skill does not choose releases or versions; `/ycc:releaser` cuts releases and
+  `/ycc:backport` moves fixes to maintenance branches, both reading the state written here.

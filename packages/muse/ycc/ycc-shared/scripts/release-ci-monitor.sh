@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # release-ci-monitor.sh — Poll release-event CI for a published tag and emit
-# structured handoff signals for the releaser auto-fix loop.
+# structured handoff signals for the ycc/releaser auto-fix loop.
 #
 # Sibling to ci-monitor.sh (PR mode). Same exit codes, same RESULT= signaling,
 # same JSONL audit-log schema, same failure-classification law (sourced from

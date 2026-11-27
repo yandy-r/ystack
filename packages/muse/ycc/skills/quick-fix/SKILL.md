@@ -15,7 +15,7 @@ updating a review artifact.
 any store (local `docs/prps/reviews/` or linear `.ycc/artifacts/*/reviews/`) —
 that would lose the audit contract — it MUST NOT update any review markdown
 file, and it makes no Linear calls. If the
-user wants an auditable artifact, route them to `/review-fix` with a saved
+user wants an auditable artifact, route them to `/ycc:review-fix` with a saved
 review file instead.
 
 **Input**: `$ARGUMENTS`
@@ -28,7 +28,7 @@ Extract flags from `$ARGUMENTS`:
 
 | Flag                 | Effect                                                                                |
 | -------------------- | ------------------------------------------------------------------------------------- |
-| `--parallel`         | Dispatch independent same-file groups to `review-fixer` in parallel.              |
+| `--parallel`         | Dispatch independent same-file groups to `ycc/review-fixer` in parallel.              |
 | `--severity <level>` | Minimum severity to fix. Valid: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`. Default: `HIGH`. |
 
 Strip these flags and set `PARALLEL_MODE` and `MIN_SEVERITY` (default `HIGH`).
@@ -39,7 +39,7 @@ The remaining text is the inline review payload.
 - `--severity` value not one of `CRITICAL|HIGH|MEDIUM|LOW` -> abort with:
   `Invalid --severity value. Use CRITICAL, HIGH, MEDIUM, or LOW.`
 - Remaining payload is empty -> abort with:
-  `Error: /quick-fix requires an inline Quick Review findings block.`
+  `Error: /ycc:quick-fix requires an inline Quick Review findings block.`
 
 ---
 
@@ -104,7 +104,7 @@ If `M == 0`, stop with `No eligible findings to fix.`
 
 ## Phase 3 — Detect validation command
 
-Detect one project-level type-check command to pass to `review-fixer`.
+Detect one project-level type-check command to pass to `ycc/review-fixer`.
 Use the first matching rule:
 
 | File Exists         | Command            |
@@ -123,7 +123,7 @@ If no command is detected, set:
 PROJECT TYPE-CHECK COMMAND: SKIP (no supported project validation command detected)
 ```
 
-`review-fixer` is allowed to skip verification only for this explicit
+`ycc/review-fixer` is allowed to skip verification only for this explicit
 `SKIP (...)` value.
 
 ---
@@ -131,7 +131,7 @@ PROJECT TYPE-CHECK COMMAND: SKIP (no supported project validation command detect
 ## Phase 4 — Plan batches
 
 Group eligible findings by file. Same-file findings MUST be processed by the
-same `review-fixer` agent and sorted by line number descending.
+same `ycc/review-fixer` agent and sorted by line number descending.
 
 Sort groups by highest severity in the group (`CRITICAL`, `HIGH`, `MEDIUM`,
 `LOW`), then by file path.
@@ -153,7 +153,7 @@ Group 1: src/file.ts (2 findings)
 
 ## Phase 5 — Execute
 
-Every `review-fixer` prompt must include:
+Every `ycc/review-fixer` prompt must include:
 
 ```
 SOURCE REVIEW FILE: (quick-fix ephemeral handoff)
@@ -166,7 +166,7 @@ This tells the fixer not to expect or edit a review artifact.
 
 Process groups one at a time.
 
-For a one-finding group, dispatch a single `review-fixer` agent with Shape A:
+For a one-finding group, dispatch a single `ycc/review-fixer` agent with Shape A:
 
 ```text
 FINDING:
@@ -182,7 +182,7 @@ SOURCE REVIEW FILE: (quick-fix ephemeral handoff)
 PROJECT TYPE-CHECK COMMAND: pnpm typecheck
 ```
 
-For a same-file group, dispatch one `review-fixer` agent with Shape B:
+For a same-file group, dispatch one `ycc/review-fixer` agent with Shape B:
 
 ```text
 FINDINGS (same file, sorted by line descending):
@@ -201,7 +201,7 @@ artifact status lines.
 Process one batch containing all same-file groups. Dispatch all groups in a
 single message with multiple `Agent` calls, one call per file group:
 
-- `subagent_type`: `review-fixer`
+- `subagent_type`: `ycc/review-fixer`
 - `description`: `Quick-fix <ids> in <file>`
 - `prompt`: Shape A or Shape B as above
 
@@ -230,7 +230,7 @@ Skipped: K
 
 ## Notes
 
-No review artifact was written. Re-run `/quick-review` if you need a fresh
+No review artifact was written. Re-run `/ycc:quick-review` if you need a fresh
 post-fix review.
 ```
 
@@ -241,9 +241,9 @@ so the user can decide whether to save a formal review artifact or fix manually.
 
 ## Relationship to review-fix
 
-- `/quick-fix` is for ephemeral, inline quick-review findings.
-- `/review-fix` is for saved review artifacts (local `docs/prps/reviews/`
+- `/ycc:quick-fix` is for ephemeral, inline quick-review findings.
+- `/ycc:review-fix` is for saved review artifacts (local `docs/prps/reviews/`
   or the linear artifact-store cache and Document).
-- Do not teach `/review-fix` to parse inline quick-review payloads; keeping
+- Do not teach `/ycc:review-fix` to parse inline quick-review payloads; keeping
   the workflows separate preserves the audit trail contract for artifact-backed
   reviews.

@@ -4,10 +4,10 @@ description: Evaluate code quality, modularity, reuse, and KISS compliance. Disc
   existing reusable code, assess build-vs-depend decisions, and review code structure
   for engineering best practices.
 tools:
-- Read
-- Grep
-- WebSearch
-- WebFetch
+- read_file
+- search
+- web_search
+- web_fetch
 ---
 
 Read-only: inspect files with Read, Grep, and Glob. Return the report text to the caller, who owns persistence. Never write files or run commands.

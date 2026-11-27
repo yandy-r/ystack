@@ -53,7 +53,7 @@ Parse `$ARGUMENTS`:
      comma-separated). These drive the protected set, the retired
      maintenance branch category, and the sync-merge findings below.
    - Exit code 2 (malformed state block): **STOP**. Show the parse error from
-     stderr and point the user at `/release-model --audit`. Never guess a
+     stderr and point the user at `/ycc:release-model --audit`. Never guess a
      trunk or a protected set from a broken block.
 4. **Detect host CLIs and MCP tools**. Detection follows the bundle-wide
    contract in
@@ -195,7 +195,7 @@ Write `.git-cleanup/report.md` with sections keyed by domain:
   branches and sync-merge commits (hash, subject, branch), with a pointer to
   the branching-model rule "Never merge one long-lived branch into another"
   and the fix: rebase the topic branch onto `origin/<RELEASE_TRUNK>` instead,
-  and move fixes to maintenance branches with `/backport`.
+  and move fixes to maintenance branches with `/ycc:backport`.
 - **Host-API notes** — PRs/issues surfaced from GitHub/GitLab with current
   state and decision rationale.
 
@@ -269,7 +269,7 @@ error): abort and report.
 ## Subagent Delegation
 
 For large repos where Phase 2's active-code scan is expensive, delegate to
-`git-cleanup` agent via the Agent tool. The agent performs the read-only
+`ycc/git-cleanup` agent via the Agent tool. The agent performs the read-only
 audit (Phases 1-3) and returns the structured report inline without writing
 files; this skill writes it to `.git-cleanup/report.md` (Phase 3) and
 orchestrates Phases 4-6. Pass the Phase 1 collection commands inline in the dispatch
@@ -287,7 +287,7 @@ release-model rules (a malformed state has already stopped the run in Phase 0).
 - **Retired maintenance branches are never auto-deleted.** Suggest the
   `archive/<branch>` tag first and require per-item confirmation.
 - **A malformed `RELEASING.md` state block stops the audit** with the parse
-  error and a pointer to `/release-model --audit`.
+  error and a pointer to `/ycc:release-model --audit`.
 - **Never `git branch -D`** without explicit per-item confirmation.
 
 

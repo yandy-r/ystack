@@ -159,9 +159,9 @@ apply_makefile() {
     else mk="$target/Makefile"
     fi
 
-    if [[ -f "$mk" ]] && grep -q 'formatters managed block' "$mk" 2>/dev/null; then
+    if [[ -f "$mk" ]] && grep -q 'ycc:formatters managed block' "$mk" 2>/dev/null; then
         if ! $force; then
-            info "Makefile already contains formatters managed block; skipping (pass --force to replace)"
+            info "Makefile already contains ycc:formatters managed block; skipping (pass --force to replace)"
             return 0
         fi
         if $dry_run; then
@@ -170,8 +170,8 @@ apply_makefile() {
         fi
         # Strip existing block and append fresh.
         awk '
-            /^# --- formatters managed block/ {skip=1; next}
-            /^# --- end formatters managed block/ {skip=0; next}
+            /^# --- ycc:formatters managed block/ {skip=1; next}
+            /^# --- end ycc:formatters managed block/ {skip=0; next}
             !skip
         ' "$mk" > "${mk}.tmp"
         mv "${mk}.tmp" "$mk"
@@ -205,9 +205,9 @@ apply_justfile() {
     else jf="$target/justfile"
     fi
 
-    if [[ -f "$jf" ]] && grep -q 'formatters managed block' "$jf" 2>/dev/null; then
+    if [[ -f "$jf" ]] && grep -q 'ycc:formatters managed block' "$jf" 2>/dev/null; then
         if ! $force; then
-            info "justfile already contains formatters managed block; skipping (pass --force to replace)"
+            info "justfile already contains ycc:formatters managed block; skipping (pass --force to replace)"
             return 0
         fi
         if $dry_run; then
@@ -215,8 +215,8 @@ apply_justfile() {
             return 0
         fi
         awk '
-            /^# --- formatters managed block/ {skip=1; next}
-            /^# --- end formatters managed block/ {skip=0; next}
+            /^# --- ycc:formatters managed block/ {skip=1; next}
+            /^# --- end ycc:formatters managed block/ {skip=0; next}
             !skip
         ' "$jf" > "${jf}.tmp"
         mv "${jf}.tmp" "$jf"

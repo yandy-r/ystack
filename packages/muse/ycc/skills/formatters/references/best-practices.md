@@ -73,6 +73,6 @@ Per-language tool selection, rationale, and deviation guidance. The skill instal
 
 ## The Installer Contract
 
-The skill **does not reimplement** linter/formatter dispatch. It installs a self-contained bundle (`scripts/style.sh`, `lint.sh`, `format.sh`, `init-formatters.sh`, templates) rooted in `scripts/style.sh`. All runtime dispatch — stack detection, `--modified` file filtering, `cargo fmt` vs `cargo fmt --check`, etc. — lives in that bundle. Upgrading the bundle upstream propagates to all installed targets via `formatters --sync`.
+The skill **does not reimplement** linter/formatter dispatch. It installs a self-contained bundle (`scripts/style.sh`, `lint.sh`, `format.sh`, `init-formatters.sh`, templates) rooted in `scripts/style.sh`. All runtime dispatch — stack detection, `--modified` file filtering, `cargo fmt` vs `cargo fmt --check`, etc. — lives in that bundle. Upgrading the bundle upstream propagates to all installed targets via `ycc:formatters --sync`.
 
 When in doubt about which tool runs on a given file, read `scripts/style.sh` functions `run_*_lint` and `run_*_format`. That file is the source of truth.

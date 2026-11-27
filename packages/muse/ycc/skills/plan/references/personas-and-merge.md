@@ -11,11 +11,11 @@
 
 | Sub-agent name      | `subagent_type`                 | Role focus                                                                         |
 | ------------------- | ------------------------------- | ---------------------------------------------------------------------------------- |
-| `architect`         | `planner`                   | Structural plan, phases, file layout, dependencies                                 |
-| `risk-analyst`      | `codebase-research-analyst` | Risks, edge cases, rollback, migration concerns                                    |
-| `test-strategist`   | `test-strategy-planner`     | Testing strategy, validation commands, acceptance criteria                         |
-| `security-reviewer` | `research-specialist`       | Threat model, input validation, authn/authz, secrets handling, dependency risk     |
-| `ux-reviewer`       | `research-specialist`       | User-facing impact (UI, CLI, API responses, error messages); skip if internal-only |
+| `architect`         | `ycc/planner`                   | Structural plan, phases, file layout, dependencies                                 |
+| `risk-analyst`      | `ycc/codebase-research-analyst` | Risks, edge cases, rollback, migration concerns                                    |
+| `test-strategist`   | `ycc/test-strategy-planner`     | Testing strategy, validation commands, acceptance criteria                         |
+| `security-reviewer` | `ycc/research-specialist`       | Threat model, input validation, authn/authz, secrets handling, dependency risk     |
+| `ux-reviewer`       | `ycc/research-specialist`       | User-facing impact (UI, CLI, API responses, error messages); skip if internal-only |
 
 ## Standalone Dry-Run (Path C)
 
@@ -26,11 +26,11 @@ Print:
 ```
 Dispatch:    standalone parallel sub-agents (no team)
 Sub-agents:  5
-  - architect         subagent_type=planner                    task=Structural plan, phases, file layout, dependencies
-  - risk-analyst      subagent_type=codebase-research-analyst  task=Risks, edge cases, rollback, migration concerns
-  - test-strategist   subagent_type=test-strategy-planner      task=Testing strategy, validation commands, acceptance criteria
-  - security-reviewer subagent_type=research-specialist        task=Threat model, input validation, authn/authz, secrets, dependency risk
-  - ux-reviewer       subagent_type=research-specialist        task=User-facing impact (UI, CLI, API responses, error messages); skip if internal-only
+  - architect         subagent_type=ycc/planner                    task=Structural plan, phases, file layout, dependencies
+  - risk-analyst      subagent_type=ycc/codebase-research-analyst  task=Risks, edge cases, rollback, migration concerns
+  - test-strategist   subagent_type=ycc/test-strategy-planner      task=Testing strategy, validation commands, acceptance criteria
+  - security-reviewer subagent_type=ycc/research-specialist        task=Threat model, input validation, authn/authz, secrets, dependency risk
+  - ux-reviewer       subagent_type=ycc/research-specialist        task=User-facing impact (UI, CLI, API responses, error messages); skip if internal-only
 Batches:     1  (single message, 5 parallel Agent calls)
 ```
 
@@ -43,9 +43,9 @@ When `DRY_RUN=true` with `--team`, print (when `ENHANCED_MODE=false`):
 ```
 Team name:   plan-<sanitized-request>
 Teammates:   3
-  - architect       subagent_type=planner                    task=Structural plan, phases, file layout, dependencies
-  - risk-analyst    subagent_type=codebase-research-analyst  task=Risks, edge cases, rollback, migration concerns
-  - test-strategist subagent_type=test-strategy-planner      task=Testing strategy, validation commands, acceptance criteria
+  - architect       subagent_type=ycc/planner                    task=Structural plan, phases, file layout, dependencies
+  - risk-analyst    subagent_type=ycc/codebase-research-analyst  task=Risks, edge cases, rollback, migration concerns
+  - test-strategist subagent_type=ycc/test-strategy-planner      task=Testing strategy, validation commands, acceptance criteria
 Batches:     1  (batch 1: architect, risk-analyst, test-strategist)
 Dependencies: none  (flat graph)
 ```
@@ -55,11 +55,11 @@ Print (when `ENHANCED_MODE=true`):
 ```
 Team name:        plan-<sanitized-request>
 Teammates:        5
-  - architect         subagent_type=planner                    task=Structural plan, phases, file layout, dependencies
-  - risk-analyst      subagent_type=codebase-research-analyst  task=Risks, edge cases, rollback, migration concerns
-  - test-strategist   subagent_type=test-strategy-planner      task=Testing strategy, validation commands, acceptance criteria
-  - security-reviewer subagent_type=research-specialist        task=Threat model, input validation, authn/authz, secrets, dependency risk
-  - ux-reviewer       subagent_type=research-specialist        task=User-facing impact (UI, CLI, API responses, error messages); skip if internal-only
+  - architect         subagent_type=ycc/planner                    task=Structural plan, phases, file layout, dependencies
+  - risk-analyst      subagent_type=ycc/codebase-research-analyst  task=Risks, edge cases, rollback, migration concerns
+  - test-strategist   subagent_type=ycc/test-strategy-planner      task=Testing strategy, validation commands, acceptance criteria
+  - security-reviewer subagent_type=ycc/research-specialist        task=Threat model, input validation, authn/authz, secrets, dependency risk
+  - ux-reviewer       subagent_type=ycc/research-specialist        task=User-facing impact (UI, CLI, API responses, error messages); skip if internal-only
 Batches:          1  (batch 1: all 5 teammates)
 Dependencies:     none  (flat graph)
 ```
@@ -92,7 +92,7 @@ Team (Path B) re-dispatch spawns fresh teammates after prior teammates have shut
 ## Merge outputs (B.7)
 
 Synthesize the teammate outputs (3 or 5) into a single unified plan following the standard
-`planner` Plan Format. Merging rules:
+`ycc/planner` Plan Format. Merging rules:
 
 - **Overview / Summary**: use `architect`'s framing.
 - **Architecture Changes / Implementation Steps**: primarily `architect`; fold in

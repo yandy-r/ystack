@@ -58,7 +58,7 @@ Build a recap when a change is large, multi-file, or touches schema, API contrac
 or architecture, and a reviewer would benefit from seeing the change mapped to
 structured blocks before reading the raw diff. Skip it for small, single-file, or
 obvious diffs when choosing proactively — a recap is review overhead, and a tiny
-change reviews faster as plain diff. An explicit `visual-recap` or
+change reviews faster as plain diff. An explicit `ycc:visual-recap` or
 `/visual-recap` invocation overrides this heuristic; honor the request.
 
 ## Phase 0 — Collect the diff (remote-agnostic, local refs only)
@@ -222,7 +222,7 @@ intentionally unavailable.
   or note — redact them (`sk-•••`). This mirrors the repo's hardcoded-secret rule.
 - **No egress.** This skill performs no hosted upload. The shared
   `~/.local/share/ycc/muse/ycc/ycc-shared/scripts/visual-egress-guard.sh` exists for the
-  consent-gated hosted path used by `visual-plan`; it is NOT invoked here because
+  consent-gated hosted path used by `ycc:visual-plan`; it is NOT invoked here because
   this recap never leaves the machine.
 
 ## Output
@@ -233,7 +233,7 @@ intentionally unavailable.
 
 ## Related
 
-- `visual-plan` — forward planning; faithful hosted+local MDX workflow with
+- `ycc:visual-plan` — forward planning; faithful hosted+local MDX workflow with
   consent-gated egress. Shares the wireframe quality bar word-for-word.
 - `~/.local/share/ycc/muse/ycc/ycc-shared/references/agent-native-setup.md` — runtime
   contract (install pin, connector, bridge, egress policy).

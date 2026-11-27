@@ -25,24 +25,24 @@ blocks that are copied or filled in.
 Print this verbatim when no task description remains after stripping flags, then abort:
 
 ```
-Usage: /orchestrate [--team] [--dry-run] [--plan-only] [--sequential] [--worktree] [--no-worktree] <task-description>
+Usage: /ycc:orchestrate [--team] [--dry-run] [--plan-only] [--sequential] [--worktree] [--no-worktree] <task-description>
 
 Examples:
-  /orchestrate "Implement user authentication with tests and docs"
+  /ycc:orchestrate "Implement user authentication with tests and docs"
     # default: all parallel and sequential tasks share one feature worktree
 
-  /orchestrate --team "Implement user authentication with tests and docs"
+  /ycc:orchestrate --team "Implement user authentication with tests and docs"
     # agent-team dispatch (worktree still on by default for parallel tasks)
 
-  /orchestrate --dry-run "Debug payment processing failure"
-  /orchestrate --plan-only "Refactor database layer"
-  /orchestrate --sequential "Migrate legacy config"
-  /orchestrate --team --dry-run "Update API documentation across all services"
+  /ycc:orchestrate --dry-run "Debug payment processing failure"
+  /ycc:orchestrate --plan-only "Refactor database layer"
+  /ycc:orchestrate --sequential "Migrate legacy config"
+  /ycc:orchestrate --team --dry-run "Update API documentation across all services"
 
-  /orchestrate --no-worktree "Refactor the auth middleware"
+  /ycc:orchestrate --no-worktree "Refactor the auth middleware"
     # opt out of worktree isolation; all tasks run in the current checkout
 
-  /orchestrate --team --no-worktree "Implement user authentication with tests and docs"
+  /ycc:orchestrate --team --no-worktree "Implement user authentication with tests and docs"
     # agent-team dispatch without worktrees
 ```
 

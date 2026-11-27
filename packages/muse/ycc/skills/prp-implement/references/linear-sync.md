@@ -1,6 +1,6 @@
 # PRP Linear Sync (linear mode only)
 
-Canonical rules: `~/.local/share/ycc/muse/ycc/ycc-shared/references/artifact-store.md` **Implementation skills** (Status sync, Report and completion, Offline). This file only adapts them to prp-implement's phases. Local mode never reads this file and makes no Linear calls. Only the orchestrating skill calls Linear MCP; `implementor` subagents never do. Move issues by state type, never team-specific state names, and never move an issue backwards, reopen it, change its assignee, or touch issues outside the plan's `tasks` map and parent.
+Canonical rules: `~/.local/share/ycc/muse/ycc/ycc-shared/references/artifact-store.md` **Implementation skills** (Status sync, Report and completion, Offline). This file only adapts them to prp-implement's phases. Local mode never reads this file and makes no Linear calls. Only the orchestrating skill calls Linear MCP; `ycc/implementor` subagents never do. Move issues by state type, never team-specific state names, and never move an issue backwards, reopen it, change its assignee, or touch issues outside the plan's `tasks` map and parent.
 
 ## Run start
 

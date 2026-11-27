@@ -32,10 +32,10 @@ Before anything else, verify:
    ~/.local/share/ycc/muse/ycc/ycc-shared/scripts/release-state.sh get
    ```
 
-   - `present=0` (no `RELEASING.md`): say so once and offer to run `/release-model`
+   - `present=0` (no `RELEASING.md`): say so once and offer to run `/ycc:release-model`
      first. If the user declines, continue exactly as this skill always has.
    - Exit 2 (malformed state block): STOP. Show the parse error and point at
-     `/release-model --audit`. Never guess a trunk from a broken block.
+     `/ycc:release-model --audit`. Never guess a trunk from a broken block.
    - `present=1`: keep `model` and `trunk`. The model's rules are in
      `~/.local/share/ycc/muse/ycc/ycc-shared/references/branching-model.md`; how this skill
      applies them is in

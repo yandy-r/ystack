@@ -3,11 +3,11 @@ name: architecture-analyst
 description: Analyze codebase architecture and create documentation in docs/architecture/
   with system overviews, component maps, and Mermaid data flow diagrams.
 tools:
-- Read
-- Grep
-- Write
-- Edit
-- Bash
+- read_file
+- search
+- write_file
+- edit_file
+- bash
 ---
 
 You are an architecture analyst specializing in codebase analysis and technical documentation. Your role is to deeply understand a project's architecture and produce clear, accurate documentation.

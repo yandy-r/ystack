@@ -28,22 +28,22 @@ Context injection is deliberately one scoped helper call: no `pwd`, `ls | head`,
 
 | Flag                         | Meaning                                                                                          | Example                                     |
 | ---------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------- |
-| `--dry-run`                  | Preview every planned file; make no writes                                                       | `/init --dry-run`                       |
-| `--docs-only`                | Skip MCP/agent selection; emit the rules files only                                              | `/init --docs-only`                     |
-| `--templates`                | Also emit `.github/` issue forms, PR template, labels                                            | `/init --templates`                     |
-| `--git`                      | Also emit `.gitignore`, `.gitmessage`, commitlint (JS/TS), and the lefthook bundle               | `/init --git`                           |
-| `--vendor-neutral`           | Also emit `.ai/rules/project.md` pointer to `AGENTS.md`                                          | `/init --vendor-neutral`                |
-| `--formatters`               | Also bootstrap lint/format via `formatters` (scripts, configs, aliases, docs)                | `/init --formatters`                    |
-| `--release-model[=<model>]`  | Run `release-model` without asking when `RELEASING.md` is missing                            | `/init --release-model=trunk-only`      |
-| `--no-release-model`         | Never offer `release-model`                                                                  | `/init --no-release-model`              |
-| `--artifact-store[=<store>]` | Set up the artifact-store pointer (`linear` runs without asking; `local` writes a local pointer) | `/init --artifact-store=linear`         |
-| `--no-artifact-store`        | Never offer the artifact-store setup                                                             | `/init --no-artifact-store`             |
-| `--migrate-rules`            | Move an existing long `CLAUDE.md` into `AGENTS.md` (dry-run diff first)                          | `/init --migrate-rules`                 |
-| `--allow-non-git`            | With `--migrate-rules`: permit non-git or git-ignored rules files (timestamped backups first)    | `/init --migrate-rules --allow-non-git` |
-| `--no-claude-md`             | Skip the `@AGENTS.md` `CLAUDE.md` shim (needs Claude Code 2.1.277+)                              | `/init --no-claude-md`                  |
-| `--update`                   | Structured refresh of existing artifacts (merge/migrate, never clobber)                          | `/init --update`                        |
-| `--force`                    | Overwrite existing files without prompting                                                       | `/init --force`                         |
-| `--profile=<lang>`           | Override detected language (`rust`, `ts-node`, `python`, `go`, `mixed`, `empty`)                 | `/init --profile=rust`                  |
+| `--dry-run`                  | Preview every planned file; make no writes                                                       | `/ycc:init --dry-run`                       |
+| `--docs-only`                | Skip MCP/agent selection; emit the rules files only                                              | `/ycc:init --docs-only`                     |
+| `--templates`                | Also emit `.github/` issue forms, PR template, labels                                            | `/ycc:init --templates`                     |
+| `--git`                      | Also emit `.gitignore`, `.gitmessage`, commitlint (JS/TS), and the lefthook bundle               | `/ycc:init --git`                           |
+| `--vendor-neutral`           | Also emit `.ai/rules/project.md` pointer to `AGENTS.md`                                          | `/ycc:init --vendor-neutral`                |
+| `--formatters`               | Also bootstrap lint/format via `ycc:formatters` (scripts, configs, aliases, docs)                | `/ycc:init --formatters`                    |
+| `--release-model[=<model>]`  | Run `ycc:release-model` without asking when `RELEASING.md` is missing                            | `/ycc:init --release-model=trunk-only`      |
+| `--no-release-model`         | Never offer `ycc:release-model`                                                                  | `/ycc:init --no-release-model`              |
+| `--artifact-store[=<store>]` | Set up the artifact-store pointer (`linear` runs without asking; `local` writes a local pointer) | `/ycc:init --artifact-store=linear`         |
+| `--no-artifact-store`        | Never offer the artifact-store setup                                                             | `/ycc:init --no-artifact-store`             |
+| `--migrate-rules`            | Move an existing long `CLAUDE.md` into `AGENTS.md` (dry-run diff first)                          | `/ycc:init --migrate-rules`                 |
+| `--allow-non-git`            | With `--migrate-rules`: permit non-git or git-ignored rules files (timestamped backups first)    | `/ycc:init --migrate-rules --allow-non-git` |
+| `--no-claude-md`             | Skip the `@AGENTS.md` `CLAUDE.md` shim (needs Claude Code 2.1.277+)                              | `/ycc:init --no-claude-md`                  |
+| `--update`                   | Structured refresh of existing artifacts (merge/migrate, never clobber)                          | `/ycc:init --update`                        |
+| `--force`                    | Overwrite existing files without prompting                                                       | `/ycc:init --force`                         |
+| `--profile=<lang>`           | Override detected language (`rust`, `ts-node`, `python`, `go`, `mixed`, `empty`)                 | `/ycc:init --profile=rust`                  |
 
 Flags are composable. See `references/flag-reference.md` for the full matrix.
 
@@ -98,7 +98,7 @@ Otherwise, estimate source file count with the single scoped helper (no pipeline
 ~/.local/share/ycc/muse/ycc/skills/init/scripts/count-source-files.sh --repo .
 ```
 
-It prints `count=<n>`, `capped=true|false`, `cap=50`. If `capped=true` (i.e., >50 files), dispatch `subagent_type: "codebase-research-analyst"` with a prompt requesting:
+It prints `count=<n>`, `capped=true|false`, `cap=50`. If `capped=true` (i.e., >50 files), dispatch `subagent_type: "ycc/codebase-research-analyst"` with a prompt requesting:
 
 - Key architectural patterns and conventions to encode in `AGENTS.md`
 - Critical commands (test, lint, build, deploy) to embed
@@ -163,7 +163,7 @@ If `DRY_RUN=true`:
 - Print planned rules-file line counts (see Phase 7) so oversize output is visible before any write.
 - Show the planned `.mcp.json` content.
 - List agent files that would be copied.
-- Print the release-model step Phase 5.5 would take: "skip (RELEASING.md exists)", "skip (--no-release-model)", "would run `release-model` [--model <value> --yes]", or "would offer `release-model`".
+- Print the release-model step Phase 5.5 would take: "skip (RELEASING.md exists)", "skip (--no-release-model)", "would run `ycc:release-model` [--model <value> --yes]", or "would offer `ycc:release-model`".
 - Print the artifact-store step Phase 5.6 would take: "skip (linear pointer already tracked)", "skip (--no-artifact-store)", "would run `artifact-store-pointer.sh --store=local`", "would run `artifact-store-pointer.sh --store=linear` (--artifact-store)", "skip (--docs-only)", "skip (headless)", or "would offer Linear artifact-store setup". Before previewing a Linear helper run, perform Phase 5.6's read-only Gather (`get_workspace`, `list_teams`, existing hints and repo label); do not create Linear objects. If all required values resolve, run the full helper command with `--dry-run` (writes nothing) and show the planned `.plans-config`. If values cannot resolve (including headless multi-team ambiguity), print the command with placeholders for missing values and explicitly report that it was not run. Local previews need no Linear Gather.
 - STOP — make no writes.
 
@@ -172,14 +172,14 @@ If `DRY_RUN=true`:
 Decide whether to create `RELEASING.md` (the project's branching and release rules — see `~/.local/share/ycc/muse/ycc/ycc-shared/references/branching-model.md`), then resolve the `IF_RELEASE_MODEL` blocks.
 
 1. **Choose the action** (first match wins):
-   - `has_releasing_md=true` → skip. The project already has a release model; init reads only its presence (`/release-model --audit` validates it).
+   - `has_releasing_md=true` → skip. The project already has a release model; init reads only its presence (`/ycc:release-model --audit` validates it).
    - `NO_RELEASE_MODEL=true` → skip.
    - `RELEASE_MODEL=true` → run without asking.
    - `DOCS_ONLY=true` (and no `--release-model`) → skip; `--docs-only` stays limited to the rules files.
-   - Otherwise → ask: "This project has no `RELEASING.md`. Run `release-model` to choose a branching and release model (trunk-only or release branches) and write one?" Default: yes. A missing `RELEASING.md` never blocks init — "no" continues normally.
-2. **Run** the `release-model` skill when chosen. With `RELEASE_MODEL_VALUE` set, pass `--model <value> --yes`: the model was decided upstream (for example by `blueprint`), so the proposal is accepted without questions. Otherwise run it without arguments so it can propose a model from the repo's signals and confirm with the user.
-3. **Resolve** every `IF_RELEASE_MODEL` block rendered in Phase 3: keep the block contents when `RELEASING.md` now exists at the project root, else drop the block. This covers "exists already" and "created in this run", and drops the pointer if `release-model` was declined or failed.
-4. If `release-model` errors, record the failure for the Phase 7 summary and continue — do not abort init.
+   - Otherwise → ask: "This project has no `RELEASING.md`. Run `ycc:release-model` to choose a branching and release model (trunk-only or release branches) and write one?" Default: yes. A missing `RELEASING.md` never blocks init — "no" continues normally.
+2. **Run** the `ycc:release-model` skill when chosen. With `RELEASE_MODEL_VALUE` set, pass `--model <value> --yes`: the model was decided upstream (for example by `ycc:blueprint`), so the proposal is accepted without questions. Otherwise run it without arguments so it can propose a model from the repo's signals and confirm with the user.
+3. **Resolve** every `IF_RELEASE_MODEL` block rendered in Phase 3: keep the block contents when `RELEASING.md` now exists at the project root, else drop the block. This covers "exists already" and "created in this run", and drops the pointer if `ycc:release-model` was declined or failed.
+4. If `ycc:release-model` errors, record the failure for the Phase 7 summary and continue — do not abort init.
 
 ### Phase 5.6 — Artifact store
 
@@ -263,9 +263,9 @@ Create `.claude/agents/` if needed; copy selected agent files from `${HOME}/.cla
 
 ### Phase 6.5 — Formatter bootstrap (when `FORMATTERS=true`)
 
-When `FORMATTERS=true`, invoke the `formatters` skill to bootstrap the lint/format environment. Pass through `--dry-run` and `--force`; let the skill handle its own flag defaults for everything else (stack detection, sync vs copy, aliases, docs). Do NOT duplicate formatter logic here — the formatters skill owns every decision about scripts, tool configs, aliases, and docs.
+When `FORMATTERS=true`, invoke the `ycc:formatters` skill to bootstrap the lint/format environment. Pass through `--dry-run` and `--force`; let the skill handle its own flag defaults for everything else (stack detection, sync vs copy, aliases, docs). Do NOT duplicate formatter logic here — the formatters skill owns every decision about scripts, tool configs, aliases, and docs.
 
-If `DRY_RUN=true`, invoke `formatters --dry-run` and merge its preview output into the Phase 7 summary. Otherwise invoke `formatters` normally.
+If `DRY_RUN=true`, invoke `ycc:formatters --dry-run` and merge its preview output into the Phase 7 summary. Otherwise invoke `ycc:formatters` normally.
 
 If the formatters skill exits with an error, record the failure in the Phase 7 summary and continue — do not let a formatter error abort the overall init run.
 
@@ -292,7 +292,7 @@ Produce a summary using `~/.local/share/ycc/muse/ycc/skills/init/templates/works
 - `bash scripts/install-lefthook.sh` to install the `lefthook` binary and activate the hooks defined in `lefthook.yml` (if `GIT=true`). Re-runnable on every checkout; safe to rerun.
 - For JS/TS projects: run `{{PACKAGE_MANAGER}} install` (devDependencies `@commitlint/cli` + `@commitlint/config-conventional` must be installed for the `commit-msg` hook to work).
 - Review `.github/labels.md` and run the `gh label create` commands listed there (if `TEMPLATES=true`). Under the release-branches model, create one `backport:X.Y` label per maintenance branch.
-- Review `RELEASING.md` and commit it with the rest of the init output (if Phase 5.5 created it). If the offer was declined, `/release-model` can create it later.
+- Review `RELEASING.md` and commit it with the rest of the init output (if Phase 5.5 created it). If the offer was declined, `/ycc:release-model` can create it later.
 - Review `.github/copilot-instructions.md` — it is a short pointer to `AGENTS.md` plus the detected commands; keep it that way (if `TEMPLATES=true`).
 - Enable the PR title check as a required status: **Settings → Branches → Branch protection rules**, add `Validate Conventional Commit PR title` (the job name from `.github/workflows/pr-title.yml`) to the required checks. Without this, the workflow runs but isn't enforced (if `TEMPLATES=true`).
 - `.github/workflows/pr-title-autofix.yml` runs alongside the validator and (1) strips placeholder prefixes (`[WIP]`, `Draft:`, `Initial plan`) from PR titles server-side, then (2) normalizes a leading Conventional Commit type that was written without a colon or with capitalization (e.g. `Refactor X` → `refactor: X`, `Feat(auth): X` → `feat(auth): X`). Runs because GitHub Copilot's coding-agent token often lacks `pull_requests:write` and cannot self-correct. Do **not** add this workflow to required checks — it is an auto-correcting side effect, not a gate (if `TEMPLATES=true`).
@@ -304,9 +304,9 @@ Produce a summary using `~/.local/share/ycc/muse/ycc/skills/init/templates/works
 - Default behavior never destroys existing files; always diff-and-ask before overwriting.
 - `--update` enables structured merge/migrate semantics and is the recommended flag when re-running `init` in a project that already has docs/templates.
 - `--force` is opt-in and always logs every path it overwrote. `--update --force` applies merge semantics but overwrites on conflict instead of skipping.
-- No new agents are registered. `codebase-research-analyst` is called only once, conditionally, for large existing repos (>50 source files) when `--docs-only` is not set.
+- No new agents are registered. `ycc/codebase-research-analyst` is called only once, conditionally, for large existing repos (>50 source files) when `--docs-only` is not set.
 - The MCP and agent selection flow is preserved unchanged behind `--docs-only`.
-- A missing `RELEASING.md` never blocks init. Phase 5.5 only offers `release-model`; `--release-model` runs it and `--no-release-model` silences the offer.
+- A missing `RELEASING.md` never blocks init. Phase 5.5 only offers `ycc:release-model`; `--release-model` runs it and `--no-release-model` silences the offer.
 - A missing artifact-store pointer never blocks init. `linear` is the default store without one; Phase 5.6 only offers to commit a Linear pointer with workspace/team hints (interactive, Linear MCP available), `--artifact-store[=linear|local]` runs it without asking, and `--no-artifact-store` silences it.
 - For the full flag matrix with composability examples, see `references/flag-reference.md`.
 - Read `references/conventional-commits.md` only when the user asks for the full commit-type reference; the generated `AGENTS.md` carries a one-line rule, not the types table. Read `references/label-taxonomy.md` when rendering

@@ -12,7 +12,7 @@
 - Priority Classification
 - Source-Specific Labels
 
-Extraction instructions for `feature-spec.md` documents produced by `feature-research`.
+Extraction instructions for `feature-spec.md` documents produced by `ycc:feature-research`.
 
 ## Expected Source Structure
 

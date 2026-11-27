@@ -47,7 +47,7 @@ At least one action flag is required in normal use; with none, resolve interacti
 - **--ci**: monitor CI on the current branch's PR and auto-fix until green or a bail. Works with `--pr` (create-then-monitor), `--push` (push-then-monitor), or bare (monitor only: no commit, no push). An open PR for the branch must exist when Phase 6 starts. Incompatible with `--dry-run` and with `--commit`-only.
 - **--ci-max-pushes=N** (default 5), **--ci-max-same-failure=N** (default 3), **--ci-timeout-min=N** (default 30, from first iteration), **--ci-yes** (skip the one-time auth prompt)
 
-**Questions:** class `clarify` (Phase 0.5 action menu): headless (no question tool or chat turn), print the menu and stop; pass `--commit`, `--push` or `--pr`. Class `confirm-publish` (Step 22a "run --ci against the existing PR?", Phase 6 CI authorization): headless and without `--ci-yes`, skip CI monitoring and print `rerun with --ci-yes`. Class `confirm-publish` (backport-label question): headless, add no label and print the `/backport` hint. See `~/.local/share/ycc/muse/ycc/ycc-shared/references/question-policy.md`.
+**Questions:** class `clarify` (Phase 0.5 action menu): headless (no question tool or chat turn), print the menu and stop; pass `--commit`, `--push` or `--pr`. Class `confirm-publish` (Step 22a "run --ci against the existing PR?", Phase 6 CI authorization): headless and without `--ci-yes`, skip CI monitoring and print `rerun with --ci-yes`. Class `confirm-publish` (backport-label question): headless, add no label and print the `/ycc:backport` hint. See `~/.local/share/ycc/muse/ycc/ycc-shared/references/question-policy.md`.
 
 ## Tool Preference (before Phase 0)
 
@@ -105,7 +105,7 @@ Read `references/commit-phases.md` before Phase 0 for exact commands, the dry-ru
 Only when `pr ∈ actions`. Read `references/pr-creation.md` before Step 22. Decision points:
 
 - Step 22a: existing PR → with `--ci`, ask whether to skip creation and run Phase 6 against it (`no` exits cleanly, no Phase 6); without `--ci`, stop with the "PR already exists" message.
-- Step 22b: resolve `$BASE`, run the sync-check guard (exit 3: no PR, stop), offer backport, per `~/.local/share/ycc/muse/ycc/ycc-shared/references/pr-base-and-backport.md`. Exit 2 (malformed `RELEASING.md`) stops with the parse error and `/release-model --audit`.
+- Step 22b: resolve `$BASE`, run the sync-check guard (exit 3: no PR, stop), offer backport, per `~/.local/share/ycc/muse/ycc/ycc-shared/references/pr-base-and-backport.md`. Exit 2 (malformed `RELEASING.md`) stops with the parse error and `/ycc:release-model --audit`.
 - Step 23: read `templates/pr-template.md`.
 - Step 25: PR title must be Conventional Commit format and pass `validate-commit.sh`.
 - Step 26a: link Linear and GitHub issues in `## Related Issues` per `references/pr-creation.md` (contract: artifact-store.md PR linking).

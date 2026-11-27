@@ -25,15 +25,15 @@ Parse `$ARGUMENTS` for:
 
 If `$ARGUMENTS` contains `--include-git`: ignore the flag, keep every other argument unchanged, and display this notice exactly once, before Phase 0 (including before any `--dry-run` stop):
 
-> `--include-git` is deprecated and ignored. This skill cleans project-directory files only — it performs no Git audit and no Git cleanup. For branches, worktrees, remotes, stashes, tags, PRs, or issues, run `/git-cleanup` separately. Never invoked automatically on your behalf.
+> `--include-git` is deprecated and ignored. This skill cleans project-directory files only — it performs no Git audit and no Git cleanup. For branches, worktrees, remotes, stashes, tags, PRs, or issues, run `/ycc:git-cleanup` separately. Never invoked automatically on your behalf.
 
-Never auto-chain `/git-cleanup`, and never treat `--include-git` as consent to run it.
+Never auto-chain `/ycc:git-cleanup`, and never treat `--include-git` as consent to run it.
 
 ### Scope and Git-only requests
 
 This skill cleans files present in the project directory only. It never audits or changes Git refs, history, or submodules, and `.git` metadata stays protected.
 
-If the request concerns only Git resources, STOP before Phase 0 and deploy no agents. Route branches, worktrees, remotes, stashes, tags, PRs, or issues to `/git-cleanup`; say history rewriting and submodule cleanup are out of scope for both skills.
+If the request concerns only Git resources, STOP before Phase 0 and deploy no agents. Route branches, worktrees, remotes, stashes, tags, PRs, or issues to `/ycc:git-cleanup`; say history rewriting and submodule cleanup are out of scope for both skills.
 
 ## Phase 0: Setup
 

@@ -27,13 +27,13 @@ Substitute the Phase 3 matrix and project name into the template. Also emit a sh
 
 ### --ci-config=audit
 
-Delegate to the `releaser` agent. Pass the list of existing workflow files, the
+Delegate to the `ycc/releaser` agent. Pass the list of existing workflow files, the
 detected language and build system, the expected `{os × arch}` matrix, and the full
 contents of `references/ci-optimization-checklist.md` inline in the dispatch prompt
 (including every numbered section and severity table, not a path or summary).
 The agent returns a structured report (Findings → Severity → Fix). The skill
 summarizes the top items and writes the full report to
-`docs/prps/reviews/ci-release-audit.md` for later consumption by `review-fix`.
+`docs/prps/reviews/ci-release-audit.md` for later consumption by `ycc:review-fix`.
 
 ### No --ci-config flag
 

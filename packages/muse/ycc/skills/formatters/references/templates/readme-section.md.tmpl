@@ -4,7 +4,7 @@ This project uses a self-contained lint/format bundle rooted in `scripts/style.s
 
 ### One-command bootstrap
 
-If you cloned this repo fresh and `scripts/style.sh` is missing (it ships managed), re-run `formatters --sync` from Claude Code to reinstall the bundle.
+If you cloned this repo fresh and `scripts/style.sh` is missing (it ships managed), re-run `ycc:formatters --sync` from Claude Code to reinstall the bundle.
 
 ### Daily commands
 
@@ -99,7 +99,7 @@ just format-unstaged
 Lint runs automatically on every pull request via `.github/workflows/lint.yml`. If `.github/workflows/lint-autofix.yml` is also present, it applies `./scripts/style.sh format` + `lint --fix` on same-repo PRs. When the `AUTOFIX_APP_CLIENT_ID` variable and `AUTOFIX_APP_PRIVATE_KEY` secret are set, it pushes the fixes back with a GitHub App token; without them it lists the fixes in the job summary and does not push. Fork PRs are skipped.
 {{/IF_CI_INSTALLED}}
 {{#IF_CI_NOT_INSTALLED}}
-To wire lint into CI, run `formatters --ci` (installs both `lint.yml` and `lint-autofix.yml`) or pair it with `--no-autofix` to skip the autofix workflow.
+To wire lint into CI, run `ycc:formatters --ci` (installs both `lint.yml` and `lint-autofix.yml`) or pair it with `--no-autofix` to skip the autofix workflow.
 {{/IF_CI_NOT_INSTALLED}}
 
 ### Pre-commit hook (optional)
@@ -108,11 +108,11 @@ To wire lint into CI, run `formatters --ci` (installs both `lint.yml` and `lint-
 A pre-commit hook is installed. It runs `./scripts/style.sh lint --modified --fix` before every commit. To bypass once: `git commit --no-verify`.
 {{/IF_HOOKS_INSTALLED}}
 {{#IF_HOOKS_NOT_INSTALLED}}
-Run `formatters --hooks` to wire a pre-commit hook that formats and lints only the files you've staged.
+Run `ycc:formatters --hooks` to wire a pre-commit hook that formats and lints only the files you've staged.
 {{/IF_HOOKS_NOT_INSTALLED}}
 
 ### Advanced
 
-- **Upgrade the bundle**: re-run `formatters --sync` from Claude Code. This prunes stale managed files and copies the latest scripts.
+- **Upgrade the bundle**: re-run `ycc:formatters --sync` from Claude Code. This prunes stale managed files and copies the latest scripts.
 - **Ignore paths**: add entries to `.prettierignore`, `.markdownlintignore`, `.gitignore`, or tool-native ignore keys (`ruff exclude`, `biome files.ignore`, `.golangci.yml issues.exclude-rules`).
 - **Modified-only mode** reads `git diff --name-only HEAD` — untracked files are included when `scripts/lib/modified-files.sh` sees them with `git status --porcelain`.

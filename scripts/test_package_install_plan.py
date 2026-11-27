@@ -41,6 +41,10 @@ def test_closures() -> None:
         ("ycc", "omp", ("base", "dedupe")),
         ("ycc-mcp", "omp", ("base",)),
         ("ycc-rules", "omp", ("base",)),
+        ("ycc", "muse", ("base",)),
+        ("ycc-mcp", "muse", ("base",)),
+        ("ycc-rules", "muse", ("base",)),
+        ("ycc", "antigravity", ("base",)),
     ):
         plan = plan_install(MODEL, (package,), (target,)).targets[0]
         assert plan.steps == expected, (package, target, plan.steps)

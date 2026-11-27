@@ -8,8 +8,8 @@
 - Checking an existing PR
 - Missing or malformed state
 
-How `git-workflow` (Phase 5) and `prp-pr` pick a PR's base branch, refuse sync
-merges, and offer a backport under the release model. `code-review` uses
+How `ycc:git-workflow` (Phase 5) and `ycc:prp-pr` pick a PR's base branch, refuse sync
+merges, and offer a backport under the release model. `ycc:code-review` uses
 [Checking an existing PR](#checking-an-existing-pr). The rules themselves live in
 `branching-model.md` in this directory; this file only says how skills apply them.
 
@@ -74,7 +74,7 @@ On refusal, do **not** create the PR. Show the helper's `reason=` line, cite
 `branching-model.md` ("Rules") (rule 3: never merge one long-lived
 branch into another), and suggest the fix: rebase the topic branch onto `origin/<base>`
 without the merge, or move a fix between the trunk and a maintenance branch with
-`/backport`. A refusal also skips any `--ci` loop, since no PR was created.
+`/ycc:backport`. A refusal also skips any `--ci` loop, since no PR was created.
 
 ## Backport prompt
 
@@ -105,14 +105,14 @@ On **yes**, after the PR exists:
    `gh api -X POST repos/{owner}/{repo}/issues/<N>/labels -f 'labels[]=<label>'`, or the
    MCP equivalent). Forgejo/Gitea: add it in the web UI. If the label does not exist on the
    repo, say so and offer `gh label create <label> --description "Backport to <branch>"`;
-   `releaser` normally creates it with the minor release.
-2. Tell the user: `After #<N> merges, run /backport <N> to open the <branch> PR.`
+   `ycc/releaser` normally creates it with the minor release.
+2. Tell the user: `After #<N> merges, run /ycc:backport <N> to open the <branch> PR.`
 
 On **no**, create the PR without the label. Never run the backport before the merge.
 
 ## Checking an existing PR
 
-`code-review` PR mode compares the PR's `baseRefName` with the base the state
+`ycc:code-review` PR mode compares the PR's `baseRefName` with the base the state
 expects for its head:
 
 ```bash
@@ -126,7 +126,7 @@ and citing `branching-model.md` ("Where does my change go").
 `release-state.sh base` cannot recognize a head cut from a `release/X.Y` that has no
 commits of its own yet, so when the PR targets `release/X.Y` and `EXPECTED` is the trunk,
 say in the finding that the base is correct if this is a release-only fix. A malformed
-block (exit 2) skips the comparison; mention the parse error and `/release-model --audit`
+block (exit 2) skips the comparison; mention the parse error and `/ycc:release-model --audit`
 in the review summary instead.
 
 ## Missing or malformed state
@@ -134,10 +134,10 @@ in the review summary instead.
 Follows `branching-model.md` ("Missing or malformed state"):
 
 - **No `RELEASING.md`:** base = forge default branch, the guard is skipped, no backport
-  prompt. Add one line to the summary suggesting `/release-model` to record the
+  prompt. Add one line to the summary suggesting `/ycc:release-model` to record the
   branching model.
 - **Malformed block** (exit 2 from any subcommand): stop before creating the PR, show the
-  parse error, and point at `/release-model --audit`. Never guess a base from a broken
+  parse error, and point at `/ycc:release-model --audit`. Never guess a base from a broken
   block; an explicit base does not bypass this, because the guard still reads the state.
 - **A branch named in the state is missing on `origin`:** `base` falls back to the trunk;
   mention the missing branch and continue.

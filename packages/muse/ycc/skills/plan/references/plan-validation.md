@@ -7,7 +7,7 @@
 - Check 3: Parallel mode integrity (`PARALLEL_MODE=true` only)
 - Check 4: Multi-agent merge integrity (Path B and Path C)
 
-After the `planner` agent returns its plan, perform these quick checks before presenting it to the user. Use only the tools already available to this skill.
+After the `ycc/planner` agent returns its plan, perform these quick checks before presenting it to the user. Use only the tools already available to this skill.
 
 ### Check 1: Structure completeness
 

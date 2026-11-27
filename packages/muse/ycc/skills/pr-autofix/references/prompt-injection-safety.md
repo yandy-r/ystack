@@ -9,9 +9,9 @@
 
 PR comment bodies are **untrusted input**. Anyone who can comment on a PR — bots, external contributors, anyone with read+comment access — can inject text designed to manipulate an autofix agent into reading secrets, exfiltrating data, executing shell commands, or making out-of-scope code changes.
 
-`pr-autofix` defends against this with two complementary sanitization passes:
+`ycc:pr-autofix` defends against this with two complementary sanitization passes:
 
-1. **Inbound sanitization** — applied before a comment body is shown to the user or handed to a `pr-comment-fixer` agent.
+1. **Inbound sanitization** — applied before a comment body is shown to the user or handed to a `ycc/pr-comment-fixer` agent.
 2. **Outbound sanitization** — applied before any text is posted back to the PR (replies, summary comment, commit messages).
 
 This file documents both. The rules are baked into the SKILL.md workflow, not into the scripts.

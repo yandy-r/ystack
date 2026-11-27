@@ -8,7 +8,7 @@ argument-hint: '[YYYY-MM-DD | path/to/session.tmp] (blank = most recent)'
 
 # Resume Session
 
-Load the last saved session state and orient fully before doing any work. This skill is the counterpart to `/save-session`.
+Load the last saved session state and orient fully before doing any work. This skill is the counterpart to `/ycc:save-session`.
 
 **Operational context:** Load the most recent session through the shared session-state contract, or select by date/path; brief completed work, successful and failed approaches, open questions, and the exact next step. Do not start work or touch files until the user directs continuation.
 
@@ -24,10 +24,10 @@ Load the last saved session state and orient fully before doing any work. This s
 ## Usage
 
 ```
-/resume-session                                                       # most recent file in ~/.claude/session-data/
-/resume-session 2024-01-15                                            # most recent session for that date
-/resume-session ~/.claude/session-data/2024-01-15-abc123de-session.tmp # specific short-id file
-/resume-session ~/.claude/sessions/2024-01-15-session.tmp             # legacy-format file
+/ycc:resume-session                                                       # most recent file in ~/.claude/session-data/
+/ycc:resume-session 2024-01-15                                            # most recent session for that date
+/ycc:resume-session ~/.claude/session-data/2024-01-15-abc123de-session.tmp # specific short-id file
+/ycc:resume-session ~/.claude/sessions/2024-01-15-session.tmp             # legacy-format file
 ```
 
 ## Process
@@ -44,7 +44,7 @@ Locate the file using the contract's Discovery section:
 
   ```
   No session files found in ~/.claude/session-data/
-  Run /save-session at the end of a session to create one.
+  Run /ycc:save-session at the end of a session to create one.
   ```
 
   Then stop.
@@ -107,7 +107,7 @@ Note this during the briefing — "WARNING: `path/to/file.ts` referenced in sess
 Note the gap — "WARNING: This session is from N days ago (threshold: 7 days). Things may have changed." — then proceed normally.
 
 **Session file is empty or malformed:**
-Report: "Session file found but appears empty or unreadable. You may need to create a new one with `/save-session`."
+Report: "Session file found but appears empty or unreadable. You may need to create a new one with `/ycc:save-session`."
 
 ---
 
@@ -152,4 +152,4 @@ Ready to continue. What would you like to do?
 - Never modify the session file when loading it — it's a read-only historical record
 - The briefing format is fixed — do not skip sections even if they are empty
 - "What Not To Retry" must always be shown, even if it just says "None" — it's too important to miss
-- After resuming, the user may want to run `/save-session` again at the end of the new session to create a new dated file
+- After resuming, the user may want to run `/ycc:save-session` again at the end of the new session to create a new dated file

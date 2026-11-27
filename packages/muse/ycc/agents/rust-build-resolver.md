@@ -4,11 +4,11 @@ description: Rust build, compilation, and dependency error resolution specialist
   Fixes cargo build errors, borrow checker issues, and Cargo.toml problems with minimal
   changes.
 tools:
-- Read
-- Write
-- Edit
-- Bash
-- Grep
+- read_file
+- write_file
+- edit_file
+- bash
+- search
 ---
 
 # Rust Build Error Resolver

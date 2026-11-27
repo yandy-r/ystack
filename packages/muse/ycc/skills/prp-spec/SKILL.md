@@ -10,7 +10,7 @@ argument-hint: '[--ground] [--store=local|linear] [feature description | path/to
 
 Generate a concise, actionable feature specification in a single pass. Lighter than `feature-research` (no multi-agent team), more technically directed than a PRD (includes technical approach and integration points).
 
-**Operational context:** Write the resolved `spec` artifact with problem, requirements, technical approach, integration points, and risks; accept free-form input or ask clarifying questions. --ground adds codebase/market research through prp-researcher. Use prp-prd for problem discovery and feature-research for heavyweight multi-agent research.
+**Operational context:** Write the resolved `spec` artifact with problem, requirements, technical approach, integration points, and risks; accept free-form input or ask clarifying questions. --ground adds codebase/market research through ycc/prp-researcher. Use prp-prd for problem discovery and feature-research for heavyweight multi-agent research.
 
 > Part of the PRP workflow series. Parallel entry point alongside `prp-prd` — both feed directly into `prp-plan`.
 
@@ -63,7 +63,7 @@ Extract flags from `$ARGUMENTS`:
 
 | Flag       | Effect                                                                                       |
 | ---------- | -------------------------------------------------------------------------------------------- |
-| `--ground` | Dispatch `prp-researcher` in dual mode for codebase + market grounding before generating |
+| `--ground` | Dispatch `ycc/prp-researcher` in dual mode for codebase + market grounding before generating |
 
 Strip `--ground`, set `GROUND_MODE=true|false`. Parse and strip `--store=local|linear`, retaining the exact override as `STORE_FLAG` (empty when absent); reject other values or conflicting overrides. Forward `${STORE_FLAG}` to every resolver call. Only the remaining text is the feature description or file path.
 
@@ -114,7 +114,7 @@ Derive a kebab-case `{name}` from the input:
 
 **If skipped**: Report "Generating spec from provided context only — use `--ground` for researcher-backed discovery."
 
-**If running**: Dispatch a single `prp-researcher` agent via the `Agent` tool, in dual mode (codebase + market):
+**If running**: Dispatch a single `ycc/prp-researcher` agent via the `Agent` tool, in dual mode (codebase + market):
 
 - Codebase side: similar implementations, relevant types, existing patterns, integration points already in place
 - Market side: competitor approaches, library options, API documentation, known gotchas
@@ -250,15 +250,15 @@ Report to the user:
 ### Next Steps
 
 - Review and refine the spec
-- Run `/prp-plan {resolved absolute OUT path}` to create an implementation plan
-- If the problem needs deeper discovery, run `/prp-prd` instead — it feeds into `prp-plan` directly
+- Run `/ycc:prp-plan {resolved absolute OUT path}` to create an implementation plan
+- If the problem needs deeper discovery, run `/ycc:prp-prd` instead — it feeds into `prp-plan` directly
 ```
 
 ---
 
 ## Anti-patterns — Do NOT Do These
 
-1. **Do NOT deploy a multi-agent team**: This is a single-pass skill. For multi-agent research, use `/feature-research`. Do not spawn named teammates here.
+1. **Do NOT deploy a multi-agent team**: This is a single-pass skill. For multi-agent research, use `/ycc:feature-research`. Do not spawn named teammates here.
 
 2. **Do NOT choose a competing output tree**: Always resolve kind `spec` through the artifact helper, regardless of the user's current working directory. It is distinct from the `feature-spec` artifact produced by `feature-research`.
 
@@ -268,17 +268,17 @@ Report to the user:
 
 5. **Do NOT fabricate grounding findings**: If `GROUND_MODE=false` and no researcher ran, leave Rationale/Notes columns empty or marked `TBD` rather than inventing justifications.
 
-6. **Do NOT act as a PRD generator**: This skill is not problem-first and does not run hypothesis questioning. If the problem is unclear and needs interactive discovery, direct the user to `/prp-prd` instead.
+6. **Do NOT act as a PRD generator**: This skill is not problem-first and does not run hypothesis questioning. If the problem is unclear and needs interactive discovery, direct the user to `/ycc:prp-prd` instead.
 
 ---
 
 ## Integration
 
-- **Entry point**: Parallel to `/prp-prd` — use `prp-spec` when the problem is clear, `prp-prd` when it needs interactive discovery. Both feed directly into `prp-plan`.
+- **Entry point**: Parallel to `/ycc:prp-prd` — use `prp-spec` when the problem is clear, `prp-prd` when it needs interactive discovery. Both feed directly into `prp-plan`.
 - **Input**: Accepts free-form descriptions or starts with clarifying questions. Can be invoked standalone.
-- **Downstream**: Specs feed into `/prp-plan` for implementation planning. Pass the actual resolved path and identify it as a PRP spec (linear mode names it `spec.md`; local mode uses `.spec.md`).
-- **Grounding**: Optionally dispatches `prp-researcher` in dual mode for codebase + market discovery.
-- **Heavyweight alternative**: For multi-agent research across many domains, use `/feature-research` instead (produces `feature-spec` and research artifacts).
+- **Downstream**: Specs feed into `/ycc:prp-plan` for implementation planning. Pass the actual resolved path and identify it as a PRP spec (linear mode names it `spec.md`; local mode uses `.spec.md`).
+- **Grounding**: Optionally dispatches `ycc/prp-researcher` in dual mode for codebase + market discovery.
+- **Heavyweight alternative**: For multi-agent research across many domains, use `/ycc:feature-research` instead (produces `feature-spec` and research artifacts).
 
 ## Success Criteria
 

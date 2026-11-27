@@ -1,6 +1,6 @@
 # Parse Deep-Research Output
 
-Extraction instructions for deep-research documents produced by `deep-research`.
+Extraction instructions for deep-research documents produced by `ycc:deep-research`.
 
 ## Expected Source Structure
 

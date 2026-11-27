@@ -4,7 +4,7 @@
 # and `./scripts/style.sh format --staged`.
 # Chooses between lefthook (preferred) and husky based on what the project uses.
 #
-# When an existing `lefthook.yml` is present (e.g., because `init --git` ran
+# When an existing `lefthook.yml` is present (e.g., because `ycc:init --git` ran
 # first), merge managed `pre-commit` commands into it instead of overwriting —
 # this preserves init-owned `pre-push` and `commit-msg` stages.
 #
@@ -238,7 +238,7 @@ install_native() {
 
     cat > "$dest" <<'EOF'
 #!/usr/bin/env sh
-# Managed by formatters (native install — not shared via git).
+# Managed by ycc:formatters (native install — not shared via git).
 # To bypass once: git commit --no-verify
 set -e
 ./scripts/style.sh lint --staged --fix

@@ -31,8 +31,8 @@ Read `~/.local/share/ycc/muse/ycc/ycc-shared/references/agent-team-dispatch.md` 
 3. **Team opt-in env gate**: `--team` without `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` aborts with: `--team requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1. Omit --team for standalone dispatch, or set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 in your Claude Code settings if you intentionally want agent-team dispatch.` Cursor and Codex bundles ship without team tools — never pass `--team` there.
 4. **Dry-run writes nothing**: handled before the prereq gate, overwrite prompt, any `mkdir`, write, dispatch, or rendering. Never prompts for input. It prints the preview and then **STOP**s.
    With `--team`, that dry-run additionally makes no `TaskCreate`/`Agent`/`SendMessage` calls.
-5. **`--plan-only` prerequisite gate (before any `mkdir` or write)**: `scripts/check-prerequisites.sh` must exit 0. On failure, print its output plus `run /shared-context <feature> or /plan-workflow <feature> --research-only first`, then **STOP**. Never fall back to running research inline under `--plan-only`.
-6. **`--optimized --plan-only` restriction**: the five unified analysis files must already exist (prior `--optimized` full run); there is no Phase 5 to regenerate them. If any is missing, **STOP** with: `--optimized --plan-only needs a prior --optimized full run. Run /plan-workflow <feature> --optimized first.` Enforced at Step 4B, re-checked by the Phase 7 PRE-CHECK.
+5. **`--plan-only` prerequisite gate (before any `mkdir` or write)**: `scripts/check-prerequisites.sh` must exit 0. On failure, print its output plus `run /ycc:shared-context <feature> or /ycc:plan-workflow <feature> --research-only first`, then **STOP**. Never fall back to running research inline under `--plan-only`.
+6. **`--optimized --plan-only` restriction**: the five unified analysis files must already exist (prior `--optimized` full run); there is no Phase 5 to regenerate them. If any is missing, **STOP** with: `--optimized --plan-only needs a prior --optimized full run. Run /ycc:plan-workflow <feature> --optimized first.` Enforced at Step 4B, re-checked by the Phase 7 PRE-CHECK.
 7. **Pre-generation gate (Step 22, cannot be skipped)**: `scripts/persist-or-fail.sh` must exit 0 before plan generation. On `MISSING_FILES`/`ACTION_REQUIRED`, re-dispatch the failing agent to write the missing file(s) and re-run until exit 0. The orchestrator must never write agent output files itself from captured summaries — that bypasses the contract (root cause of the May 2026 reproducer with 3 of 5 unified files missing).
 8. **Validator flags**: `validate-research-artifacts.sh` (Step 11), `validate-analysis-artifacts.sh` (Step 21), and `persist-or-fail.sh` (Step 22) must be invoked with `--optimized` whenever `--optimized` was passed; without it they look for the standard file sets and fail wrongly.
 9. **Validation-fail fix loop**: message the failing teammate (team mode) or re-dispatch the failing sub-agent via `Agent` (standalone). Wait, re-validate until pass. Never synthesize the missing file.
@@ -52,7 +52,7 @@ Parse flags first, then the feature name (first non-flag argument, required; art
 - **--worktree**: legacy no-op (worktree annotations are the default; safe to omit).
 - **--no-worktree**: opt out of worktree annotations in the generated `parallel-plan.md`. No effect with `--research-only` (no plan file). Honored with `--plan-only`.
 - **--store=local|linear**: optional artifact-store override. Forward it to every artifact-store helper call. Linear is the default; `local` opts out.
-- **--visual**: render the finished plan as an Agent-Native visual artifact (MDX) via `visual-plan`; local files by default, hosted link requires `--share`.
+- **--visual**: render the finished plan as an Agent-Native visual artifact (MDX) via `ycc:visual-plan`; local files by default, hosted link requires `--share`.
 
 If no feature name is provided, abort with the full usage instructions from `references/checkpoint-messages.md` — read when the feature name is missing ("Usage Instructions" section).
 
@@ -60,7 +60,7 @@ If no feature name is provided, abort with the full usage instructions from `ref
 
 ## Visual mode
 
-See `~/.local/share/ycc/muse/ycc/ycc-shared/references/visual-mode.md` for the canonical `--visual` contract. It is a terminal decorator, orthogonal to `--optimized` and `--no-worktree`; run it once at the end. With `VISUAL_MODE=true` and no `--dry-run`, invoke `visual-plan ${STORE_FLAG} <absolute-plan-path>` with the actual written `${parallel_plan_file}` and the retained store override. Dry runs print `visual generation would run` without invoking it. `--research-only` produces no plan and skips visualization.
+See `~/.local/share/ycc/muse/ycc/ycc-shared/references/visual-mode.md` for the canonical `--visual` contract. It is a terminal decorator, orthogonal to `--optimized` and `--no-worktree`; run it once at the end. With `VISUAL_MODE=true` and no `--dry-run`, invoke `ycc:visual-plan ${STORE_FLAG} <absolute-plan-path>` with the actual written `${parallel_plan_file}` and the retained store override. Dry runs print `visual generation would run` without invoking it. `--research-only` produces no plan and skips visualization.
 
 ## Phase 0: Initialize
 
@@ -148,7 +148,7 @@ Run `scripts/check-prerequisites.sh "[feature-name]" ${STORE_FLAG}` per gate 5. 
 - **Interactive (checkpoint enabled)**: surface the matching warning from `references/checkpoint-messages.md` ("Existing State Warnings") and let the user choose regenerate vs reuse/stop.
 - **Non-interactive (`--no-checkpoint`)**: default is **regenerate (overwrite)** so pipelines stay non-blocking; passing the flag is the explicit opt-in. State the choice when proceeding (e.g. "shared.md exists — regenerating (non-interactive default)").
 - **Headless (no question tool or chat turn), checkpoint enabled**: do not overwrite. Print the existing paths and `rerun with --no-checkpoint` to regenerate, then **STOP** without writes or dispatch.
-- **Research-only reuse**: report the existing `shared.md` path, state that no files were changed, print `/parallel-plan <feature>` as the next step, and **STOP** without dispatching agents.
+- **Research-only reuse**: report the existing `shared.md` path, state that no files were changed, print `/ycc:parallel-plan <feature>` as the next step, and **STOP** without dispatching agents.
 
 ### Step 5: Create Directories
 
@@ -252,7 +252,7 @@ Once `shared.md` exists and `validate-shared.sh` passed: skip Phases 4–9.5 ent
 1. Standalone research needs no teardown; proceed directly to the research-only summary.
    With `--team`, shut down remaining teammates via `SendMessage` (same cleanup as Step 33).
 2. Print the research-only summary: use "Research Complete Summary" from `references/checkpoint-messages.md` — read when emitting the research-only summary (standard or optimized variant), listing the artifacts this run created (standard: `research-*.md` ×4 + `shared.md`; optimized: the five unified `analysis-*.md` + `shared.md`) plus dispatch mode.
-3. Next step line: `/parallel-plan <feature>` or `/plan-workflow <feature> --plan-only`.
+3. Next step line: `/ycc:parallel-plan <feature>` or `/ycc:plan-workflow <feature> --plan-only`.
 4. **STOP** — no further writes or dispatch.
 
 ## Phase 4: Checkpoint (unless --no-checkpoint or --research-only)
@@ -422,13 +422,13 @@ Runs only after the plan is written (Phase 8) and validated (Phases 8–9). It n
 
 - `--dry-run` set: print `visual generation would run` and **STOP** this phase (§2.1 short-circuit — no visual artifacts).
 - `--research-only` used: no plan file was generated; skip this phase.
-- Otherwise invoke `visual-plan` on the **actual written plan path** (feature-dir plan resolved in Phase 0, not a hardcoded `docs/prps/plans` path):
+- Otherwise invoke `ycc:visual-plan` on the **actual written plan path** (feature-dir plan resolved in Phase 0, not a hardcoded `docs/prps/plans` path):
 
 ```
-visual-plan ${STORE_FLAG} "${parallel_plan_file}"
+ycc:visual-plan ${STORE_FLAG} "${parallel_plan_file}"
 ```
 
-`visual-plan` derives its `visual/` output directory from the supplied plan path and prints the resulting link (hosted URL, localhost preview, or `local files only`). Surface that link in the Phase 10 summary; do not re-derive the path yourself; do not edit the plan file.
+`ycc:visual-plan` derives its `visual/` output directory from the supplied plan path and prints the resulting link (hosted URL, localhost preview, or `local files only`). Surface that link in the Phase 10 summary; do not re-derive the path yourself; do not edit the plan file.
 
 ## Phase 10: Summary
 
@@ -438,7 +438,7 @@ confirm all teammates have shut down before completing (gate 10).
 
 ### Step 34: Display Completion Summary
 
-Skipped when `RESEARCH_ONLY=true` or the user stopped at the checkpoint. Otherwise use the "Full Workflow Complete Summary" in `references/checkpoint-messages.md`. List only files actually created (`--plan-only`: omit Research Phase files). In linear mode replace its implementation command with `/implement-plan --store=linear <feature-slug>`.
+Skipped when `RESEARCH_ONLY=true` or the user stopped at the checkpoint. Otherwise use the "Full Workflow Complete Summary" in `references/checkpoint-messages.md`. List only files actually created (`--plan-only`: omit Research Phase files). In linear mode replace its implementation command with `/ycc:implement-plan --store=linear <feature-slug>`.
 
 ## Optimized Mode
 

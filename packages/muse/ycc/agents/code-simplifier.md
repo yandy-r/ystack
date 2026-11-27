@@ -3,11 +3,11 @@ name: code-simplifier
 description: Simplifies and refines code for clarity, consistency, and maintainability
   while preserving behavior. Focus on recently modified code unless instructed otherwise.
 tools:
-- Read
-- Write
-- Edit
-- Bash
-- Grep
+- read_file
+- write_file
+- edit_file
+- bash
+- search
 ---
 
 # Code Simplifier Agent

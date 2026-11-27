@@ -5,7 +5,7 @@
 - Flag Matrix
 - Per-Flag Examples
 
-Detailed reference for every flag accepted by `formatters`. See `SKILL.md` for live phase logic.
+Detailed reference for every flag accepted by `ycc:formatters`. See `SKILL.md` for live phase logic.
 
 ---
 
@@ -13,25 +13,25 @@ Detailed reference for every flag accepted by `formatters`. See `SKILL.md` for l
 
 | Flag               | Default     | Affects phases   | Writes to                                                           | Example                                  |
 | ------------------ | ----------- | ---------------- | ------------------------------------------------------------------- | ---------------------------------------- |
-| `--dry-run`        | off         | 3 (halt)         | nothing                                                             | `formatters --dry-run`               |
-| `--force`          | off         | 4, 5 (overwrite) | all target files                                                    | `formatters --force`                 |
-| `--yes`            | off         | 3 (skip prompt)  | existing files preserved                                            | `formatters --yes`                   |
-| `--sync`           | auto        | 4 (prune)        | `scripts/` bundle + removes stale managed files                     | `formatters --sync`                  |
-| `--copy`           | on          | 4 (install)      | `scripts/` bundle                                                   | `formatters --copy`                  |
-| `--ci`             | off         | 5 (extend)       | `.github/workflows/lint.yml` + `.github/workflows/lint-autofix.yml` | `formatters --ci`                    |
-| `--no-autofix`     | off         | 5 (skip)         | (suppresses `lint-autofix.yml`; only meaningful with `--ci`)        | `formatters --ci --no-autofix`       |
-| `--hooks`          | off         | 5 (extend)       | `lefthook.yml` or `.husky/pre-commit`                               | `formatters --hooks`                 |
-| `--no-aliases`     | off         | 5 (skip)         | (suppresses package.json / Makefile / justfile alias injection)     | `formatters --no-aliases`            |
-| `--no-docs`        | off         | 5 (skip)         | (suppresses README section append)                                  | `formatters --no-docs`               |
-| `--target=<dir>`   | `$PWD`      | 1 (override)     | configs + scripts land in `<dir>`                                   | `formatters --target=~/projects/app` |
-| `--profile=<lang>` | auto-detect | 1 (override)     | (forces stack flags)                                                | `formatters --profile=rust`          |
-| `--rust`           | auto        | 4 (enable)       | `rustfmt.toml`, `clippy.toml`                                       | `formatters --rust`                  |
-| `--ts`             | auto        | 4 (enable)       | `biome.json`, `tsconfig.json`, `package.json` (TS scaffold only)    | `formatters --ts`                    |
-| `--python`         | auto        | 4 (enable)       | `pyproject.toml` (scaffold only; refuses to overwrite)              | `formatters --python`                |
-| `--go`             | auto        | 4 (enable)       | `.golangci.yml`                                                     | `formatters --go`                    |
-| `--docs`           | auto        | 4 (enable)       | `.markdownlint.json`, `.prettierrc`, `.prettierignore`              | `formatters --docs`                  |
-| `--shell`          | auto        | 4 (enable)       | `.gitignore` entry for `/tools/shellcheck` + bundled shell tooling  | `formatters --shell`                 |
-| `--all`            | off         | 4 (enable all)   | every stack regardless of detection                                 | `formatters --all`                   |
+| `--dry-run`        | off         | 3 (halt)         | nothing                                                             | `ycc:formatters --dry-run`               |
+| `--force`          | off         | 4, 5 (overwrite) | all target files                                                    | `ycc:formatters --force`                 |
+| `--yes`            | off         | 3 (skip prompt)  | existing files preserved                                            | `ycc:formatters --yes`                   |
+| `--sync`           | auto        | 4 (prune)        | `scripts/` bundle + removes stale managed files                     | `ycc:formatters --sync`                  |
+| `--copy`           | on          | 4 (install)      | `scripts/` bundle                                                   | `ycc:formatters --copy`                  |
+| `--ci`             | off         | 5 (extend)       | `.github/workflows/lint.yml` + `.github/workflows/lint-autofix.yml` | `ycc:formatters --ci`                    |
+| `--no-autofix`     | off         | 5 (skip)         | (suppresses `lint-autofix.yml`; only meaningful with `--ci`)        | `ycc:formatters --ci --no-autofix`       |
+| `--hooks`          | off         | 5 (extend)       | `lefthook.yml` or `.husky/pre-commit`                               | `ycc:formatters --hooks`                 |
+| `--no-aliases`     | off         | 5 (skip)         | (suppresses package.json / Makefile / justfile alias injection)     | `ycc:formatters --no-aliases`            |
+| `--no-docs`        | off         | 5 (skip)         | (suppresses README section append)                                  | `ycc:formatters --no-docs`               |
+| `--target=<dir>`   | `$PWD`      | 1 (override)     | configs + scripts land in `<dir>`                                   | `ycc:formatters --target=~/projects/app` |
+| `--profile=<lang>` | auto-detect | 1 (override)     | (forces stack flags)                                                | `ycc:formatters --profile=rust`          |
+| `--rust`           | auto        | 4 (enable)       | `rustfmt.toml`, `clippy.toml`                                       | `ycc:formatters --rust`                  |
+| `--ts`             | auto        | 4 (enable)       | `biome.json`, `tsconfig.json`, `package.json` (TS scaffold only)    | `ycc:formatters --ts`                    |
+| `--python`         | auto        | 4 (enable)       | `pyproject.toml` (scaffold only; refuses to overwrite)              | `ycc:formatters --python`                |
+| `--go`             | auto        | 4 (enable)       | `.golangci.yml`                                                     | `ycc:formatters --go`                    |
+| `--docs`           | auto        | 4 (enable)       | `.markdownlint.json`, `.prettierrc`, `.prettierignore`              | `ycc:formatters --docs`                  |
+| `--shell`          | auto        | 4 (enable)       | `.gitignore` entry for `/tools/shellcheck` + bundled shell tooling  | `ycc:formatters --shell`                 |
+| `--all`            | off         | 4 (enable all)   | every stack regardless of detection                                 | `ycc:formatters --all`                   |
 
 ### Flag precedence
 
@@ -61,8 +61,8 @@ Detailed reference for every flag accepted by `formatters`. See `SKILL.md` for l
 Preview everything without writing. Combines with any other flag.
 
 ```
-formatters --dry-run
-formatters --dry-run --ci --hooks
+ycc:formatters --dry-run
+ycc:formatters --dry-run --ci --hooks
 ```
 
 ### `--force`
@@ -70,7 +70,7 @@ formatters --dry-run --ci --hooks
 Non-interactive overwrite. Required when running in CI or over existing user-authored configs.
 
 ```
-formatters --force --yes
+ycc:formatters --force --yes
 ```
 
 ### `--sync`
@@ -78,14 +78,14 @@ formatters --force --yes
 Re-run after a prior install. Prunes managed files that were removed from the upstream bundle. Safe to run periodically.
 
 ```
-formatters --sync
+ycc:formatters --sync
 ```
 
 ### `--ci`
 
 Emit `.github/workflows/lint.yml` (authoritative check) **and** `.github/workflows/lint-autofix.yml` (applies `./scripts/style.sh format` + `lint --fix` and pushes fixes back to same-repo PRs). Each destination is managed independently — an existing file is skipped unless `--force` is also passed.
 
-The check workflow runs on every pull request and on pushes to the default branch (detected via `git symbolic-ref refs/remotes/origin/HEAD`, falling back to `main`) and to `release/**` maintenance branches, so patch lines cut under the release-branches model (see `/release-model`) stay linted.
+The check workflow runs on every pull request and on pushes to the default branch (detected via `git symbolic-ref refs/remotes/origin/HEAD`, falling back to `main`) and to `release/**` maintenance branches, so patch lines cut under the release-branches model (see `/ycc:release-model`) stay linted.
 
 The autofix workflow:
 
@@ -99,9 +99,9 @@ The autofix workflow:
 - Carries a commented `git add -u -- . ':(exclude)...'` placeholder in the `format` job — customize after install if the project has generated files that should not be auto-fixed.
 
 ```
-formatters --ci                     # installs both workflows
-formatters --ci --force             # overwrite both if they already exist
-formatters --ci --no-autofix        # install only lint.yml (check-only)
+ycc:formatters --ci                     # installs both workflows
+ycc:formatters --ci --force             # overwrite both if they already exist
+ycc:formatters --ci --no-autofix        # install only lint.yml (check-only)
 ```
 
 ### `--no-autofix`
@@ -109,7 +109,7 @@ formatters --ci --no-autofix        # install only lint.yml (check-only)
 Only meaningful when `--ci` is set. Skips installing `lint-autofix.yml`. The existing check workflow (`lint.yml`) is still installed. Use when a repo has branch-protection rules that forbid bot pushes, when no GitHub App can be set up for the push, or when the team prefers to run formatters exclusively via pre-commit hooks.
 
 ```
-formatters --ci --no-autofix
+ycc:formatters --ci --no-autofix
 ```
 
 ### `--hooks`
@@ -122,13 +122,13 @@ index only (fast feedback). The bundled `style.sh` accepts `--modified`,
 `--staged`, or `--unstaged` as mutually-exclusive scope flags — see
 `./scripts/style.sh lint --help` for details.
 
-If `lefthook.yml` already exists (e.g., because `init --git` ran first),
+If `lefthook.yml` already exists (e.g., because `ycc:init --git` ran first),
 `apply-hooks.sh` merges its `pre-commit` block into the existing file rather
 than overwriting, so the init-owned `pre-push` and `commit-msg` stages are
 preserved.
 
 ```
-formatters --hooks
+ycc:formatters --hooks
 ```
 
 ### `--no-aliases` / `--no-docs`
@@ -136,8 +136,8 @@ formatters --hooks
 Opt out of the post-install sugar. Useful when the target project already has a custom Makefile or docs pipeline.
 
 ```
-formatters --no-aliases
-formatters --no-aliases --no-docs
+ycc:formatters --no-aliases
+ycc:formatters --no-aliases --no-docs
 ```
 
 ### `--target=<dir>`
@@ -145,7 +145,7 @@ formatters --no-aliases --no-docs
 Install into a directory other than `$PWD`. The directory must exist and should be a git repo (hooks refuse otherwise).
 
 ```
-formatters --target=~/projects/new-app
+ycc:formatters --target=~/projects/new-app
 ```
 
 ### `--profile=<lang>`
@@ -158,8 +158,8 @@ To drop a vendored tree that is **committed and not gitignored**, list it in
 `references/stack-detection.md`).
 
 ```
-formatters --profile=rust
-formatters --profile=mixed --target=./monorepo
+ycc:formatters --profile=rust
+ycc:formatters --profile=mixed --target=./monorepo
 ```
 
 ### Per-stack flags (`--rust`, `--ts`, `--python`, `--go`, `--docs`, `--shell`)
@@ -167,8 +167,8 @@ formatters --profile=mixed --target=./monorepo
 Enable one or more specific stacks explicitly. When any per-stack flag is passed, auto-detection is suppressed and only the named stacks run.
 
 ```
-formatters --rust --go
-formatters --ts --docs
+ycc:formatters --rust --go
+ycc:formatters --ts --docs
 ```
 
 When `--ts` and `--docs` are both enabled, Biome owns JS/TS/CSS/JSON/JSONC and Prettier is limited to Markdown/YAML so the formatters do not overlap.
@@ -178,5 +178,5 @@ When `--ts` and `--docs` are both enabled, Biome owns JS/TS/CSS/JSON/JSONC and P
 Install configs for every supported stack regardless of detection. Useful for template repos or scaffolding an empty project ahead of code.
 
 ```
-formatters --all
+ycc:formatters --all
 ```

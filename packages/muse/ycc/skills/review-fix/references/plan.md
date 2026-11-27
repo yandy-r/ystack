@@ -11,7 +11,7 @@
 
 ## Batching rules
 
-1. **Findings in the same file go in the same group.** Concurrent edits to one file cause write conflicts, so same-file findings are ALWAYS processed sequentially within a single `review-fixer` agent.
+1. **Findings in the same file go in the same group.** Concurrent edits to one file cause write conflicts, so same-file findings are ALWAYS processed sequentially within a single `ycc/review-fixer` agent.
 2. **Findings in different files are parallel candidates.** They can go in the same batch and be dispatched concurrently.
 3. **Within a same-file group, sort by line number DESCENDING.** This ensures earlier edits don't shift the line numbers of later findings.
 4. **Severity ordering across batches**: process CRITICAL findings first, then HIGH, then MEDIUM, then LOW. This gives the user the highest-value fixes immediately and ensures that if the pipeline stops mid-run, the worst issues are addressed first.
@@ -91,7 +91,7 @@ inside the single feature worktree from
 no per-severity child worktrees and no fan-in merge.
 
 **One-time parent setup** (only when `WORKTREE_MODE=true` was forced and
-`$PARENT_PATH` needs creation; skip if already ensured by `/code-review`):
+`$PARENT_PATH` needs creation; skip if already ensured by `/ycc:code-review`):
 
 ```bash
 PARENT_PATH=$(bash "${HOME}/.local/share/ycc/muse/ycc/ycc-shared/scripts/setup-worktree.sh" \

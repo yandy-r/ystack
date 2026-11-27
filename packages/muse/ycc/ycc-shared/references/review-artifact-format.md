@@ -11,8 +11,8 @@
 
 Canonical schema for review artifacts, written to `docs/prps/reviews/` (local
 store) or `.ycc/artifacts/<slug>/reviews/` (linear store, the default).
-`/code-review` writes it (both modes). `/review-fix`, `/quick-fix`,
-and `/quick-review` parse it. Do not deviate — downstream skills parse
+`/ycc:code-review` writes it (both modes). `/ycc:review-fix`, `/ycc:quick-fix`,
+and `/ycc:quick-review` parse it. Do not deviate — downstream skills parse
 these fields mechanically.
 
 ## File locations
@@ -103,7 +103,7 @@ Quick reviews omit `## Validation Results` (no toolchain runs) and
 `## Worktree Setup` (no worktree is ever created). All other sections — Header,
 Summary, Findings (with full `[F###]`, `Status:`, `Category:`,
 `Suggested fix:` fields per finding), Files Reviewed — are identical to the
-standard template, so `/review-fix` parses them without special-casing.
+standard template, so `/ycc:review-fix` parses them without special-casing.
 
 ## Finding ID rules
 
@@ -124,13 +124,13 @@ Every finding has a `Status` field. Valid values:
 
 | Status | Meaning                                                                                                      |
 | ------ | ------------------------------------------------------------------------------------------------------------ |
-| Open   | Default on first write. Not yet processed by `/review-fix`, or below the fix skill's severity threshold. |
-| Fixed  | Successfully fixed by `/review-fix`. Set by the fix skill — code-review itself never writes this.        |
-| Failed | Attempted by `/review-fix` but the fix broke validation. Set by the fix skill.                           |
+| Open   | Default on first write. Not yet processed by `/ycc:review-fix`, or below the fix skill's severity threshold. |
+| Fixed  | Successfully fixed by `/ycc:review-fix`. Set by the fix skill — code-review itself never writes this.        |
+| Failed | Attempted by `/ycc:review-fix` but the fix broke validation. Set by the fix skill.                           |
 
-`/code-review` and `/quick-review` only ever write `Status: Open`. All
-other states are set in place by `/review-fix` (or, for inline hand-offs,
-reported by `/quick-fix` without editing any artifact).
+`/ycc:code-review` and `/ycc:quick-review` only ever write `Status: Open`. All
+other states are set in place by `/ycc:review-fix` (or, for inline hand-offs,
+reported by `/ycc:quick-fix` without editing any artifact).
 
 ## Required fields per finding
 
@@ -145,4 +145,4 @@ machine-parseable:
 ```
 
 Findings missing a `Suggested fix` line are valid but are skipped by
-`/review-fix` (flagged for human judgment).
+`/ycc:review-fix` (flagged for human judgment).

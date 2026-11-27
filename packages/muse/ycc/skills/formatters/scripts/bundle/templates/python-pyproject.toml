@@ -1,4 +1,4 @@
-# Managed by formatters — Ruff + Black configuration.
+# Managed by ycc:formatters — Ruff + Black configuration.
 # If you have an existing pyproject.toml, MERGE these sections manually.
 
 [tool.ruff]

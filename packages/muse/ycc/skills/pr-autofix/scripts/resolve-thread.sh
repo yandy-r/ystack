@@ -7,7 +7,7 @@
 # a uniform unsupported notice and exits 2.
 #
 # Purpose:
-#   Wraps the four mutations pr-autofix needs to close out comments:
+#   Wraps the four mutations ycc:pr-autofix needs to close out comments:
 #     resolve      — resolveReviewThread(threadId) via GraphQL
 #     reply        — POST /pulls/{N}/comments/{comment_id}/replies via REST
 #     issue-reply  — POST /issues/{N}/comments via REST (top-level conversation)

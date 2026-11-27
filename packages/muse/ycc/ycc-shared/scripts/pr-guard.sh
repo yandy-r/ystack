@@ -114,7 +114,7 @@ kv_get() {
 }
 
 # load_state — read release-state.sh get; exit with its code on failure
-# (2 = malformed block, message already names /release-model --audit).
+# (2 = malformed block, message already names /ycc:release-model --audit).
 load_state() {
   local out rc=0
   out="$(bash "$RELEASE_STATE_SH" get 2>&1)" || rc=$?
@@ -196,9 +196,9 @@ cmd_sync_check() {
 
   if [[ -n "$HEAD_BRANCH" && "$HEAD_BRANCH" != "$BASE" ]] &&
     is_long_lived "$HEAD_BRANCH" && is_long_lived "$BASE"; then
-    # Single quotes around /backport: generated bundles rewrite it to a
+    # Single quotes around /ycc:backport: generated bundles rewrite it to a
     # $-prefixed name that bash would expand inside double quotes.
-    refuse "head '${HEAD_BRANCH}' and base '${BASE}' are both long-lived branches; move fixes by cherry-pick"' (/backport), not by a sync PR'
+    refuse "head '${HEAD_BRANCH}' and base '${BASE}' are both long-lived branches; move fixes by cherry-pick"' (/ycc:backport), not by a sync PR'
   fi
 
   base_ref="origin/${BASE}"

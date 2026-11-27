@@ -13,7 +13,7 @@ argument-hint: '[base-branch] [--draft] [--ci] [--ci-max-pushes=N] [--ci-max-sam
 
 **Input**: `$ARGUMENTS` — optional, may contain a base branch name and/or flags (e.g., `--draft`).
 
-This is the lightweight counterpart to `/git-workflow --pr`. Use it when you just need the PR created, without the full commit+documentation orchestration.
+This is the lightweight counterpart to `/ycc:git-workflow --pr`. Use it when you just need the PR created, without the full commit+documentation orchestration.
 
 **Parse `$ARGUMENTS`**:
 
@@ -31,9 +31,9 @@ This is the lightweight counterpart to `/git-workflow --pr`. Use it when you jus
   BASE=$(bash ~/.local/share/ycc/muse/ycc/ycc-shared/scripts/pr-guard.sh base [--base <base-branch>])
   ```
 
-  Without an explicit base this is the `RELEASING.md` base (`release-state.sh base`), else the repo default branch. Exit 2 means a malformed `RELEASING.md`: stop with the parse error and `/release-model --audit`. Use `$BASE` as `<base>` everywhere below. See `~/.local/share/ycc/muse/ycc/ycc-shared/references/pr-base-and-backport.md`.
+  Without an explicit base this is the `RELEASING.md` base (`release-state.sh base`), else the repo default branch. Exit 2 means a malformed `RELEASING.md`: stop with the parse error and `/ycc:release-model --audit`. Use `$BASE` as `<base>` everywhere below. See `~/.local/share/ycc/muse/ycc/ycc-shared/references/pr-base-and-backport.md`.
 
-**Questions:** class `confirm-publish` (Phase 1 "run --ci against the existing PR?", Phase 7 CI authorization): headless (no question tool or chat turn) and without `--ci-yes`, skip CI monitoring and print `rerun with --ci-yes`. Class `confirm-publish` (backport prompt): headless, add no label and print the `/backport` hint. Class `choose-path` (multiple PR templates): headless, use `default.md` (or the first template) and say so. See `~/.local/share/ycc/muse/ycc/ycc-shared/references/question-policy.md`.
+**Questions:** class `confirm-publish` (Phase 1 "run --ci against the existing PR?", Phase 7 CI authorization): headless (no question tool or chat turn) and without `--ci-yes`, skip CI monitoring and print `rerun with --ci-yes`. Class `confirm-publish` (backport prompt): headless, add no label and print the `/ycc:backport` hint. Class `choose-path` (multiple PR templates): headless, use `default.md` (or the first template) and say so. See `~/.local/share/ycc/muse/ycc/ycc-shared/references/question-policy.md`.
 
 ---
 
@@ -50,7 +50,7 @@ git log origin/<base>..HEAD --oneline
 | Check                   | Condition                                           | Action if Failed                                                                              |
 | ----------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | Not on base branch      | Current branch ≠ base                               | Stop: "Switch to a feature branch first."                                                     |
-| Clean working directory | No uncommitted changes                              | Warn: "You have uncommitted changes. Commit or stash first. Use `/prp-commit` to commit." |
+| Clean working directory | No uncommitted changes                              | Warn: "You have uncommitted changes. Commit or stash first. Use `/ycc:prp-commit` to commit." |
 | Has commits ahead       | `git log origin/<base>..HEAD` not empty             | Stop: "No commits ahead of `<base>`. Nothing to PR."                                          |
 | No existing PR          | `gh pr list --head <branch> --json number` is empty | Stop: "PR already exists: #<number>. Use `gh pr view <number> --web` to open it."             |
 | No sync merge           | `pr-guard.sh sync-check --base <base>` exits 0      | Exit 3 — Stop: show the reason and cite `branching-model.md#rules` (see shared reference)     |
@@ -186,7 +186,7 @@ Use this default format:
 
 ### Backport prompt
 
-Before creating the PR, run `pr-guard.sh backport-label --base <base> --title "<PR title>"` (add `--labels` when labels are known). On `backport=1`, ask `Backport to <branch>? (yes/no)`; on yes, add the printed label to the new PR and tell the user to run `/backport <PR#>` after it merges. Details: `~/.local/share/ycc/muse/ycc/ycc-shared/references/pr-base-and-backport.md#backport-prompt`.
+Before creating the PR, run `pr-guard.sh backport-label --base <base> --title "<PR title>"` (add `--labels` when labels are known). On `backport=1`, ask `Backport to <branch>? (yes/no)`; on yes, add the printed label to the new PR and tell the user to run `/ycc:backport <PR#>` after it merges. Details: `~/.local/share/ycc/muse/ycc/ycc-shared/references/pr-base-and-backport.md#backport-prompt`.
 
 ### Create the PR
 
@@ -241,7 +241,7 @@ Artifacts referenced:
 
 Next steps:
   - gh pr view <number> --web      → open in browser
-  - /code-review <number>      → review the PR
+  - /ycc:code-review <number>      → review the PR
   - gh pr merge <number>           → merge when ready
 
 Goal Signals (machine-readable — printed verbatim for /goal)
@@ -380,7 +380,7 @@ These keys are emitted verbatim in the Goal Signals block (end of Phase 6, or en
 
 ## /goal pairing
 
-Pair this skill with the `/goal` session directive **only in `--ci` mode**. Without `--ci`, `/prp-pr` is a one-shot create-PR-and-exit flow with nothing to loop on — a `/goal` directive adds no value there. In `--ci` mode, Phase 7 enters the bounded CI auto-fix loop (sharing the `ci-monitor.sh` contract with `pr-autofix` and `releaser`), and `/goal` drives it through every `handoff` fix-and-push and `rerun-pending` flake retry without returning control between iterations.
+Pair this skill with the `/goal` session directive **only in `--ci` mode**. Without `--ci`, `/ycc:prp-pr` is a one-shot create-PR-and-exit flow with nothing to loop on — a `/goal` directive adds no value there. In `--ci` mode, Phase 7 enters the bounded CI auto-fix loop (sharing the `ci-monitor.sh` contract with `ycc:pr-autofix` and `ycc/releaser`), and `/goal` drives it through every `handoff` fix-and-push and `rerun-pending` flake retry without returning control between iterations.
 
 The Phase 7 loop's stdout `RESULT=` markers tell the evaluator when to keep looping versus when to stop:
 
@@ -391,7 +391,7 @@ The Phase 7 loop's stdout `RESULT=` markers tell the evaluator when to keep loop
 Recommended condition template (`--ci` mode):
 
 ```
-/goal Run /prp-pr <base> --ci using the prp-pr workflow, continuing through every
+/goal Run /ycc:prp-pr <base> --ci using the ycc:prp-pr workflow, continuing through every
 handoff and rerun-pending iteration of the Phase 7 CI loop without returning control to me.
 Done when the transcript shows the Phase 6 OUTPUT with the PR number and URL, followed by the
 Goal Signals printed verbatim — PR_IN_SCOPE: PASS, PR_URL_PRINTED: PASS, and CI_GREEN: PASS.
@@ -408,9 +408,9 @@ The transcript-output contract and shared caveats (worktree cwd, interactive fai
 
 ---
 
-## When to use this vs `/git-workflow --pr`
+## When to use this vs `/ycc:git-workflow --pr`
 
-| Use `/prp-pr` when            | Use `/git-workflow --pr` when                  |
+| Use `/ycc:prp-pr` when            | Use `/ycc:git-workflow --pr` when                  |
 | --------------------------------- | -------------------------------------------------- |
 | Your commits are already in place | You want to commit and PR in one flow              |
 | You want a focused PR-only tool   | You want documentation agents to update docs first |

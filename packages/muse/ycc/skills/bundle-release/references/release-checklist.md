@@ -12,7 +12,7 @@
 - Phase 7: Publish (Optional)
 - Rollback
 
-This checklist is the artifact of record for a `bundle-release` run. It documents
+This checklist is the artifact of record for a `ycc:bundle-release` run. It documents
 every ordered step the skill performs, plus manual recovery instructions if a step fails.
 Run it whenever you are preparing a new versioned release of the `ycc` plugin bundle.
 The completed checklist for each release is saved to `docs/releases/<version>.md`.

@@ -38,7 +38,7 @@ source "${SCRIPT_DIR}/../../../ycc-shared/scripts/lib/backport-lib.sh"
 PR_LIMIT=1000
 # Single-quoted: the Codex generator rewrites this to its own skill syntax, which
 # must stay literal rather than expand as a shell variable.
-RELEASE_MODEL_CMD='/release-model'
+RELEASE_MODEL_CMD='/ycc:release-model'
 
 _error() {
   echo "find-pending: $*" >&2

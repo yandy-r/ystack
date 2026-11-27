@@ -52,7 +52,7 @@ shared-context (step 1) -> parallel-plan (this skill) -> implement-plan (step 3)
 
 This skill requires `${feature_dir}/shared.md` and ends after producing
 analysis artifacts and `parallel-plan.md`. The user manually runs
-`/implement-plan` when ready in local mode; in linear mode, `/implement-plan --store=linear <feature>` loads the plan from the artifact-store cache.
+`/implement-plan` when ready in local mode; in linear mode, `/ycc:implement-plan --store=linear <feature>` loads the plan from the artifact-store cache.
 
 **If shared.md doesn't exist**: canonical `plan-workflow/scripts/check-prerequisites.sh`
 fails fast in plan-only mode. Stop and tell the user to run
@@ -65,7 +65,7 @@ fails fast in plan-only mode. Stop and tell the user to run
 - **--team**: Optional. (Claude Code only) Deploy analysis and validation stages as teammates. Default is standalone parallel sub-agents via the `Agent` tool. Cursor and Codex bundles lack team tools — do not pass `--team` there.
 - **--worktree**: Optional. (legacy — now default; safe to omit) Worktree annotations are emitted by default. Accepted as a silent no-op.
 - **--no-worktree**: Optional. Opt out of worktree annotations. The plan will not contain a `## Worktree Setup` section.
-- **--visual**: Optional. Render the finished plan as an Agent-Native visual artifact (MDX) via `visual-plan`; local-files by default, hosted link requires `--share`.
+- **--visual**: Optional. Render the finished plan as an Agent-Native visual artifact (MDX) via `ycc:visual-plan`; local-files by default, hosted link requires `--share`.
 - **--dry-run**: Show what would be created without making changes. Writes nothing.
 - **feature-name**: Required. Feature slug passed to canonical `plan-workflow` for artifact-store resolution.
 - **--store=local|linear**: Optional artifact-store override, forwarded to canonical `plan-workflow`. Linear is the default.
@@ -126,7 +126,7 @@ ${parallel_plan_file}
 Local mode only: /implement-plan [feature-name]
 
 In linear mode replace that command with:
-/implement-plan --store=linear [feature-name]
+/ycc:implement-plan --store=linear [feature-name]
 ```
 
 **STOP**: Do not execute implement-plan. Do not write any more files. Do not modify any code. This skill is complete.

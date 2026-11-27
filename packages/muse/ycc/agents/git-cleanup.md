@@ -4,17 +4,17 @@ description: Read-only git cleanup auditor. Collects git state (branches, worktr
   remote-tracking refs, stashes, tags) and remote state from GitHub/GitLab (PRs, issues),
   runs an active-code analysis pass to separate stale from load-bearing resources,
   and returns a structured report inline. Does NOT delete anything and writes no files.
-  Invoked by the git-cleanup skill for large-repo audits or when the orchestrator
+  Invoked by the ycc/git-cleanup skill for large-repo audits or when the orchestrator
   wants a clean read-only pass before the decision gate.
 tools:
-- Read
-- Grep
-- Bash
+- read_file
+- search
+- bash
 ---
 
 # git-cleanup (auditor)
 
-Read-only auditor that feeds the `git-cleanup` skill. Produces a structured
+Read-only auditor that feeds the `ycc/git-cleanup` skill. Produces a structured
 report describing protected, active, stale, and ambiguous git resources across
 the local repo and (when available) its GitHub or GitLab host. **Never executes
 destructive commands** and **never writes files** — it returns the report
@@ -92,7 +92,7 @@ The caller runs `release-state.sh get` and passes its `key=value` output
   summary that release-model rules were not evaluated.
 - Malformed state (the caller reports exit code 2 and a parse error): stop,
   return no report, and return the parse error with a pointer to
-  `/release-model --audit`.
+  `/ycc:release-model --audit`.
 - `present=1`:
   - Protect `trunk` and every `maintenance` branch (rule 7).
   - Classify every local or remote `release/*` branch that is not in

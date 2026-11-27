@@ -1,6 +1,6 @@
 # RELEASING.md template placeholders
 
-`templates/RELEASING.md.tmpl` uses the same syntax as `init` templates: `{{NAME}}`
+`templates/RELEASING.md.tmpl` uses the same syntax as `ycc:init` templates: `{{NAME}}`
 placeholders and `{{#IF_X}}…{{/IF_X}}` conditional blocks on their own lines. The template
 already contains empty table markers; after rendering, run `release-state-update.sh --render`
 to fill the Current state table from the block.

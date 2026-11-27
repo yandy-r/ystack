@@ -15,11 +15,11 @@ Convert planning and research output into structured GitHub issues with tracking
 
 | Source Type   | Produced By                              | Input Path Pattern (local mode)     | Linear cache (linear mode)                       |
 | ------------- | ---------------------------------------- | ----------------------------------- | ------------------------------------------------ |
-| deep-research | `deep-research`                      | Directory with `RESEARCH-REPORT.md` | Directory with `RESEARCH-REPORT.md` (`--source`) |
-| feature-spec  | `feature-research`                   | `docs/plans/*/feature-spec.md`      | `.ycc/artifacts/<slug>/feature-spec.md`          |
-| parallel-plan | `parallel-plan`, `plan-workflow` | `docs/plans/*/parallel-plan.md`     | `.ycc/artifacts/<slug>/parallel-plan.md`         |
-| prp-plan      | `prp-plan`                           | `docs/prps/plans/*.plan.md`         | `.ycc/artifacts/<slug>/prp-plan.md`              |
-| prd           | `prp-prd`                            | `docs/prps/prds/*.prd.md`           | `.ycc/artifacts/<slug>/prd.md`                   |
+| deep-research | `ycc:deep-research`                      | Directory with `RESEARCH-REPORT.md` | Directory with `RESEARCH-REPORT.md` (`--source`) |
+| feature-spec  | `ycc:feature-research`                   | `docs/plans/*/feature-spec.md`      | `.ycc/artifacts/<slug>/feature-spec.md`          |
+| parallel-plan | `ycc:parallel-plan`, `ycc:plan-workflow` | `docs/plans/*/parallel-plan.md`     | `.ycc/artifacts/<slug>/parallel-plan.md`         |
+| prp-plan      | `ycc:prp-plan`                           | `docs/prps/plans/*.plan.md`         | `.ycc/artifacts/<slug>/prp-plan.md`              |
+| prd           | `ycc:prp-prd`                            | `docs/prps/prds/*.prd.md`           | `.ycc/artifacts/<slug>/prd.md`                   |
 
 ## Current Task
 

@@ -23,20 +23,20 @@ Context injection is one scoped helper call: no `pwd`, `head`, `2>/dev/null`, or
 
 | Flag                                                           | Meaning                                                                         | Example                                  |
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------- |
-| `--dry-run`                                                    | Preview every planned file; make no writes                                      | `formatters --dry-run`               |
-| `--force`                                                      | Overwrite existing tool configs / aliases / docs without prompting              | `formatters --force`                 |
-| `--yes`                                                        | Non-interactive; keep existing files on conflict                                | `formatters --yes`                   |
-| `--sync`                                                       | Install bundle + prune stale managed files (preferred on re-run)                | `formatters --sync`                  |
-| `--copy`                                                       | Install bundle without pruning (default when no manifest exists)                | `formatters --copy`                  |
-| `--ci`                                                         | Also emit `.github/workflows/lint.yml` and `.github/workflows/lint-autofix.yml` | `formatters --ci`                    |
-| `--no-autofix`                                                 | With `--ci`: skip `lint-autofix.yml`, install the check workflow only           | `formatters --ci --no-autofix`       |
-| `--hooks`                                                      | Also wire a pre-commit hook (lefthook preferred, husky if detected)             | `formatters --hooks`                 |
-| `--no-aliases`                                                 | Skip package.json / Makefile / justfile alias injection                         | `formatters --no-aliases`            |
-| `--no-docs`                                                    | Skip README section append                                                      | `formatters --no-docs`               |
-| `--target=<dir>`                                               | Target directory (default: `$PWD`)                                              | `formatters --target=~/projects/app` |
-| `--profile=<lang>`                                             | Override detection: `rust`, `ts-node`, `python`, `go`, `docs`, `mixed`          | `formatters --profile=rust`          |
-| `--rust` / `--ts` / `--python` / `--go` / `--docs` / `--shell` | Enable specific stack(s); suppresses auto-detection                             | `formatters --rust --go`             |
-| `--all`                                                        | Install every supported stack's configs regardless of detection                 | `formatters --all`                   |
+| `--dry-run`                                                    | Preview every planned file; make no writes                                      | `ycc:formatters --dry-run`               |
+| `--force`                                                      | Overwrite existing tool configs / aliases / docs without prompting              | `ycc:formatters --force`                 |
+| `--yes`                                                        | Non-interactive; keep existing files on conflict                                | `ycc:formatters --yes`                   |
+| `--sync`                                                       | Install bundle + prune stale managed files (preferred on re-run)                | `ycc:formatters --sync`                  |
+| `--copy`                                                       | Install bundle without pruning (default when no manifest exists)                | `ycc:formatters --copy`                  |
+| `--ci`                                                         | Also emit `.github/workflows/lint.yml` and `.github/workflows/lint-autofix.yml` | `ycc:formatters --ci`                    |
+| `--no-autofix`                                                 | With `--ci`: skip `lint-autofix.yml`, install the check workflow only           | `ycc:formatters --ci --no-autofix`       |
+| `--hooks`                                                      | Also wire a pre-commit hook (lefthook preferred, husky if detected)             | `ycc:formatters --hooks`                 |
+| `--no-aliases`                                                 | Skip package.json / Makefile / justfile alias injection                         | `ycc:formatters --no-aliases`            |
+| `--no-docs`                                                    | Skip README section append                                                      | `ycc:formatters --no-docs`               |
+| `--target=<dir>`                                               | Target directory (default: `$PWD`)                                              | `ycc:formatters --target=~/projects/app` |
+| `--profile=<lang>`                                             | Override detection: `rust`, `ts-node`, `python`, `go`, `docs`, `mixed`          | `ycc:formatters --profile=rust`          |
+| `--rust` / `--ts` / `--python` / `--go` / `--docs` / `--shell` | Enable specific stack(s); suppresses auto-detection                             | `ycc:formatters --rust --go`             |
+| `--all`                                                        | Install every supported stack's configs regardless of detection                 | `ycc:formatters --all`                   |
 
 Flags are composable. See `references/flag-reference.md` for the full matrix and precedence rules. See `references/best-practices.md` for per-language tool rationale.
 
@@ -179,19 +179,19 @@ Produce a summary with these sections:
   - `git config commit.template .gitmessage` (unrelated to this skill but often useful alongside)
   - `lefthook install` (if `--hooks` + lefthook chosen)
   - Review `scripts/` bundle in the first commit that adds it
-  - Re-run with `formatters --sync` after upstream bundle changes
+  - Re-run with `ycc:formatters --sync` after upstream bundle changes
   - If `lint-autofix.yml` was written: create a GitHub App with repository permission Contents read and write (no Workflows permission: autofix never pushes changes under `.github/`, so format those locally), install it on the repository, and set the `AUTOFIX_APP_CLIENT_ID` variable and `AUTOFIX_APP_PRIVATE_KEY` secret; until then the workflow reports fixes instead of pushing. Anyone who can write to a repository holding the private key can mint tokens for every repository the App is installed on, so reuse one App only across repositories with the same trusted writers. Organization-level variables and secrets are not available to private repositories on GitHub Free; set them on the repository there
   - Bypass a single hook run: `git commit --no-verify`
 
 ## Important Notes
 
-- **Source of truth is `scripts/style.sh`.** This skill is an orchestrator; it never reimplements linter dispatch. Upgrading the upstream bundle propagates to installed targets via `formatters --sync`.
+- **Source of truth is `scripts/style.sh`.** This skill is an orchestrator; it never reimplements linter dispatch. Upgrading the upstream bundle propagates to installed targets via `ycc:formatters --sync`.
 - **Never overwrites user-authored configs silently.** `apply-aliases.sh` preserves existing `package.json` scripts unless `--force`. `style.sh init-formatters.sh` refuses to overwrite an existing `pyproject.toml`. Tool configs (prettier, biome, markdownlint, clippy, rustfmt) are skipped when present unless `--force`.
 - **Detection is ignore-aware.** Auto-detection enumerates only project source — git-tracked and untracked-but-not-gitignored files (via `git ls-files`), or a `find` fallback in non-git dirs — and skips well-known vendored/build directories (`node_modules`, `dist`, `build`, `vendor`, `.venv`, caches, …). A stray `*.rs`/`*.py` inside `node_modules/` or a build-output tree no longer flips `detect_*` to `true`. A vendored tree that is committed **and not gitignored** is still seen as source; list it in a root `.style-excludes` file (or `STYLE_EXTRA_EXCLUDES`) to drop it from detection and linting. See `references/stack-detection.md`.
 - **`--hooks` is opt-in.** Hooks change commit behavior repo-wide. The installer always prints the `git commit --no-verify` escape.
 - **Re-entrancy.** Re-running the skill with `--sync` on an already-installed target is a no-op for unchanged files, and prunes managed files removed upstream. Safe to schedule periodically.
 - **Runtime-neutral aliases.** When the target has no `package.json`, the skill installs Makefile targets instead. Node is never required downstream.
-- **Composing with `/init`.** `/init --formatters` delegates here and passes through `--dry-run` and `--force`. Invoke this skill directly for full flag coverage (CI, hooks, per-stack overrides).
+- **Composing with `/ycc:init`.** `/ycc:init --formatters` delegates here and passes through `--dry-run` and `--force`. Invoke this skill directly for full flag coverage (CI, hooks, per-stack overrides).
 - For per-language tool rationale (why biome over eslint, ruff over flake8, etc.), see `references/best-practices.md`.
 
 ## Support files

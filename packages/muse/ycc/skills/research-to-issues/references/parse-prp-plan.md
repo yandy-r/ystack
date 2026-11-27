@@ -11,7 +11,7 @@
 - Priority Classification
 - Source-Specific Labels
 
-Extraction instructions for plan documents produced by `prp-plan`.
+Extraction instructions for plan documents produced by `ycc:prp-plan`.
 
 ## Expected Source Structure
 

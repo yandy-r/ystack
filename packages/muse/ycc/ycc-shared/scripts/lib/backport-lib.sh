@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # backport-lib.sh — helpers shared by the backport scripts: find-pending.sh
-# (backport) and backport-audit.sh (backport --audit, releaser's
+# (ycc:backport) and backport-audit.sh (ycc:backport --audit, ycc/releaser's
 # patch gate). Sourced, not executed.
 #
 # Rules: ~/.local/share/ycc/muse/ycc/ycc-shared/references/branching-model.md#backporting

@@ -10,7 +10,7 @@ argument-hint: '[--quick] [--approve | --request-changes] [--parallel | --team] 
 # Code Review
 
 Review local changes or a GitHub PR; save machine-parseable findings for
-`/review-fix`. Input: `$ARGUMENTS`. Use `/quick-review` for inline-first
+`/ycc:review-fix`. Input: `$ARGUMENTS`. Use `/ycc:quick-review` for inline-first
 local review. PR review mode adapted from PRPs-agentic-eng by Wirasm.
 
 ## Parse flags and select mode
@@ -21,13 +21,13 @@ Extract flags before interpreting the remaining text as the selector:
 | ------------------- | ------------------------------------------------------------ |
 | `--approve`         | Override PR decision to APPROVE; still report findings       |
 | `--request-changes` | Override PR decision to REQUEST CHANGES                      |
-| `--parallel`        | 3 standalone `code-reviewer` reviewers                   |
+| `--parallel`        | 3 standalone `ycc/code-reviewer` reviewers                   |
 | `--team`            | Same roster, Claude Code agent team                          |
 | `--worktree`        | Legacy no-op; PR worktree isolation is default               |
 | `--no-worktree`     | PR: skip worktree, artifact commit/push and cleanup          |
 | `--keep-draft`      | PR: skip draft-to-ready promotion; draft decision is COMMENT |
 | `--keep-worktree`   | PR: keep worktree after successful publish                   |
-| `--quick`           | Alias for `/quick-review` after validation               |
+| `--quick`           | Alias for `/ycc:quick-review` after validation               |
 | `--store=<mode>`    | Artifact store override, `local` or `linear`                 |
 
 Strip these from `$ARGUMENTS` and set `QUICK_MODE=true|false`, `PARALLEL_MODE=true|false`, `AGENT_TEAM_MODE=true|false`, `NO_WORKTREE_MODE=true|false`, `KEEP_DRAFT=true|false`, and `KEEP_WORKTREE=true|false`. Keep `--store=local|linear` verbatim as `STORE_FLAG` (empty when absent) and forward it to every resolver call. Compute `WORKTREE_MODE=true` unless `--no-worktree` is present (default-on in PR mode; ignored for local mode as before). The remaining text is the mode selector (PR number/URL or blank for local).
@@ -56,9 +56,9 @@ commit/push artifacts, or remove worktrees.
 ### Quick delegation
 
 Print:
-`--quick delegated to /quick-review. Run /quick-review directly for full option surface (--yes, --save, --severity).`
+`--quick delegated to /ycc:quick-review. Run /ycc:quick-review directly for full option surface (--yes, --save, --severity).`
 
-Invoke `Skill: quick-review`, forwarding its accepted flags (`--parallel` or `--team`,
+Invoke `Skill: ycc:quick-review`, forwarding its accepted flags (`--parallel` or `--team`,
 `--yes`, `--save`, `--write-and-apply`, `--severity <level>`,
 `--store=<mode>`). Drop code-review-owned flags (`--quick`, decision and
 worktree flags). After delegation exit; quick-review owns artifact lifecycle.
@@ -154,7 +154,7 @@ If explicit `--worktree`, print:
    Linear mode: Save the Document. After successful write remove this
    invocation's parallel scratch directory.
 
-Print artifact path (`$DISPLAY_OUT`), severity counts, and `/review-fix $DISPLAY_OUT`
+Print artifact path (`$DISPLAY_OUT`), severity counts, and `/ycc:review-fix $DISPLAY_OUT`
 (optionally `--parallel`) as next steps. Block commit if CRITICAL/HIGH issues
 exist; never approve security vulnerabilities.
 

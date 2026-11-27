@@ -2,7 +2,7 @@
 
 ## /goal pairing
 
-Pair this skill with the `/goal` session directive **only for the bounded Phase 8.5 release-CI auto-fix loop** — never for the skill as a whole. The full `releaser` flow has four human approval gates that exist specifically to prevent unattended publishing and looping; `/goal` must never auto-satisfy them:
+Pair this skill with the `/goal` session directive **only for the bounded Phase 8.5 release-CI auto-fix loop** — never for the skill as a whole. The full `ycc/releaser` flow has four human approval gates that exist specifically to prevent unattended publishing and looping; `/goal` must never auto-satisfy them:
 
 - **Phase 2 — version confirm.** The user must approve the proposed version bump.
 - **Phase 2 — backport gate (patches).** The user decides each unlabelled fix and any shipping without a missing backport.
@@ -11,7 +11,7 @@ Pair this skill with the `/goal` session directive **only for the bounded Phase 
 
 Because the `/goal` evaluator is transcript-only it cannot answer these prompts, so a `/goal` loop will **pause** at each gate until you respond in person. That is the intended behavior: only after you have published (`--publish --confirm`) and authorized the loop does `/goal` add value — driving Phase 8.5.2+ through every `handoff` fix-and-validate and `rerun-pending` retry to green without returning control between iterations. The `GATES_INTERACTIVE` Goal Signal records that none of these gates was auto-approved.
 
-The Phase 8.5 loop's `RESULT=` markers (from `release-ci-monitor.sh`, sharing the `ci-monitor.sh` contract with `pr-autofix` and `prp-pr`) tell the evaluator when to keep looping versus when to stop:
+The Phase 8.5 loop's `RESULT=` markers (from `release-ci-monitor.sh`, sharing the `ci-monitor.sh` contract with `ycc:pr-autofix` and `ycc:prp-pr`) tell the evaluator when to keep looping versus when to stop:
 
 - **Keep looping** — `handoff` (8.5.3 fix-and-validate) and `rerun-pending` (8.5.2 wait-and-retry). Recoverable progress markers, not endpoints.
 - **Done** — `RESULT=green`, with the Phase 9 summary showing "Release CI loop outcome: `green`" and the audit-log path (`CI_GREEN: PASS`, `AUDIT_LOG_PRINTED: PASS`).
@@ -20,7 +20,7 @@ The Phase 8.5 loop's `RESULT=` markers (from `release-ci-monitor.sh`, sharing th
 Recommended condition template (set this **after** you have approved Phases 2 and 5, published with `--publish --confirm`, and authorized the loop at 8.5.1):
 
 ```
-/goal Drive the releaser Phase 8.5 release-CI loop to green, continuing through every
+/goal Drive the ycc/releaser Phase 8.5 release-CI loop to green, continuing through every
 handoff and rerun-pending iteration without returning control to me. Done when the Phase 9
 summary shows "Release CI loop outcome: green", the audit-log path is printed, and the Goal
 Signals print verbatim — GATES_INTERACTIVE: PASS, CI_GREEN: PASS, and AUDIT_LOG_PRINTED:

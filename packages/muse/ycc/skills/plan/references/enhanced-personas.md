@@ -1,30 +1,30 @@
-# Enhanced Personas (5-persona roster for plan --enhanced)
+# Enhanced Personas (5-persona roster for ycc:plan --enhanced)
 
 ## Contents
 
 - Security-reviewer
 - UX-reviewer
 
-> **Contract**: When `ENHANCED_MODE=true`, the `plan` skill spawns the 3 baseline personas (`architect`, `risk-analyst`, `test-strategist` — prompts inline in `SKILL.md` §B.5 / §C.3) plus the 2 enhanced personas defined here. The roster is identical regardless of dispatch path:
+> **Contract**: When `ENHANCED_MODE=true`, the `ycc:plan` skill spawns the 3 baseline personas (`architect`, `risk-analyst`, `test-strategist` — prompts inline in `SKILL.md` §B.5 / §C.3) plus the 2 enhanced personas defined here. The roster is identical regardless of dispatch path:
 >
 > - **Path C** (`--enhanced` alone) — 5 standalone parallel sub-agents, no teammate dispatch.
 > - **Path B enhanced** (`--enhanced --team`) — 5-persona agent team with shared `TaskList`.
 >
-> Both enhanced personas use `subagent_type: "research-specialist"` distinguished by `description` and the role-specific prompt in standalone mode; only team mode sets `name`. They contribute slices that the synthesizer folds into the merged plan per `SKILL.md` (Merge outputs; Re-dispatch). They do NOT write any files — they return findings inline.
+> Both enhanced personas use `subagent_type: "ycc/research-specialist"` distinguished by `description` and the role-specific prompt in standalone mode; only team mode sets `name`. They contribute slices that the synthesizer folds into the merged plan per `SKILL.md` (Merge outputs; Re-dispatch). They do NOT write any files — they return findings inline.
 
 ## Roster
 
 | name                | subagent_type             | Plan section(s) it owns                                                                                                          |
 | ------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `security-reviewer` | `research-specialist` | `## Security Considerations` (top-level) and per-step `> **Security**:` callouts; risk rows folded into `## Risks & Mitigations` |
-| `ux-reviewer`       | `research-specialist` | `## UX Impact` (Before / After / Interaction Changes); omitted entirely if internal-only                                         |
+| `security-reviewer` | `ycc/research-specialist` | `## Security Considerations` (top-level) and per-step `> **Security**:` callouts; risk rows folded into `## Risks & Mitigations` |
+| `ux-reviewer`       | `ycc/research-specialist` | `## UX Impact` (Before / After / Interaction Changes); omitted entirely if internal-only                                         |
 
 ---
 
 ## Prompt: security-reviewer
 
 ```
-You are joining the `plan` planning team as the security perspective. You do NOT
+You are joining the `ycc:plan` planning team as the security perspective. You do NOT
 write any files. Return findings inline as Markdown sections that the synthesizer
 will fold into the merged plan.
 
@@ -79,7 +79,7 @@ Constraints:
 ## Prompt: ux-reviewer
 
 ```
-You are joining the `plan` planning team as the UX perspective. You do NOT
+You are joining the `ycc:plan` planning team as the UX perspective. You do NOT
 write any files. Return findings inline as Markdown sections that the synthesizer
 will fold into the merged plan.
 

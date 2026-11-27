@@ -12,7 +12,7 @@ Follow the spawn/return contract in
 `~/.local/share/ycc/muse/ycc/ycc-shared/references/standalone-dispatch.md` for
 how reviewers are dispatched and how their results are collected.
 
-Dispatch 3 standalone `code-reviewer` sub-agents in parallel in a single
+Dispatch 3 standalone `ycc/code-reviewer` sub-agents in parallel in a single
 message with multiple `Agent` calls. Use the mode-appropriate roster
 (Local / Quick Mode Roster or PR Mode Roster) and the Standard Findings Format
 from `~/.local/share/ycc/muse/ycc/ycc-shared/references/review-checklist.md`.
@@ -112,7 +112,7 @@ If any `TaskCreate` fails, shut down any active teammates and abort.
 
 Single message, three `Agent` calls. Every call includes `name`
 (the reviewer name — must match the `TaskCreate` subject prefix),
-`subagent_type: "code-reviewer"`, a one-line `description`, and the same
+`subagent_type: "ycc/code-reviewer"`, a one-line `description`, and the same
 `prompt` as Path B plus a note that the teammate shares a task list with two
 sibling reviewers (name them), may `SendMessage` them on overlapping scope,
 and must call `TaskUpdate` to mark its task complete before returning.

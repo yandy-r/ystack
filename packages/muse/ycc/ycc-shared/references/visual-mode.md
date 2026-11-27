@@ -5,15 +5,15 @@
 - 0. Default Behavior
 - 1. Timing — runs AFTER write AND validation
 - 2. Composition with other flags
-- 3. Hand-off to `visual-plan`
-- 4. `/plan --visual` special case — force a write FIRST
+- 3. Hand-off to `ycc:visual-plan`
+- 4. `/ycc:plan --visual` special case — force a write FIRST
 - 5. NAMING_CONVENTION
 
-Used by `prp-plan`, `plan`, `parallel-plan`, and `plan-workflow`
+Used by `ycc:prp-plan`, `ycc:plan`, `ycc:parallel-plan`, and `ycc:plan-workflow`
 to expose a uniform `--visual` decorator. This file documents the **single
 `--visual` contract** shared by all four planning skills: when it runs, how it
 composes with other flags, how `--dry-run` short-circuits it, and the hand-off
-to `visual-plan`. Individual skills own their own flag plumbing and the path
+to `ycc:visual-plan`. Individual skills own their own flag plumbing and the path
 where they write a plan; the shared **invariant** lives here.
 
 `--visual` is a **terminal decorator step**, not a dispatch mode. It does not
@@ -34,15 +34,15 @@ skill behaves exactly as it does today and writes no visual output.
 
 | Skill               | Writes a plan artifact by default?   | `--visual` target                         |
 | ------------------- | ------------------------------------ | ----------------------------------------- |
-| `prp-plan`      | yes — resolved `prp-plan` artifact   | the written plan file                     |
-| `parallel-plan` | yes — feature-dir `parallel-plan.md` | the written plan file                     |
-| `plan-workflow` | yes — feature-dir `parallel-plan.md` | the written plan file                     |
-| `plan`          | **no** — plan kept in-chat           | a plan file `--visual` is forced to write |
+| `ycc:prp-plan`      | yes — resolved `prp-plan` artifact   | the written plan file                     |
+| `ycc:parallel-plan` | yes — feature-dir `parallel-plan.md` | the written plan file                     |
+| `ycc:plan-workflow` | yes — feature-dir `parallel-plan.md` | the written plan file                     |
+| `ycc:plan`          | **no** — plan kept in-chat           | a plan file `--visual` is forced to write |
 
-The plan path differs per skill (and `plan` writes none by default). The
+The plan path differs per skill (and `ycc:plan` writes none by default). The
 contract therefore never hardcodes `docs/prps/plans`; it passes whatever
-absolute plan path the skill produced to `visual-plan` and lets that skill
-derive its output directory. See §3 (hand-off) and §4 (`plan` special case).
+absolute plan path the skill produced to `ycc:visual-plan` and lets that skill
+derive its output directory. See §3 (hand-off) and §4 (`ycc:plan` special case).
 
 ---
 
@@ -89,28 +89,28 @@ When `--dry-run` is present, `--visual` is **short-circuited**: the skill prints
 visual generation would run
 ```
 
-and does **not** generate anything and does **not** invoke `visual-plan`.
+and does **not** generate anything and does **not** invoke `ycc:visual-plan`.
 `--dry-run` always wins over `--visual`; no visual artifacts, directories, or
 links are produced in a dry run.
 
 ---
 
-## 3. Hand-off to `visual-plan`
+## 3. Hand-off to `ycc:visual-plan`
 
 When `--visual` runs for real (not `--dry-run`), the planning skill invokes:
 
 ```
-visual-plan ${STORE_FLAG} <absolute-plan-path>
+ycc:visual-plan ${STORE_FLAG} <absolute-plan-path>
 ```
 
 passing the **absolute path** of the plan file it wrote and validated, plus the exact `--store=local|linear` override as `STORE_FLAG` when the user supplied one (otherwise empty). Parse and strip the override before deriving descriptions or slugs; never let visual-plan re-resolve a conflicting config because the caller dropped the flag.
 
-Contract for `visual-plan`:
+Contract for `ycc:visual-plan`:
 
 - **Accept ANY plan path.** It must not assume `docs/prps/plans` or any other
   fixed location. The plan path is supplied by the caller and may live anywhere
   (e.g. a local-mode `docs/prps/plans/<name>.plan.md`, a feature-dir
-  `parallel-plan.md`, or a forced-write file from `plan`).
+  `parallel-plan.md`, or a forced-write file from `ycc:plan`).
 - **Resolve `visual/` by store.** Local mode keeps the sibling
   `<dirname of plan>/visual/`. Linear mode (default) resolves kind `feature-dir`
   for the source feature slug and writes its `visual/` child, even if the input plan
@@ -126,28 +126,28 @@ Contract for `visual-plan`:
 - **NEVER edit the plan file.** It reads the plan and writes only into the
   derived `visual/` directory; the plan artifact is left byte-for-byte intact.
 
-The planning skill surfaces whatever link `visual-plan` prints; it does not
+The planning skill surfaces whatever link `ycc:visual-plan` prints; it does not
 re-derive the path itself.
 
 ---
 
-## 4. `/plan --visual` special case — force a write FIRST
+## 4. `/ycc:plan --visual` special case — force a write FIRST
 
-`plan` writes **no** artifact by default (the plan stays in-chat). There is
+`ycc:plan` writes **no** artifact by default (the plan stays in-chat). There is
 therefore nothing on disk to visualize. When `--visual` is passed to
-`plan`:
+`ycc:plan`:
 
-1. `plan` **MUST force a plan-file write first** using kind `prp-plan`
+1. `ycc:plan` **MUST force a plan-file write first** using kind `prp-plan`
    through the artifact-store helper, producing an absolute path on disk.
    Local mode keeps `docs/prps/plans/<slug>.plan.md`; linear mode follows
    artifact-store.md **Planning skills** to Save the plan and task sub-issues.
 2. That forced write is then validated like any other plan.
-3. Only after a valid file exists does `plan` hand the absolute path to
-   `visual-plan ${STORE_FLAG} <absolute-plan-path>`.
+3. Only after a valid file exists does `ycc:plan` hand the absolute path to
+   `ycc:visual-plan ${STORE_FLAG} <absolute-plan-path>`.
 
-Without the forced write there is no input for `visual-plan`, so the
-force-write rule is mandatory — not optional — for `plan --visual`. Under
-`--dry-run` this is moot: the §2.1 short-circuit applies and `plan` prints
+Without the forced write there is no input for `ycc:visual-plan`, so the
+force-write rule is mandatory — not optional — for `ycc:plan --visual`. Under
+`--dry-run` this is moot: the §2.1 short-circuit applies and `ycc:plan` prints
 `visual generation would run` without forcing any write.
 
 ---
@@ -163,5 +163,5 @@ In-body references to skill assets use the plugin-root variable, e.g.:
 - `~/.local/share/ycc/muse/ycc/skills/plan-workflow/SKILL.md`
 
 The hand-off is always expressed as the skill invocation
-`visual-plan ${STORE_FLAG} <absolute-plan-path>`, with `<absolute-plan-path>` resolved by
+`ycc:visual-plan ${STORE_FLAG} <absolute-plan-path>`, with `<absolute-plan-path>` resolved by
 the calling skill to a real, absolute path on disk and `STORE_FLAG` retaining any user override.

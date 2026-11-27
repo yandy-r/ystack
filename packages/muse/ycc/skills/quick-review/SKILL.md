@@ -11,12 +11,12 @@ argument-hint: '[--parallel | --team] [--yes | --save | --write-and-apply] [--se
 
 Interactive low-friction review of uncommitted changes. Output is **inline**. The default fix path is artifact-free.
 
-**Operational context:** "Apply fixes" delegates inline findings to /quick-fix without an artifact; "Save to file" saves a review artifact through the artifact store (local mode: docs/prps/reviews/); "Write file and apply fixes" saves an artifact and delegates to /review-fix. Writes require confirmation unless a documented scripted action selects them.
+**Operational context:** "Apply fixes" delegates inline findings to /ycc:quick-fix without an artifact; "Save to file" saves a review artifact through the artifact store (local mode: docs/prps/reviews/); "Write file and apply fixes" saves an artifact and delegates to /ycc:review-fix. Writes require confirmation unless a documented scripted action selects them.
 
 **Input**: `$ARGUMENTS`
 
 **Core rule**: "Apply fixes" must not write a review artifact. It hands the
-inline findings directly to `/quick-fix`. Only "Save to file" and
+inline findings directly to `/ycc:quick-fix`. Only "Save to file" and
 "Write file and apply fixes" write the `quick-*-review.md` artifact (kind
 `review-quick-<TIMESTAMP>`; local mode `docs/prps/reviews/quick-*.md`).
 
@@ -28,14 +28,14 @@ Extract flags from `$ARGUMENTS`:
 
 | Flag                 | Effect                                                                                                                                                                                      |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--parallel`         | Fan out REVIEW across 3 standalone `code-reviewer` sub-agents (correctness, security, quality) and merge findings. Works in Claude Code, Cursor, and Codex bundles.                     |
+| `--parallel`         | Fan out REVIEW across 3 standalone `ycc/code-reviewer` sub-agents (correctness, security, quality) and merge findings. Works in Claude Code, Cursor, and Codex bundles.                     |
 | `--team`             | (Claude Code only) Same 3-reviewer fan-out as a coordinated agent team with shared `TaskList`, per-reviewer `TaskCreate`, and coordinated shutdown. Heavier dispatch, richer communication. |
-| `--yes`              | Skip the confirmation prompt and behave as "Apply fixes" through `/quick-fix`. Mutually exclusive with `--save` and `--write-and-apply`.                                                |
+| `--yes`              | Skip the confirmation prompt and behave as "Apply fixes" through `/ycc:quick-fix`. Mutually exclusive with `--save` and `--write-and-apply`.                                                |
 | `--save`             | Skip the confirmation prompt and behave as "Save to file" (write artifact, print Next steps, exit). Mutually exclusive with `--yes` and `--write-and-apply`.                                |
-| `--write-and-apply`  | Skip the confirmation prompt, write the review artifact, then hand off to `/review-fix`. Mutually exclusive with `--yes` and `--save`.                                                  |
-| `--severity <level>` | Forwarded to `/quick-fix` or `/review-fix` during hand-off. Valid: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`. Default: `HIGH`. Ignored on "Save to file" / "Discard".                     |
+| `--write-and-apply`  | Skip the confirmation prompt, write the review artifact, then hand off to `/ycc:review-fix`. Mutually exclusive with `--yes` and `--save`.                                                  |
+| `--severity <level>` | Forwarded to `/ycc:quick-fix` or `/ycc:review-fix` during hand-off. Valid: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`. Default: `HIGH`. Ignored on "Save to file" / "Discard".                     |
 | `--no-worktree`      | Accepted as a **no-op**. Quick mode never creates a worktree. Emit a note: `--no-worktree has no effect in quick mode.`                                                                     |
-| `--store=<mode>`     | Artifact store override, `local` or `linear`. Forwarded to `/review-fix` on "Write file and apply fixes".                                                                               |
+| `--store=<mode>`     | Artifact store override, `local` or `linear`. Forwarded to `/ycc:review-fix` on "Write file and apply fixes".                                                                               |
 
 Strip these from `$ARGUMENTS` and set `PARALLEL_MODE`, `AGENT_TEAM_MODE`,
 `AUTO_YES`, `AUTO_SAVE`, `AUTO_WRITE_AND_APPLY`, and `MIN_SEVERITY` (default
@@ -43,7 +43,7 @@ Strip these from `$ARGUMENTS` and set `PARALLEL_MODE`, `AGENT_TEAM_MODE`,
 absent). The remaining text MUST be empty; if not, abort with:
 
 ```
-Error: /quick-review takes no positional argument (only flags).
+Error: /ycc:quick-review takes no positional argument (only flags).
 ```
 
 **Validation**:
@@ -157,7 +157,7 @@ If the count is zero across all severities, skip Phase 4 entirely. Print
 `No findings. Nothing to do.` and exit.
 
 Keep the exact printed review block in memory as `INLINE_REVIEW_PAYLOAD` for
-`/quick-fix` or artifact writing.
+`/ycc:quick-fix` or artifact writing.
 
 ---
 
@@ -181,7 +181,7 @@ question: "What should I do with this review?"
 header:   "Review action"
 options:
   - label: "Apply fixes"
-    description: "Hand findings directly to /quick-fix. No review file is written. (recommended)"
+    description: "Hand findings directly to /ycc:quick-fix. No review file is written. (recommended)"
   - label: "Save to file"
     description: "Write the quick-<timestamp>-review.md artifact (local mode: docs/prps/reviews/) and stop."
   - label: "Discard"
@@ -195,9 +195,9 @@ question: "This is a larger quick review. What should I do?"
 header:   "Review action"
 options:
   - label: "Apply fixes"
-    description: "Hand findings directly to /quick-fix. No review file is written."
+    description: "Hand findings directly to /ycc:quick-fix. No review file is written."
   - label: "Write file and apply fixes"
-    description: "Write the quick-<timestamp>-review.md artifact, then use /review-fix for an audit trail. (recommended)"
+    description: "Write the quick-<timestamp>-review.md artifact, then use /ycc:review-fix for an audit trail. (recommended)"
   - label: "Save to file"
     description: "Write the quick-<timestamp>-review.md artifact (local mode: docs/prps/reviews/) and stop."
   - label: "Discard"
@@ -235,10 +235,10 @@ Print `Discarded. No artifact written.` and exit. Do NOT write any file.
 
 ### Selection: "Apply fixes"
 
-Invoke the `quick-fix` skill inline via the `Skill` tool. Do NOT write an
+Invoke the `ycc:quick-fix` skill inline via the `Skill` tool. Do NOT write an
 artifact first.
 
-- `skill`: `"quick-fix"`
+- `skill`: `"ycc:quick-fix"`
 - `args`: `"[--parallel] [--severity <level>] <INLINE_REVIEW_PAYLOAD>"`
 
 Forward `--parallel` if `PARALLEL_MODE=true`. Forward `--severity <level>` when
@@ -300,8 +300,8 @@ Quick review written to: <DISPLAY_FILE>
 Findings: [C] {critical_count}  [H] {high_count}  [M] {medium_count}  [L] {low_count}
 
 Next steps:
-  /review-fix <DISPLAY_FILE>              # apply fixes {recommended_single if 1-2 Open findings}
-  /review-fix <DISPLAY_FILE> --parallel   # fan out fixes {recommended_parallel if 3+ Open across 2+ files}
+  /ycc:review-fix <DISPLAY_FILE>              # apply fixes {recommended_single if 1-2 Open findings}
+  /ycc:review-fix <DISPLAY_FILE> --parallel   # fan out fixes {recommended_parallel if 3+ Open across 2+ files}
 ```
 
 `<DISPLAY_FILE>` is defined in step 4; in linear mode also print the
@@ -319,9 +319,9 @@ Exit.
 
 Step 1 — write the artifact to disk exactly as in "Save to file".
 
-Step 2 — invoke the `review-fix` skill inline via the `Skill` tool:
+Step 2 — invoke the `ycc:review-fix` skill inline via the `Skill` tool:
 
-- `skill`: `"review-fix"`
+- `skill`: `"ycc:review-fix"`
 - `args`: `"<REVIEW_FILE> [--parallel] [--severity <level>] [--store=<mode>]"`
 
 Forward `--parallel` if `PARALLEL_MODE=true`. Forward `--severity <level>` when
@@ -343,7 +343,7 @@ fix phase has its own execution decision.
 
 ## Important Notes
 
-- **Apply fixes is artifact-free**: direct apply routes to `/quick-fix`
+- **Apply fixes is artifact-free**: direct apply routes to `/ycc:quick-fix`
   without writing a `quick-*-review.md` artifact.
 - **Scratch is the one ephemeral exception**: when Path B (`--parallel`) is
   used, the calling skill persists each valid inline return to its scratch copy
@@ -357,20 +357,20 @@ fix phase has its own execution decision.
 - **Large reviews are advisory**: `5+` findings or `3+` finding files adds a
   "Write file and apply fixes" choice. It does not force artifact creation.
 - **Explicit artifact-backed apply**: only `--write-and-apply` or the matching
-  prompt choice writes the artifact and invokes `/review-fix`.
+  prompt choice writes the artifact and invokes `/ycc:review-fix`.
 - **Idempotent filename**: the `quick-{YYYYMMDD-HHMMSS}-review.md` pattern
   produces a new file per artifact-writing invocation — no overwrites.
-- **Not a replacement for `/code-review`**: if you need toolchain
+- **Not a replacement for `/ycc:code-review`**: if you need toolchain
   validation (typecheck/lint/test/build), a `## Validation Results` block,
-  worktree isolation, or a GitHub review posted, use `/code-review`
+  worktree isolation, or a GitHub review posted, use `/ycc:code-review`
   without `--quick`.
 
 ---
 
 ## Integration with ycc
 
-- `/code-review --quick` delegates to this skill.
-- `/quick-fix` consumes inline findings for artifact-free fixing.
-- `/review-fix` consumes written artifacts only.
-- Commit the fixes afterward by explicit path: `/prp-commit <fixed files>`,
+- `/ycc:code-review --quick` delegates to this skill.
+- `/ycc:quick-fix` consumes inline findings for artifact-free fixing.
+- `/ycc:review-fix` consumes written artifacts only.
+- Commit the fixes afterward by explicit path: `/ycc:prp-commit <fixed files>`,
   never a stage-everything commit.

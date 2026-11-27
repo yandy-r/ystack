@@ -19,10 +19,10 @@ RS_KNOWN_KEYS=" model trunk maintenance frozen support backport_label tracker tr
 RS_BRANCH_RE='^release/[0-9]+\.[0-9]+$'
 
 # Slash-command hints stay in single quotes: the Codex generator rewrites
-# "/release-model" to "$release-model", which bash would expand (and fail
+# "/ycc:release-model" to "$release-model", which bash would expand (and fail
 # on under set -u) inside double quotes.
-RS_HINT_CREATE='/release-model'
-RS_HINT_AUDIT='/release-model --audit'
+RS_HINT_CREATE='/ycc:release-model'
+RS_HINT_AUDIT='/ycc:release-model --audit'
 RS_ERROR=""
 # Read by the scripts that source this library.
 export RS_HINT_CREATE RS_HINT_AUDIT RS_ERROR

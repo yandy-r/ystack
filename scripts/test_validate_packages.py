@@ -70,7 +70,7 @@ def repo_model() -> PackageModel:
                 runtime("codex", components=("skills", "shared")),
                 runtime("cursor", components=("skills", "agents", "commands", "shared")),
                 runtime("antigravity", components=("skills", "agents", "shared")),
-                runtime("muse", components=("skills", "agents", "commands", "shared")),
+                runtime("muse", components=("skills", "agents", "shared")),
             ),
             package(
                 "ycc-mcp",

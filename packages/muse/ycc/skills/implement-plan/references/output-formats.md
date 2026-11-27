@@ -60,8 +60,8 @@ Batch M: <comma-separated task IDs>  (depends on Batch M-1)
 
 Per-batch teammate roster:
   Batch 1:
-    - <task-id-1>  subagent_type=implementor  task=<short>
-    - <task-id-2>  subagent_type=implementor  task=<short>
+    - <task-id-1>  subagent_type=ycc/implementor  task=<short>
+    - <task-id-2>  subagent_type=ycc/implementor  task=<short>
   ...
 ```
 
@@ -172,7 +172,7 @@ Recommended condition template:
 
 ```
 /goal Execute the parallel plan <feature> (resolved plan path) using the
-implement-plan workflow, continuing through every batch and the Phase 4 lint pass
+ycc:implement-plan workflow, continuing through every batch and the Phase 4 lint pass
 without returning control to me. Done when the transcript shows the Phase 4
 "# Implementation Complete" output followed by all three Goal Signals printed verbatim —
 ALL_BATCHES_DONE: PASS, FILES_CHANGED_NONEMPTY: PASS, LINT_PASS: PASS. If any signal prints

@@ -10,11 +10,11 @@ argument-hint: '[target description] (blank = all changes)'
 
 > Adapted from PRPs-agentic-eng by Wirasm. Part of the PRP workflow series.
 
-**Operational context:** Interpret input as a glob, a filter such as "except tests" or "only new files", a topic such as "the auth changes", or "staged" to preserve staging; blank input selects all changes. Use /git-workflow for documentation updates, parallel agents, or full PR orchestration.
+**Operational context:** Interpret input as a glob, a filter such as "except tests" or "only new files", a topic such as "the auth changes", or "staged" to preserve staging; blank input selects all changes. Use /ycc:git-workflow for documentation updates, parallel agents, or full PR orchestration.
 
 **Input**: `$ARGUMENTS`
 
-This is the lightweight counterpart to `/git-workflow`. Use this skill when the user wants a quick, single-message commit without the full documentation/agent orchestration that `git-workflow` provides.
+This is the lightweight counterpart to `/ycc:git-workflow`. Use this skill when the user wants a quick, single-message commit without the full documentation/agent orchestration that `git-workflow` provides.
 
 ---
 
@@ -100,8 +100,8 @@ Files:     {count} file(s) changed
 
 Next steps:
   - git push           → push to remote
-  - /prp-pr        → create a pull request
-  - /code-review   → review before pushing
+  - /ycc:prp-pr        → create a pull request
+  - /ycc:code-review   → review before pushing
 ```
 
 ---
@@ -110,18 +110,18 @@ Next steps:
 
 | You say                                  | What happens                                               |
 | ---------------------------------------- | ---------------------------------------------------------- |
-| `/prp-commit`                        | Stages all, auto-generates message                         |
-| `/prp-commit staged`                 | Commits only what's already staged                         |
-| `/prp-commit *.ts`                   | Stages all TypeScript files, commits                       |
-| `/prp-commit except tests`           | Stages everything except test files                        |
-| `/prp-commit the database migration` | Finds DB migration files from status, stages them, commits |
-| `/prp-commit only new files`         | Stages untracked files only                                |
+| `/ycc:prp-commit`                        | Stages all, auto-generates message                         |
+| `/ycc:prp-commit staged`                 | Commits only what's already staged                         |
+| `/ycc:prp-commit *.ts`                   | Stages all TypeScript files, commits                       |
+| `/ycc:prp-commit except tests`           | Stages everything except test files                        |
+| `/ycc:prp-commit the database migration` | Finds DB migration files from status, stages them, commits |
+| `/ycc:prp-commit only new files`         | Stages untracked files only                                |
 
 ---
 
-## When to use this vs `/git-workflow`
+## When to use this vs `/ycc:git-workflow`
 
-| Use `/prp-commit` when                        | Use `/git-workflow` when                     |
+| Use `/ycc:prp-commit` when                        | Use `/ycc:git-workflow` when                     |
 | ------------------------------------------------- | ------------------------------------------------ |
 | You want a quick, single commit                   | You want commit + documentation updates          |
 | You have a clear scope or natural-language filter | You want to run documentation agents in parallel |

@@ -1,6 +1,6 @@
 # Pointer section and labels doc
 
-Exact text `release-model` adds outside `RELEASING.md`. Both edits are idempotent:
+Exact text `ycc:release-model` adds outside `RELEASING.md`. Both edits are idempotent:
 the skill checks for the marker before writing and never rewrites an existing section.
 
 ## Pointer section

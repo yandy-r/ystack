@@ -3,8 +3,8 @@ name: code-explorer
 description: Deeply analyze codebase features by tracing execution paths, mapping
   architecture layers, and documenting dependencies to inform new development.
 tools:
-- Read
-- Grep
+- read_file
+- search
 ---
 
 # Code Explorer Agent

@@ -161,7 +161,7 @@ Execute the dependency-ready standalone batches described below.
 
 ### Path A — Standalone Sub-Agent Batches (default)
 
-Read `~/.local/share/ycc/muse/ycc/ycc-shared/references/standalone-dispatch.md` for the `Agent` contract; use its §§9–10 for dependency-ready batches. Coordinate agents, do not implement tasks yourself. Read `~/.local/share/ycc/muse/ycc/skills/implement-plan/references/agent-task-prompt.md` once before the loop. Per ready task, one `Agent` call per batch message: `subagent_type=implementor`, `description="Implement [Task ID]: [Title]"`, full substituted template.
+Read `~/.local/share/ycc/muse/ycc/ycc-shared/references/standalone-dispatch.md` for the `Agent` contract; use its §§9–10 for dependency-ready batches. Coordinate agents, do not implement tasks yourself. Read `~/.local/share/ycc/muse/ycc/skills/implement-plan/references/agent-task-prompt.md` once before the loop. Per ready task, one `Agent` call per batch message: `subagent_type=ycc/implementor`, `description="Implement [Task ID]: [Title]"`, full substituted template.
 
 **When `WORKTREE_ACTIVE=true`**, every task prompt (parallel and sequential) carries the lines below; when `WORKTREE_ACTIVE=false` (`--no-worktree`) use `Working directory: ${REPO_ROOT}` and `All parallel agents in this batch share the current feature branch; batching guarantees no two agents touch the same file.` Never pass `isolation: "worktree"`. Agents read the plan, shared context and "READ THESE BEFORE TASK" files first, implement only assigned files/instructions, lint and compile/parse modified files, then report files created/modified and issues.
 

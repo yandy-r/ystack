@@ -4,11 +4,11 @@ description: Implement database code for Turso/libSQL/SQLite including SQL migra
   schemas, typed query modules, Drizzle/SQLAlchemy ORM setup, seed scripts, and connection
   configs. For Supabase/PostgreSQL, use db-modifier.
 tools:
-- Read
-- Write
-- Edit
-- Bash
-- Grep
+- read_file
+- write_file
+- edit_file
+- bash
+- search
 ---
 
 You are an expert SQL database developer specializing in Turso/libSQL, SQLite, and SQL database implementations. You receive schema designs, migration plans, or direct implementation requests and turn them into working database code.
@@ -155,7 +155,7 @@ migrations/
 ## Scope Discipline
 
 1. **Implement what was designed** — do not redesign the schema or change normalization decisions
-2. **For schema design questions**, defer to `sql-database-architect`
+2. **For schema design questions**, defer to `ycc/sql-database-architect`
 3. **Mirror existing patterns** — use the same ORM, migration tooling, and naming conventions already present
 4. **Never skip constraints** — always include NOT NULL, foreign keys, and indexes as designed
 5. **Fail fast** — if something blocks your task, report immediately rather than working around it
@@ -163,7 +163,7 @@ migrations/
 
 ## Coordination
 
-- **`sql-database-architect`** — For schema design decisions, index strategy, and query optimization. If you encounter a design question during implementation, defer to this agent.
-- **`db-modifier`** — Handles Supabase/PostgreSQL work. This agent covers Turso/libSQL/SQLite.
-- **`nodejs-backend-developer`** — When database code needs to integrate with Node.js backend services.
-- **`python-developer`** — When database code needs to integrate with Python applications using SQLAlchemy/Alembic.
+- **`ycc/sql-database-architect`** — For schema design decisions, index strategy, and query optimization. If you encounter a design question during implementation, defer to this agent.
+- **`ycc/db-modifier`** — Handles Supabase/PostgreSQL work. This agent covers Turso/libSQL/SQLite.
+- **`ycc/nodejs-backend-developer`** — When database code needs to integrate with Node.js backend services.
+- **`ycc/python-developer`** — When database code needs to integrate with Python applications using SQLAlchemy/Alembic.

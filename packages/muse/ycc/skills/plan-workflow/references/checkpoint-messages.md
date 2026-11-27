@@ -255,7 +255,7 @@ This will execute the plan with parallel agents where dependencies allow.
 
 In linear mode, replace that command with:
 
-/implement-plan --store=linear {{FEATURE_NAME}}
+/ycc:implement-plan --store=linear {{FEATURE_NAME}}
 
 This loads the plan from the Linear artifact-store cache and executes it with parallel agents where dependencies allow.
 
@@ -367,7 +367,7 @@ Options:
   --dry-run         Show execution plan without running
   --worktree        (legacy — now default; safe to omit) Worktree annotations emitted by default
   --no-worktree     Opt out of worktree annotations in the generated parallel-plan.md
-  --visual          Render the finished plan as a visual artifact via visual-plan (local-files by default; hosted link requires --share)
+  --visual          Render the finished plan as a visual artifact via ycc:visual-plan (local-files by default; hosted link requires --share)
   --store=local|linear  Optional artifact-store override (default: linear)
 
 Examples:

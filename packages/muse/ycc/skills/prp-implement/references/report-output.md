@@ -76,8 +76,8 @@ Linear mode: resolve the report path instead with `resolve-artifact-store.sh ${S
 
 ## Next Steps
 
-- [ ] Code review via `/code-review`
-- [ ] Create PR via `/prp-pr`
+- [ ] Code review via `/ycc:code-review`
+- [ ] Create PR via `/ycc:prp-pr`
 ```
 
 ## PRD update and archive
@@ -168,7 +168,7 @@ Report to user (linear mode: print `[plan Document URL] → issues closed` inste
 
 > Run `git worktree remove <repo-root>/<worktree-root>/<repo>-<feature>/` after merging and pushing to clean up the parent worktree.
 
-> Next step: Run `/prp-pr` to create a pull request, or `/code-review` to review changes first.
+> Next step: Run `/ycc:prp-pr` to create a pull request, or `/ycc:code-review` to review changes first.
 
 Print every signal verbatim. Use `PASS` only when the criterion in `## Success Criteria` is met; otherwise `FAIL`.
 
@@ -190,7 +190,7 @@ Pair this skill with the `/goal` session directive for autonomous plan execution
 Recommended condition template:
 
 ```
-/goal Implement the plan at docs/prps/plans/<name>.plan.md using the prp-implement
+/goal Implement the plan at docs/prps/plans/<name>.plan.md using the ycc:prp-implement
 workflow, continuing through every phase CHECKPOINT without returning control to me.
 Done when the transcript shows the Phase 6 "## Implementation Complete" output followed
 by all seven Goal Signals printed verbatim — TASKS_COMPLETE: PASS, TYPES_PASS: PASS,
@@ -211,7 +211,7 @@ prompts, platform availability) live in the shared reference — read it before 
 
 ## Next Steps
 
-- Run `/code-review` to review changes before committing
-- Run `/prp-commit` to commit with a descriptive message
-- Run `/prp-pr` to create a pull request
-- Run `/prp-plan <next-phase>` if the PRD has more phases
+- Run `/ycc:code-review` to review changes before committing
+- Run `/ycc:prp-commit` to commit with a descriptive message
+- Run `/ycc:prp-pr` to create a pull request
+- Run `/ycc:prp-plan <next-phase>` if the PRD has more phases

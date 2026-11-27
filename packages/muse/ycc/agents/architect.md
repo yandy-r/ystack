@@ -4,8 +4,8 @@ description: Software architecture specialist for system design, scalability, an
   technical decision-making. Use when planning new features, refactoring large systems,
   or making architectural decisions.
 tools:
-- Read
-- Grep
+- read_file
+- search
 ---
 
 You are a senior software architect specializing in scalable, maintainable system design.

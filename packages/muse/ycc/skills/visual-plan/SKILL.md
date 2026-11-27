@@ -14,7 +14,7 @@ Architecture and backend plans stay document-only; UI and product plans start wi
 
 **Operational context:** Consume an existing plan without editing it, researching again, or dispatching planners. The shared --visual decorator hands off here; write only the derived visual/ output. Local-files mode is default; hosted sharing requires explicit --share consent.
 
-`visual-plan` is the packaged entry point (slash command `/visual-plan`). It
+`ycc:visual-plan` is the packaged entry point (slash command `/visual-plan`). It
 **consumes an existing plan** handed to it — it does not research, dispatch, or
 re-plan. Local-files mode uses the pinned Agent-Native Plans CLI and never
 registers an MCP server; hosted sharing uses the Plan MCP connector only after

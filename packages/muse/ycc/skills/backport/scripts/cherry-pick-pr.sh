@@ -118,14 +118,14 @@ git_root() {
 rc=0
 STATE_OUT="$(bash "$STATE_SCRIPT" --repo "$ROOT" get)" || rc=$?
 if [[ "$rc" -eq 2 ]]; then
-  _error "RELEASING.md has a malformed state block (see above); run /release-model --audit"
+  _error "RELEASING.md has a malformed state block (see above); run /ycc:release-model --audit"
   exit 2
 elif [[ "$rc" -ne 0 ]]; then
   _error "could not read the release state"
   exit 1
 fi
 if [[ "$(sed -n 's/^present=//p' <<<"$STATE_OUT")" != "1" ]]; then
-  _error "no RELEASING.md in ${ROOT}; backports need a release-branches model (run /release-model)"
+  _error "no RELEASING.md in ${ROOT}; backports need a release-branches model (run /ycc:release-model)"
   exit 1
 fi
 MAINTENANCE="$(sed -n 's/^maintenance=//p' <<<"$STATE_OUT")"
