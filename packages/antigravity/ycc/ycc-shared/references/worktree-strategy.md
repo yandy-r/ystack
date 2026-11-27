@@ -111,6 +111,7 @@ root named for that runtime. Each worktree keeps the name
 | Cursor      | `<repo-root>/.cursor/worktrees/`      | generator rewrite (`.cursor`)             |
 | OMP         | `<repo-root>/.omp/worktrees/`         | generator rewrite (`.omp`)                |
 | Antigravity | `<repo-root>/.antigravity/worktrees/` | generator rewrite (`.antigravity`)        |
+| Muse        | `<repo-root>/.muse/worktrees/`        | generator rewrite (`.muse`)               |
 | `agents`    | runtime-selected, `.agents/` fallback | `worktree-paths.sh` detection (see below) |
 
 `YCC_WORKTREE_ROOT` remains the explicit override for every runtime; relative

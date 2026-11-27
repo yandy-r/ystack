@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 CLI_NAME="ycc"
 # shellcheck disable=SC2034  # read by steps.sh (target resolution).
-ALL_TARGETS=(claude cursor codex opencode agents omp antigravity)
+ALL_TARGETS=(claude cursor codex opencode agents omp antigravity muse)
 
 # shellcheck source=scripts/lib/install/core.sh
 source "${SCRIPT_DIR}/scripts/lib/install/core.sh"

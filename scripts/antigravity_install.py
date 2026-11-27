@@ -23,18 +23,19 @@ before exiting), 2 usage error.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import shutil
-import stat
 import subprocess
 import sys
-import tempfile
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from owned_tree import place_copy as place_owned_copy
+from owned_tree import relocate_tree as relocate_text
+from owned_tree import remove_tree, tree_digest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SOURCE = REPO_ROOT / "packages/antigravity"
@@ -64,41 +65,11 @@ def relocated() -> bool:
 
 def relocate_tree(root: Path, plugins: Path) -> None:
     """Point the default plugin-folder references in ``root``'s text files at ``plugins``."""
-    target = f"{plugins.expanduser().resolve()}/"
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.is_symlink():
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue
-        updated = text
-        for prefix in DEFAULT_PLUGIN_PREFIXES:
-            updated = updated.replace(prefix, target)
-        if updated != text:
-            mode = path.stat().st_mode
-            path.write_text(updated, encoding="utf-8")
-            path.chmod(mode)
+    relocate_text(root, DEFAULT_PLUGIN_PREFIXES, f"{plugins.expanduser().resolve()}/")
 
 
 def state_path() -> Path:
     return Path.home() / ".config/ycc/antigravity-install.json"
-
-
-def tree_digest(root: Path) -> str | None:
-    """sha256 over relative paths, contents and exec bits; None when ``root`` is absent."""
-    if not root.is_dir():
-        return None
-    digest = hashlib.sha256()
-    for path in sorted(p for p in root.rglob("*") if p.is_file() or p.is_symlink()):
-        rel = path.relative_to(root).as_posix()
-        digest.update(rel.encode("utf-8") + b"\0")
-        if path.is_symlink():
-            digest.update(b"L" + os.readlink(path).encode("utf-8") + b"\0")
-            continue
-        digest.update(b"X" if path.stat().st_mode & stat.S_IXUSR else b"-")
-        digest.update(path.read_bytes() + b"\0")
-    return digest.hexdigest()
 
 
 def load_state() -> dict[str, Any]:
@@ -126,34 +97,9 @@ def save_state(state: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-def _make_writable(func: Callable[..., Any], path: str, _exc: object) -> None:
-    """rmtree handler: agy stages read-only copies, so grant write and retry."""
-    parent = os.path.dirname(path)
-    os.chmod(parent, stat.S_IRWXU)
-    if os.path.exists(path) and not os.path.islink(path):
-        os.chmod(path, stat.S_IRWXU)
-    func(path)
-
-
-def remove_tree(path: Path) -> None:
-    # onerror (not onexc) keeps the 3.11 floor; it is deprecated, not removed, in 3.12+.
-    shutil.rmtree(path, onerror=_make_writable)
-
-
 def place_copy(src: Path, dest: Path) -> None:
     """Copy ``src`` to ``dest`` through a sibling temp dir, replacing ``dest`` last."""
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=f".{dest.name}.", dir=dest.parent))
-    try:
-        shutil.copytree(src, staging / dest.name, symlinks=True)
-        if relocated():
-            relocate_tree(staging / dest.name, dest.parent)
-        if dest.exists() or dest.is_symlink():
-            remove_tree(dest) if dest.is_dir() and not dest.is_symlink() else dest.unlink()
-        (staging / dest.name).rename(dest)
-    finally:
-        if staging.exists():
-            remove_tree(staging)
+    place_owned_copy(src, dest, (lambda staged: relocate_tree(staged, dest.parent)) if relocated() else None)
 
 
 @dataclass

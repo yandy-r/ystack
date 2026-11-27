@@ -17,7 +17,7 @@ _ycc() {
     local _ycc_cmd="${words[1]}"
     local -a common kinds selectors install_selectors
     common=(
-        '--target[targets to sync]:targets:_values -s , target claude cursor codex opencode agents omp antigravity all'
+        '--target[targets to sync]:targets:_values -s , target claude cursor codex opencode agents omp antigravity muse all'
         '(--global)--project[write into the current project]'
         '(--project)--global[write into user-global config]'
         '--force[let repo values win]'
@@ -28,7 +28,7 @@ _ycc() {
     local intent='--intent[what to sync]:intents:_values -s , intent base skills agents commands settings rules mcp hooks plugins mods'
     local only='--only[run only these steps]:steps:_values -s , step base dedupe skills agents settings rules mcp hooks mods'
     local package='--package[install package closures]:packages:_values -s , package ycc ycc-mcp ycc-hooks ycc-rules ycc-all'
-    local list_target='--target[targets to list for]:targets:_values -s , target claude cursor codex opencode agents omp antigravity all'
+    local list_target='--target[targets to list for]:targets:_values -s , target claude cursor codex opencode agents omp antigravity muse all'
     # --<kind> selectors: one per kind from 'ycc list', names from 'ycc list <kind>'.
     local kind
     kinds=(${(f)"$(${_ycc_cmd} list 2>/dev/null)"})

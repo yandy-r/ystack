@@ -1,0 +1,22 @@
+# lefthook.yml — managed by formatters
+#
+# Stage ownership (when used with init --git):
+#   - formatters owns the `pre-commit` lint/format stage (this file).
+#   - init --git owns `pre-push` (test/validate) and `commit-msg` (commitlint).
+# If an init-emitted lefthook.yml already exists, apply-hooks.sh merges these
+# commands into its `pre-commit` block instead of overwriting.
+
+pre-commit:
+  parallel: true
+  commands:
+    style-lint:
+      run: ./scripts/style.sh lint --staged --fix
+      stage_fixed: true
+    style-format:
+      run: ./scripts/style.sh format --staged
+      stage_fixed: true
+
+pre-push:
+  commands:
+    style-ci:
+      run: ./scripts/style.sh lint

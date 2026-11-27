@@ -70,6 +70,7 @@ def repo_model() -> PackageModel:
                 runtime("codex", components=("skills", "shared")),
                 runtime("cursor", components=("skills", "agents", "commands", "shared")),
                 runtime("antigravity", components=("skills", "agents", "shared")),
+                runtime("muse", components=("skills", "agents", "commands", "shared")),
             ),
             package(
                 "ycc-mcp",
@@ -77,6 +78,7 @@ def repo_model() -> PackageModel:
                 runtime("codex", components=("mcp",)),
                 runtime("cursor", components=("mcp",)),
                 runtime("antigravity", components=("mcp",)),
+                runtime("muse", components=("mcp",)),
             ),
             package(
                 "ycc-hooks",
@@ -86,7 +88,10 @@ def repo_model() -> PackageModel:
             ),
             package("ycc-all", runtime("claude", requires=("ycc", "ycc-mcp", "ycc-hooks"))),
             package(
-                "ycc-rules", runtime("cursor", components=("rules",)), runtime("antigravity", components=("rules",))
+                "ycc-rules",
+                runtime("cursor", components=("rules",)),
+                runtime("antigravity", components=("rules",)),
+                runtime("muse", components=("rules",)),
             ),
             package("installer-fallback", runtime("cursor", mechanism="file-copy")),
         ),
@@ -134,12 +139,18 @@ class ValidatePackagesTests(unittest.TestCase):
                 if row.runtime not in validator.ROOTS or row.mechanism != "native" or row.status != "included":
                     continue
                 root = validator.package_root(entry_package.key, row.runtime)
-                self.write_json(root / validator.MANIFESTS[row.runtime], {"name": entry_package.key})
+                self.write_json(
+                    root / validator.manifest_rel(row.runtime, entry_package.key), {"name": entry_package.key}
+                )
                 for component in row.components:
                     target = self.root / root / validator.component_path(component, row.runtime)
                     if component == "mcp":
                         target.parent.mkdir(parents=True, exist_ok=True)
-                        target.write_text('{"mcpServers": {}}\n', encoding="utf-8")
+                        if row.runtime == "muse":  # Muse's native manifest carries the servers
+                            payload = {"name": entry_package.key, "capabilities": {"mcpServers": [{"id": "x"}]}}
+                            target.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+                        else:
+                            target.write_text('{"mcpServers": {}}\n', encoding="utf-8")
                     else:
                         target.mkdir(parents=True, exist_ok=True)
                 if row.runtime == "claude" and row.listed:
@@ -203,6 +214,14 @@ class ValidatePackagesTests(unittest.TestCase):
         self.assert_has_error(self.errors(), "packages/antigravity/ycc-mcp/plugin.json: missing")
         self.assertEqual(validator.component_path("mcp", "antigravity"), "mcp_config.json")
         self.assertEqual(validator.component_path("shared", "antigravity"), "ycc-shared")
+
+    def test_muse_manifest_family_per_package(self) -> None:
+        self.assertEqual(validator.manifest_rel("muse", "ycc"), Path(".claude-plugin/plugin.json"))
+        self.assertEqual(validator.manifest_rel("muse", "ycc-mcp"), Path(".muse-plugin/plugin.json"))
+        self.assertEqual(validator.component_path("mcp", "muse"), ".muse-plugin/plugin.json")
+        self.assertEqual(validator.component_path("shared", "muse"), "ycc-shared")
+        (self.root / "packages/muse/ycc/.claude-plugin/plugin.json").unlink()
+        self.assert_has_error(self.errors(), "packages/muse/ycc/.claude-plugin/plugin.json: missing")
 
     def test_missing_component_tree(self) -> None:
         shutil.rmtree(self.root / "packages/cursor/ycc/skills")

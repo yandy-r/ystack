@@ -1,0 +1,85 @@
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches: [{{DEFAULT_BRANCH}}, 'release/**']
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+{{#IF_RUST}}
+  lint-rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: ./scripts/style.sh lint --rust
+{{/IF_RUST}}
+
+{{#IF_GO}}
+  lint-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+{{/IF_GO}}
+
+{{#IF_TS}}
+  lint-ts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: ./scripts/style.sh lint --ts
+{{/IF_TS}}
+
+{{#IF_PYTHON}}
+  lint-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --no-cache-dir ruff black
+      - run: ./scripts/style.sh lint --python
+{{/IF_PYTHON}}
+
+{{#IF_SHELL}}
+  lint-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: ./scripts/install-shellcheck.sh
+      - run: ./scripts/style.sh lint --shell
+{{/IF_SHELL}}
+
+{{#IF_DOCS}}
+  lint-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - run: npx --yes markdownlint-cli "**/*.md" --ignore-path .markdownlintignore
+      - run: npx --yes prettier --check "{{DOCS_PRETTIER_GLOB}}" --ignore-path .prettierignore
+{{/IF_DOCS}}

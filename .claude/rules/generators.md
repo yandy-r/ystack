@@ -20,6 +20,7 @@ sets (they differ). Do not change generated files independently of source.
 | Cursor      | `generate-cursor-skills.sh`, `generate-cursor-agents.sh`, `generate-cursor-rules.sh`                                         | `validate-cursor-skills.sh`, `validate-cursor-agents.sh`, `validate-cursor-rules.sh`                                         |
 | opencode    | `generate-opencode-skills.sh`, `generate-opencode-agents.sh`, `generate-opencode-commands.sh`, `generate-opencode-plugin.sh` | `validate-opencode-skills.sh`, `validate-opencode-agents.sh`, `validate-opencode-commands.sh`, `validate-opencode-plugin.sh` |
 | Antigravity | `generate-antigravity-packages.sh`                                                                                           | `validate-antigravity-packages.sh`                                                                                           |
+| Muse        | `generate-muse-packages.sh`                                                                                                  | `validate-muse-packages.sh`                                                                                                  |
 | OMP         | `generate-omp-skills.sh`                                                                                                     | `validate-omp-skills.sh`                                                                                                     |
 
 All entrypoints above live under `scripts/`. See `scripts/sync.sh --help` for the

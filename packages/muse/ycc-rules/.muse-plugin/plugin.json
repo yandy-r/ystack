@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "name": "ycc-rules",
+  "displayName": "ycc rules",
+  "version": "6.5.0",
+  "description": "Language and common coding rules for the ycc workflow.",
+  "compat": {
+    "source": "native",
+    "manifestDir": ".muse-plugin"
+  },
+  "capabilities": {
+    "skills": [
+      {
+        "id": "ycc-common-agents",
+        "path": "rules/ycc-common-agents/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-common-code-review",
+        "path": "rules/ycc-common-code-review/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-common-coding-style",
+        "path": "rules/ycc-common-coding-style/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-common-development-workflow",
+        "path": "rules/ycc-common-development-workflow/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-common-git-workflow",
+        "path": "rules/ycc-common-git-workflow/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-common-patterns",
+        "path": "rules/ycc-common-patterns/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-common-performance",
+        "path": "rules/ycc-common-performance/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-common-security",
+        "path": "rules/ycc-common-security/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-common-testing",
+        "path": "rules/ycc-common-testing/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-golang-coding-style",
+        "path": "rules/ycc-golang-coding-style/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-golang-patterns",
+        "path": "rules/ycc-golang-patterns/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-golang-security",
+        "path": "rules/ycc-golang-security/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-golang-testing",
+        "path": "rules/ycc-golang-testing/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-python-coding-style",
+        "path": "rules/ycc-python-coding-style/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-python-patterns",
+        "path": "rules/ycc-python-patterns/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-python-security",
+        "path": "rules/ycc-python-security/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-python-testing",
+        "path": "rules/ycc-python-testing/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-rust-coding-style",
+        "path": "rules/ycc-rust-coding-style/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-rust-patterns",
+        "path": "rules/ycc-rust-patterns/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-rust-security",
+        "path": "rules/ycc-rust-security/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-rust-testing",
+        "path": "rules/ycc-rust-testing/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-typescript-coding-style",
+        "path": "rules/ycc-typescript-coding-style/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-typescript-patterns",
+        "path": "rules/ycc-typescript-patterns/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-typescript-security",
+        "path": "rules/ycc-typescript-security/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-typescript-testing",
+        "path": "rules/ycc-typescript-testing/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-web-coding-style",
+        "path": "rules/ycc-web-coding-style/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-web-design-quality",
+        "path": "rules/ycc-web-design-quality/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-web-patterns",
+        "path": "rules/ycc-web-patterns/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-web-performance",
+        "path": "rules/ycc-web-performance/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-web-security",
+        "path": "rules/ycc-web-security/SKILL.md",
+        "enabledDefault": true
+      },
+      {
+        "id": "ycc-web-testing",
+        "path": "rules/ycc-web-testing/SKILL.md",
+        "enabledDefault": true
+      }
+    ],
+    "commands": [],
+    "hooks": [],
+    "mcpServers": [],
+    "reminders": []
+  }
+}

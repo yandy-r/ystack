@@ -1,0 +1,118 @@
+## Linting & Formatting
+
+This project uses a self-contained lint/format bundle rooted in `scripts/style.sh`. Run it directly, via the package-manager aliases below, or wire it into CI.
+
+### One-command bootstrap
+
+If you cloned this repo fresh and `scripts/style.sh` is missing (it ships managed), re-run `formatters --sync` from Claude Code to reinstall the bundle.
+
+### Daily commands
+
+```bash
+./scripts/style.sh lint                  # full lint pass (all detected languages)
+./scripts/style.sh lint --fix            # auto-fix what is auto-fixable
+./scripts/style.sh lint --modified       # staged + unstaged + untracked
+./scripts/style.sh lint --staged         # only files staged in the git index
+./scripts/style.sh lint --unstaged       # only unstaged + untracked changes
+./scripts/style.sh lint --fix --modified # fast pre-push loop
+./scripts/style.sh format                # format everything
+./scripts/style.sh format --modified     # format modified files
+./scripts/style.sh format --staged       # format only staged files
+./scripts/style.sh format --unstaged     # format only unstaged + untracked
+```
+
+{{#IF_PACKAGE_JSON}}
+### npm aliases
+
+```bash
+{{PACKAGE_MANAGER}} run lint
+{{PACKAGE_MANAGER}} run lint:modified
+{{PACKAGE_MANAGER}} run lint:staged
+{{PACKAGE_MANAGER}} run lint:unstaged
+{{PACKAGE_MANAGER}} run lint:fix
+{{PACKAGE_MANAGER}} run lint:fix:modified
+{{PACKAGE_MANAGER}} run format
+{{PACKAGE_MANAGER}} run format:modified
+{{PACKAGE_MANAGER}} run format:staged
+{{PACKAGE_MANAGER}} run format:unstaged
+```
+{{/IF_PACKAGE_JSON}}
+
+{{#IF_MAKEFILE}}
+### Make targets
+
+```bash
+make lint
+make lint-modified
+make lint-staged
+make lint-unstaged
+make lint-fix
+make lint-fix-modified
+make format
+make format-modified
+make format-staged
+make format-unstaged
+```
+{{/IF_MAKEFILE}}
+
+{{#IF_JUSTFILE}}
+### just recipes
+
+```bash
+just lint
+just lint-modified
+just lint-staged
+just lint-unstaged
+just lint-fix
+just lint-fix-modified
+just format
+just format-modified
+just format-staged
+just format-unstaged
+```
+{{/IF_JUSTFILE}}
+
+### Per-language tools
+
+{{#IF_RUST}}
+- **Rust**: `rustfmt` + `clippy` (pinned via `rustfmt.toml`, `clippy.toml`). Runs `cargo clippy --all-targets -- -D warnings` in CI.
+{{/IF_RUST}}
+{{#IF_GO}}
+- **Go**: `gofmt` + `goimports` + `golangci-lint` (config: `.golangci.yml`). Runs `golangci-lint run ./...`.
+{{/IF_GO}}
+{{#IF_TS}}
+- **TypeScript / JavaScript**: `@biomejs/biome` for lint + format + import sort on JS/TS/CSS/JSON/JSONC. Runs `biome ci` in CI. `tsc --noEmit` runs when `tsconfig*.json` is present.
+{{/IF_TS}}
+{{#IF_PYTHON}}
+- **Python**: `ruff` (lint + import sort) + `black` (format). Config: `[tool.ruff]` and `[tool.black]` in `pyproject.toml`.
+{{/IF_PYTHON}}
+{{#IF_DOCS}}
+- **Docs**: `markdownlint` + `prettier` (`.markdownlint.json`, `.prettierrc`) for Markdown/YAML. In docs-only repos, Prettier also owns JSON/JSONC.
+{{/IF_DOCS}}
+{{#IF_SHELL}}
+- **Shell**: `shellcheck --severity=warning` on `*.sh`.
+{{/IF_SHELL}}
+
+### CI
+
+{{#IF_CI_INSTALLED}}
+Lint runs automatically on every pull request via `.github/workflows/lint.yml`. If `.github/workflows/lint-autofix.yml` is also present, it applies `./scripts/style.sh format` + `lint --fix` on same-repo PRs. When the `AUTOFIX_APP_CLIENT_ID` variable and `AUTOFIX_APP_PRIVATE_KEY` secret are set, it pushes the fixes back with a GitHub App token; without them it lists the fixes in the job summary and does not push. Fork PRs are skipped.
+{{/IF_CI_INSTALLED}}
+{{#IF_CI_NOT_INSTALLED}}
+To wire lint into CI, run `formatters --ci` (installs both `lint.yml` and `lint-autofix.yml`) or pair it with `--no-autofix` to skip the autofix workflow.
+{{/IF_CI_NOT_INSTALLED}}
+
+### Pre-commit hook (optional)
+
+{{#IF_HOOKS_INSTALLED}}
+A pre-commit hook is installed. It runs `./scripts/style.sh lint --modified --fix` before every commit. To bypass once: `git commit --no-verify`.
+{{/IF_HOOKS_INSTALLED}}
+{{#IF_HOOKS_NOT_INSTALLED}}
+Run `formatters --hooks` to wire a pre-commit hook that formats and lints only the files you've staged.
+{{/IF_HOOKS_NOT_INSTALLED}}
+
+### Advanced
+
+- **Upgrade the bundle**: re-run `formatters --sync` from Claude Code. This prunes stale managed files and copies the latest scripts.
+- **Ignore paths**: add entries to `.prettierignore`, `.markdownlintignore`, `.gitignore`, or tool-native ignore keys (`ruff exclude`, `biome files.ignore`, `.golangci.yml issues.exclude-rules`).
+- **Modified-only mode** reads `git diff --name-only HEAD` — untracked files are included when `scripts/lib/modified-files.sh` sees them with `git status --porcelain`.

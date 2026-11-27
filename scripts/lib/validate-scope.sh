@@ -8,7 +8,7 @@
 # the unscoped validate.sh, so a rule that is too narrow is caught there.
 
 # shellcheck disable=SC2034  # read by validate.sh and the scope tests.
-VALIDATE_TARGETS=(inventory cursor codex opencode omp antigravity agents claude claude-native cursor-native codex-native json config packages release mods practices scope types)
+VALIDATE_TARGETS=(inventory cursor codex opencode omp antigravity muse agents claude claude-native cursor-native codex-native json config packages release mods practices scope types)
 
 # validate_scope_targets_for_path <path> — print the targets a changed
 # repo-relative path affects: a space-separated list, `all`, or nothing.
@@ -44,6 +44,7 @@ validate_scope_owned_targets() {
         packages/opencode/*) echo "opencode release packages" ;;
         packages/omp/*) echo "omp" ;;
         packages/antigravity/*) echo "antigravity packages" ;;
+        packages/muse/*) echo "muse packages" ;;
         .omp-plugin/*) echo "omp" ;;
         # Pi's generated tree: skills (YAN-1184) are checked in `packages`, whose
         # capability-matrix check also fails closed on an installable package (ADR 0003).
@@ -52,8 +53,8 @@ validate_scope_owned_targets() {
         # The package manifest and its model feed the packages validators and
         # per-runtime package generators, so they must match before the
         # catch-all settings rule.
-        ycc/settings/packages.json | ycc/settings/packages.schema.json) echo "cursor codex opencode omp antigravity claude claude-native cursor-native codex-native packages" ;;
-        scripts/package_model.py | scripts/test_package_model.py) echo "cursor codex opencode omp antigravity claude claude-native cursor-native codex-native packages" ;;
+        ycc/settings/packages.json | ycc/settings/packages.schema.json) echo "cursor codex opencode omp antigravity muse claude claude-native cursor-native codex-native packages" ;;
+        scripts/package_model.py | scripts/test_package_model.py) echo "cursor codex opencode omp antigravity muse claude claude-native cursor-native codex-native packages" ;;
         # The graph extractor also drives the hidden v7 Claude split check in claude-native.
         scripts/build_package_graph.py | scripts/package_graph_extract.py) echo "claude-native packages" ;;
         scripts/test_package_graph.py) echo "packages" ;;
@@ -131,6 +132,14 @@ validate_scope_owned_targets() {
         scripts/generate_antigravity_packages.py | scripts/generate-antigravity-packages.sh | scripts/validate-antigravity-packages.sh | scripts/test_generate_antigravity_packages.py) echo "antigravity" ;;
         scripts/antigravity_install.py) echo "antigravity config" ;;
         scripts/test_antigravity_install.py) echo "antigravity config types" ;;
+        # The shared owned-copy primitives back both plugin-folder installers.
+        scripts/owned_tree.py) echo "antigravity muse config types" ;;
+
+        # Muse Code plugins: generator, validator and golden tests (with a live
+        # `muse plugins validate`), and the install helper install.sh --target muse drives.
+        scripts/generate_muse_packages.py | scripts/generate-muse-packages.sh | scripts/validate-muse-packages.sh | scripts/test_generate_muse_packages.py) echo "muse" ;;
+        scripts/muse_install.py) echo "muse config" ;;
+        scripts/test_muse_install.py) echo "muse config types" ;;
 
         # Install docs contain model-validated public package identifiers; the OMP hook-verdict
         # check (validate_omp_native.py) also reads the OMP install doc, the ADR and the spike.
@@ -153,7 +162,7 @@ validate_scope_owned_targets() {
         # the install tests and the manifest checks, so they select everything.
         ycc/settings/* | ycc/.claude-plugin/*) echo "all" ;;
         ycc/mods/*) echo "config mods" ;;
-        ycc/*) echo "inventory cursor codex opencode omp antigravity agents claude-native cursor-native codex-native packages release practices" ;;
+        ycc/*) echo "inventory cursor codex opencode omp antigravity muse agents claude-native cursor-native codex-native packages release practices" ;;
 
         # install.sh and its tests. The install-coverage validators in the
         # agents and opencode targets parse the per-target install libs.

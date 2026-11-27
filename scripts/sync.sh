@@ -6,13 +6,13 @@
 #   ./scripts/sync.sh --only inventory           # single target
 #   ./scripts/sync.sh --only cursor,codex        # comma-separated subset
 #
-# Targets: inventory, cursor, codex, opencode, omp, pi, antigravity, agents, claude
+# Targets: inventory, cursor, codex, opencode, omp, pi, antigravity, muse, agents, claude
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-VALID_TARGETS=(inventory cursor codex opencode omp pi antigravity agents claude)
+VALID_TARGETS=(inventory cursor codex opencode omp pi antigravity muse agents claude)
 TARGETS=("${VALID_TARGETS[@]}")
 
 usage() {
@@ -111,6 +111,10 @@ run_ycc_target() {
         antigravity)
             echo "== sync: antigravity plugins =="
             "${REPO_ROOT}/scripts/generate-antigravity-packages.sh"
+            ;;
+        muse)
+            echo "== sync: muse plugins =="
+            "${REPO_ROOT}/scripts/generate-muse-packages.sh"
             ;;
         agents)
             echo "== sync: agents skills =="

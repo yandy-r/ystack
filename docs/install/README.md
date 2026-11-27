@@ -17,6 +17,7 @@ evidence.
 | opencode    | [`opencode.md`](opencode.md)       | npm plugin: `install.sh` writes the `@yandy-r/ycc-opencode` `plugins` entry, plus settings and rules                   | [`v6/opencode.md`](v6/opencode.md) |
 | agents      | [`agents.md`](agents.md)           | File copy of skills into `~/.agents/skills` (Zed and others)                                                           | [`v6/agents.md`](v6/agents.md)     |
 | Antigravity | [`antigravity.md`](antigravity.md) | Native plugins in `~/.gemini/config/plugins`: `agy plugin install` of `ycc`, `ycc-mcp`, `ycc-rules` (or an owned copy) | [`antigravity.md`](antigravity.md) |
+| Muse Code   | [`muse.md`](muse.md)               | Native plugins `ycc`, `ycc-mcp`, `ycc-rules` from owned copies in `~/.local/share/ycc/muse` via `muse plugins install` | [`muse.md`](muse.md)               |
 
 Every native package can also be installed straight from the published
 repository with the runtime's own CLI; each runtime guide shows the commands.
@@ -31,7 +32,7 @@ first-time setup (the `base` step plus the opt-in `--settings`, `--rules`,
 recommended entry point:
 
 ```bash
-./install.sh sync --target <claude|cursor|codex|opencode|agents|omp|antigravity|all> --intent <intents>
+./install.sh sync --target <claude|cursor|codex|opencode|agents|omp|antigravity|muse|all> --intent <intents>
 ```
 
 You say **what** you want synced. Each target maps the intent onto the steps it
@@ -160,18 +161,18 @@ or `source <(ycc completion --shell zsh)`.
 
 Per-target mapping (intents a target cannot execute are skipped with a notice):
 
-| Intent     | claude     | cursor     | codex      | opencode   | agents   | omp           | antigravity |
-| ---------- | ---------- | ---------- | ---------- | ---------- | -------- | ------------- | ----------- |
-| `base`     | `base`     | `base`     | `base`     | `base`     | `base`   | `base,dedupe` | `base`      |
-| `skills`   | `base`     | `base`     | `base`     | `base`     | `skills` | no-op         | `base`      |
-| `agents`   | `base`     | `base`     | `agents`   | `base`     | no-op    | no-op         | `base`      |
-| `commands` | `base`     | `base`     | no-op      | `base`     | no-op    | no-op         | `base`      |
-| `settings` | `settings` | `settings` | `settings` | `settings` | no-op    | `settings`    | no-op       |
-| `rules`    | `rules`    | `base`     | `rules`    | `rules`    | no-op    | `rules`       | `rules`     |
-| `mcp`      | `mcp`      | `base`     | `mcp`      | `base`     | no-op    | no-op         | `base`      |
-| `hooks`    | `hooks`    | `base`     | no-op      | no-op      | no-op    | no-op         | no-op       |
-| `plugins`  | `settings` | no-op      | `settings` | `settings` | no-op    | `base,dedupe` | `base`      |
-| `mods`     | `mods`     | no-op      | no-op      | no-op      | no-op    | no-op         | no-op       |
+| Intent     | claude     | cursor     | codex      | opencode   | agents   | omp           | antigravity | muse    |
+| ---------- | ---------- | ---------- | ---------- | ---------- | -------- | ------------- | ----------- | ------- |
+| `base`     | `base`     | `base`     | `base`     | `base`     | `base`   | `base,dedupe` | `base`      | `base`  |
+| `skills`   | `base`     | `base`     | `base`     | `base`     | `skills` | no-op         | `base`      | `base`  |
+| `agents`   | `base`     | `base`     | `agents`   | `base`     | no-op    | no-op         | `base`      | `base`  |
+| `commands` | `base`     | `base`     | no-op      | `base`     | no-op    | no-op         | `base`      | `base`  |
+| `settings` | `settings` | `settings` | `settings` | `settings` | no-op    | `settings`    | no-op       | no-op   |
+| `rules`    | `rules`    | `base`     | `rules`    | `rules`    | no-op    | `rules`       | `rules`     | `rules` |
+| `mcp`      | `mcp`      | `base`     | `mcp`      | `base`     | no-op    | no-op         | `base`      | `base`  |
+| `hooks`    | `hooks`    | `base`     | no-op      | no-op      | no-op    | no-op         | no-op       | no-op   |
+| `plugins`  | `settings` | no-op      | `settings` | `settings` | no-op    | `base,dedupe` | `base`      | `base`  |
+| `mods`     | `mods`     | no-op      | no-op      | no-op      | no-op    | no-op         | no-op       | no-op   |
 
 `sync` is exclusive: it never implicitly runs `base`. On Claude, `skills`,
 `agents` and `commands` run `base`, because those components ship only inside
@@ -592,7 +593,7 @@ creates no directories, and Cursor and OMP settings print the
 `install` takes step flags instead of intents:
 
 ```bash
-./install.sh install --target <claude|cursor|codex|opencode|agents|omp|antigravity|all> [flags]
+./install.sh install --target <claude|cursor|codex|opencode|agents|omp|antigravity|muse|all> [flags]
 ```
 
 Without `--only`, the target's `base` step runs, and the additive flags run

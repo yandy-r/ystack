@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "name": "ycc-mcp",
+  "displayName": "ycc MCP",
+  "version": "6.5.0",
+  "description": "MCP server connections for the ycc skills and agents.",
+  "compat": {
+    "source": "native",
+    "manifestDir": ".muse-plugin"
+  },
+  "capabilities": {
+    "skills": [],
+    "commands": [],
+    "hooks": [],
+    "mcpServers": [
+      {
+        "id": "context7",
+        "transport": "http",
+        "url": "https://mcp.context7.com/mcp"
+      },
+      {
+        "id": "github",
+        "transport": "stdio",
+        "command": [
+          "sh",
+          "mcp/github.sh"
+        ]
+      },
+      {
+        "id": "linear",
+        "transport": "http",
+        "url": "https://mcp.linear.app/mcp"
+      },
+      {
+        "id": "openai-developer-docs",
+        "transport": "http",
+        "url": "https://developers.openai.com/mcp"
+      },
+      {
+        "id": "playwright",
+        "transport": "stdio",
+        "command": [
+          "sh",
+          "mcp/playwright.sh"
+        ]
+      },
+      {
+        "id": "railway",
+        "transport": "http",
+        "url": "https://mcp.railway.com"
+      },
+      {
+        "id": "stripe",
+        "transport": "http",
+        "url": "https://mcp.stripe.com"
+      },
+      {
+        "id": "vercel",
+        "transport": "http",
+        "url": "https://mcp.vercel.com"
+      },
+      {
+        "id": "xero",
+        "transport": "stdio",
+        "command": [
+          "sh",
+          "mcp/xero.sh"
+        ],
+        "env": {
+          "XERO_CLIENT_ID": "${XERO_CLIENT_ID}",
+          "XERO_CLIENT_SECRET": "${XERO_CLIENT_SECRET}"
+        }
+      }
+    ],
+    "reminders": []
+  }
+}

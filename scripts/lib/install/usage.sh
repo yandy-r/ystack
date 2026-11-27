@@ -30,7 +30,9 @@ ycc-hooks, ycc-rules). opencode installs it as the npm plugin
 ~/.config/opencode/opencode.json. The agents target has no native route;
 the installer copies its skills. antigravity places the generated
 packages/antigravity plugins in ~/.gemini/config/plugins (through 'agy plugin
-install' when agy is on PATH, else as ycc-owned copies). After a successful native install (and on
+install' when agy is on PATH, else as ycc-owned copies). muse keeps ycc-owned
+copies of the packages/muse plugins in ~/.local/share/ycc/muse and registers
+them with 'muse plugins install'. After a successful native install (and on
 remove), the installer automatically retires the legacy copies and config
 an older ycc installer wrote for that target — only entries it can prove it
 owns (recorded hash, ownership record or a byte-identical copy); your own
@@ -134,6 +136,9 @@ plugins, mods):
     antigravity base, skills, agents, commands, mcp, plugins → base  rules→rules
               settings, hooks, mods → no-op (global scope only; the plugins
               ycc, ycc-mcp and ycc-rules carry skills, agents, MCP and rules)
+    muse      base, skills, agents, commands, mcp, plugins → base  rules→rules
+              settings, hooks, mods → no-op (the plugins ycc, ycc-mcp and
+              ycc-rules carry skills, commands, agents, MCP servers and rules)
 
 Remove ('remove' subcommand):
   Undoes what the selected steps installed, for every target and intent (same
@@ -250,11 +255,12 @@ Merge semantics (all structured config files):
 
 Options:
   --target <targets>  Comma-separated targets: claude, cursor, codex, opencode,
-                      agents, omp, antigravity, or all (which must stand alone).
-                      Every target is validated before any of them runs. all
-                      skips omp unless omp >= 18.12.2 is on PATH and an OMP
-                      package is listed, and antigravity unless agy is on PATH
-                      or ~/.gemini/config exists.
+                      agents, omp, antigravity, muse, or all (which must stand
+                      alone). Every target is validated before any of them
+                      runs. all skips omp unless omp >= 18.12.2 is on PATH and
+                      an OMP package is listed, antigravity unless agy is on
+                      PATH or ~/.gemini/config exists, and muse unless muse is
+                      on PATH.
   --mode <mode>       Marketplace source mode (default: local). Supported:
                         local — claude adds this checkout as a directory
                                 marketplace; codex runs 'codex plugin
@@ -425,7 +431,8 @@ Options:
                       ycc-hooks; omp: ycc, ycc-mcp, ycc-rules (ycc-hooks
                       excluded: herdr reporting is 'herdr integration install
                       omp'); opencode: @yandy-r/ycc-opencode; antigravity:
-                      ycc, ycc-mcp, ycc-rules (one plugin each).
+                      ycc, ycc-mcp, ycc-rules (one plugin each); muse: ycc,
+                      ycc-mcp, ycc-rules (one plugin each).
                       Each package maps onto the target's native route:
                         claude  ycc → base (ycc@ycc), ycc-mcp → mcp
                                 (ycc-mcp@ycc), ycc-hooks → hooks
@@ -607,9 +614,25 @@ Target steps:
                       YCC_ANTIGRAVITY_AGY override the folder and the binary.
             rules:    opt-in. symlink ycc/settings/rules/AGENTS.md to
                       ~/.gemini/config/AGENTS.md.
+  muse      base | rules (--mode repo is rejected; --project applies to base only)
+            base:     copy the generated packages/muse plugins ycc, ycc-mcp and
+                      ycc-rules
+                      to ~/.local/share/ycc/muse/<name> (the folder the skills'
+                      helper paths name), then 'muse plugins install <copy>
+                      --scope user' (--scope project with --project) and 'muse plugins approve <name>' (trusts
+                      the ycc agents and MCP servers; YCC_MUSE_APPROVE=0 skips
+                      it). Ownership is recorded in
+                      ~/.config/ycc/muse-install.json; remove uninstalls and
+                      deletes only unedited ycc-owned copies, a foreign folder
+                      is refused unless --force. YCC_MUSE_PACKAGE_DIR and
+                      YCC_MUSE_BIN override the folder and the binary.
+            rules:    opt-in. symlink ycc/settings/rules/AGENTS.md to Muse's
+                      user rules file \${XDG_CONFIG_HOME:-~/.config}/muse/AGENTS.md
+                      (YCC_MUSE_CONFIG_DIR overrides the folder).
   all       Run claude then cursor then codex then opencode then agents (then
             omp, once omp >= 18.12.2 is on PATH and an OMP package is listed,
-            then antigravity, once agy is on PATH or ~/.gemini/config exists);
+            then antigravity, once agy is on PATH or ~/.gemini/config exists,
+            then muse, once muse is on PATH);
             step flags propagate.
 
 Examples:
@@ -659,5 +682,10 @@ Examples:
   $(basename "$0") install --target antigravity                    # ycc, ycc-mcp, ycc-rules plugins
   $(basename "$0") sync    --target antigravity --intent base,rules  # plugins + ~/.gemini/config/AGENTS.md
   $(basename "$0") remove  --target antigravity --intent base,rules  # remove what ycc installed
+
+  # Muse Code (the muse CLI):
+  $(basename "$0") install --target muse                           # ycc, ycc-mcp, ycc-rules plugins (approved)
+  $(basename "$0") sync    --target muse --intent base,rules       # plugins + ~/.config/muse/AGENTS.md
+  $(basename "$0") remove  --target muse --intent base,rules       # remove what ycc installed
 EOF
 }

@@ -23,7 +23,7 @@ from validate_capability_matrix import (  # noqa: E402
     validate,
 )
 
-RUNTIMES = ["claude", "cursor", "codex", "opencode", "omp", "agents", "pi", "antigravity"]
+RUNTIMES = ["claude", "cursor", "codex", "opencode", "omp", "agents", "pi", "antigravity", "muse"]
 HEADER = "| capability | " + " | ".join(CANONICAL_TARGETS) + " |"
 SEPARATOR = "| --- | " + " | ".join("---" for _ in CANONICAL_TARGETS) + " |"
 # Every capability is supported except the pi column, which is all unsupported
@@ -118,7 +118,7 @@ class NegativeTests(MatrixFixture):
         self.assert_error(self.errors(fixture_matrix(header=header)), "must be exactly")
 
     def test_stale_target_not_in_schema_fails(self) -> None:
-        for stale in ("omp", "pi", "antigravity"):
+        for stale in ("omp", "pi", "antigravity", "muse"):
             with self.subTest(target=stale):
                 schema = fixture_schema([r for r in RUNTIMES if r != stale])
                 self.assert_error(self.errors(fixture_matrix(), schema), f"target '{stale}' is not a runtime")
