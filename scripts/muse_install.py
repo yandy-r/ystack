@@ -194,26 +194,41 @@ def install_one(ctx: Context, state: dict[str, Any], name: str, installed: set[s
         and record.get("source_digest") == src_digest
         and record.get("digest") == current
         and record.get("scope", "user") == ctx.scope
+        and record.get("registered", True)
         and name in installed
     ):
+        if ctx.approve and not record.get("approved"):
+            # Approval was skipped on an earlier run (--no-approve); grant it now.
+            ctx.run_muse("approve", name)
+            if not ctx.dry_run:
+                record["approved"] = True
+                print(f"[ok]  muse: approved {name} ({dest})")
+            return
         print(f"[ok]  muse: {name} is up to date ({dest})")
         return
     if ctx.dry_run:
         print(f"[dry-run] would copy {src} -> {dest}")
     else:
         place_copy(src, dest, copy_rewrite(dest))
+        # Record the new copy before calling muse, so a failed install or approval is
+        # retried as ycc's own copy instead of being reported as a user edit.
+        record = state["packages"][name] = {
+            "digest": tree_digest(dest),
+            "source": str(src.resolve()),
+            "source_digest": src_digest,
+            "approved": False,
+            "scope": ctx.scope,
+            "registered": False,
+        }
     ctx.run_muse("install", str(dest), "--scope", ctx.scope)
+    if ctx.dry_run:
+        if ctx.approve:
+            ctx.run_muse("approve", name)
+        return
+    record["registered"] = True
     if ctx.approve:
         ctx.run_muse("approve", name)
-    if ctx.dry_run:
-        return
-    state["packages"][name] = {
-        "digest": tree_digest(dest),
-        "source": str(src.resolve()),
-        "source_digest": src_digest,
-        "approved": ctx.approve,
-        "scope": ctx.scope,
-    }
+        record["approved"] = True
     print(f"[ok]  muse: installed {name} from {dest}" + (" (approved)" if ctx.approve else ""))
 
 

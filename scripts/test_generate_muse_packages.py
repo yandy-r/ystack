@@ -145,6 +145,13 @@ class GeneratorTests(unittest.TestCase):
         launcher = self.tree[Path("ycc-mcp/mcp/playwright.sh")]
         self.assertTrue(launcher.executable)
         self.assertIn("exec npx -y @playwright/mcp@latest", launcher.content.decode("utf-8"))
+        # npx resolves node_modules/.bin from its cwd; Muse starts servers in the workspace,
+        # so every launcher first leaves it for its own (trusted) plugin directory.
+        for rel, payload in self.tree.items():
+            if rel.parts[:2] == ("ycc-mcp", "mcp"):
+                body = payload.content.decode("utf-8")
+                self.assertIn('cd -- "$(dirname -- "$0")" || exit 1', body, rel)
+                self.assertLess(body.index("cd -- "), body.index("exec "), rel)
         self.assertEqual(servers["xero"]["env"]["XERO_CLIENT_ID"], "${XERO_CLIENT_ID}")
         for entry in servers.values():
             for arg in entry.get("command", [])[1:]:

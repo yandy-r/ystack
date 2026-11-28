@@ -29,6 +29,9 @@ case "$1 $2" in
     python3 -c 'import json,sys; ids=[l.strip() for l in open(sys.argv[1]) if l.strip()];
 print(json.dumps({"plugins":[{"plugin":{"id":i},"record":{"id":i}} for i in ids]}))' "$db" ;;
   "plugins install")
+    if [ -f "$HOME/fail-install-once" ]; then
+      rm -f "$HOME/fail-install-once"; echo '{"error":{"code":"boom"}}'; exit 1
+    fi
     name=$(python3 -c 'import json,os,sys
 for m in (".claude-plugin/plugin.json",".muse-plugin/plugin.json"):
     p=os.path.join(sys.argv[1],m)
@@ -104,6 +107,27 @@ class InstallHelperTests(unittest.TestCase):
         self.assertIn(f"plugins install {self.copies / 'ycc'} --scope project --json", self.log())
         state = json.loads(helper.state_path().read_text(encoding="utf-8"))
         self.assertEqual(state["packages"]["ycc"]["scope"], "project")
+
+    def test_rerun_with_approval_approves_unchanged_packages(self) -> None:
+        self.run_helper("install", "--no-approve")
+        code, out = self.run_helper("install")
+        self.assertEqual(code, 0, out)
+        for name in helper.PACKAGES:
+            self.assertIn(f"plugins approve {name} --json", self.log())
+        state = json.loads(helper.state_path().read_text(encoding="utf-8"))
+        self.assertTrue(all(record["approved"] for record in state["packages"].values()))
+
+    def test_failed_upgrade_retries_without_force(self) -> None:
+        self.run_helper("install", "--packages", "ycc")
+        skill = self.source / "ycc/skills/demo/SKILL.md"
+        skill.write_text(skill.read_text(encoding="utf-8") + "changed\n", encoding="utf-8")
+        (self.home / "fail-install-once").write_text("", encoding="utf-8")
+        code, out = self.run_helper("install", "--packages", "ycc")
+        self.assertEqual(code, 1, out)
+        code, out = self.run_helper("install", "--packages", "ycc")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("edited since ycc placed it", out)
+        self.assertIn("changed", (self.copies / "ycc/skills/demo/SKILL.md").read_text(encoding="utf-8"))
 
     def test_no_approve_skips_review_decision(self) -> None:
         self.run_helper("install", "--no-approve")
