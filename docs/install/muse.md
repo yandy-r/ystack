@@ -3,13 +3,14 @@
 This guide covers installing the `ycc` workflow bundle into Muse Code (`muse`)
 with `install.sh`.
 
-> **Status: experimental.** The packages were checked against the `muse`
-> 1.4.25 CLI: `muse plugins validate` reports no diagnostics and every skill,
-> command, agent and MCP server as supported, and `muse plugins install`,
+> **Status: supported (muse 1.4.25).** The packages were checked against the
+> `muse` 1.4.25 CLI: `muse plugins validate` reports no diagnostics and every
+> skill, agent and MCP server as supported, and `muse plugins install`,
 > `approve` and `remove` were run end to end. In live `muse exec` sessions, a
 > ycc skill ran its `ycc-shared` helper, a `ycc/<agent>` subagent was spawned,
 > and an HTTP (context7) and a stdio (playwright) ycc-mcp server were called.
-> In the interactive TUI, `/ycc:plan` loaded and ran the skill. Report
+> In the interactive TUI, `/ycc:plan` loaded and ran the skill. The same
+> checks passed on a real user profile installed with `install.sh`. Report
 > anything that does not load. The findings and
 > decisions behind this target are in
 > [`muse-runtime-contract.md`](../internal/spikes/muse-runtime-contract.md).

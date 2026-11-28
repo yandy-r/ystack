@@ -1,6 +1,6 @@
 # ystack
 
-A single Claude Code plugin (`ycc`) bundling workflow orchestration, parallel planning, documentation, research, and project management. The repository also generates native packages for Cursor, Codex, opencode (the npm plugin `@yandy-r/ycc-opencode`), OMP (oh-my-pi), Google Antigravity (experimental), and Muse Code (experimental).
+A single Claude Code plugin (`ycc`) bundling workflow orchestration, parallel planning, documentation, research, and project management. The repository also generates native packages for Cursor, Codex, opencode (the npm plugin `@yandy-r/ycc-opencode`), OMP (oh-my-pi), Google Antigravity (experimental), and Muse Code.
 
 > **2.0.0 breaking change.** Versions ≤ 1.x shipped 9 separate plugins (`ask`, `plan-workflow`, `git-workflow`, `implement-plan`, `code-report`, `deep-research`, `orchestrate`, `write-docs`, `project`). 2.0.0 collapses all of them into a single `ycc` plugin so every skill is accessible via `ycc:{skill}`. Re-install after upgrading.
 > **Migration: `/ycc:ask` and `ycc:ask` retired.** For read-only codebase questions, ask the main session to delegate to `ycc:codebase-advisor`. Request explicit search gaps, assumptions, and analyzed/skipped scope in the answer. Request implementation separately.
@@ -177,7 +177,7 @@ installs the `ycc`, `ycc-mcp` and `ycc-rules` plugins there (through
 `agy plugin install` when `agy` is on `PATH`). See
 [`docs/install/antigravity.md`](docs/install/antigravity.md).
 
-Muse Code (experimental): from a checkout, `./install.sh install --target muse`
+Muse Code: from a checkout, `./install.sh install --target muse`
 copies the `ycc`, `ycc-mcp` and `ycc-rules` plugins to `~/.local/share/ycc/muse/` and
 registers them with `muse plugins install` (then approves their agents and MCP
 servers). See [`docs/install/muse.md`](docs/install/muse.md).

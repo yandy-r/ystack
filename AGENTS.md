@@ -46,7 +46,7 @@ this table records install ownership, not a claim of runtime feature parity:
 | Cursor native packages     | `packages/cursor/{ycc,ycc-rules,ycc-mcp,ycc-hooks}/`                                   | Listed in root `.cursor-plugin/marketplace.json`; installed in Cursor's `/plugins`                         |
 | OMP native packages        | `packages/omp/{ycc,ycc-mcp,ycc-rules}/`; listed in root `.omp-plugin/marketplace.json` | `omp plugin install <pkg>@ycc`, or `install.sh install --target omp` (user or `--project` scope)           |
 | Antigravity (experimental) | `packages/antigravity/{ycc,ycc-mcp,ycc-rules}/`                                        | `~/.gemini/config/plugins/` via `install.sh install --target antigravity` (`agy plugin install` or copy)   |
-| Muse Code (experimental)   | `packages/muse/{ycc,ycc-mcp,ycc-rules}/`                                               | Owned copies in `~/.local/share/ycc/muse/` via `install.sh install --target muse` (`muse plugins install`) |
+| Muse Code                  | `packages/muse/{ycc,ycc-mcp,ycc-rules}/`                                               | Owned copies in `~/.local/share/ycc/muse/` via `install.sh install --target muse` (`muse plugins install`) |
 
 - The `agents` target is skills-only; never write `~/.agents/plugins/` (owned by Codex).
 - Project rules here are not user-global plugin rules. opencode's generated `AGENTS.md`

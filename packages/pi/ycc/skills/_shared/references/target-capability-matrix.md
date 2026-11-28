@@ -124,7 +124,8 @@ The recommendation in `docs/research/ystack/recommendation.md` is qualified by
   `install`, `approve`, `remove`), not yet in an authenticated model session. ycc generates
   `packages/muse/ycc` (claude-compatible manifest, the only family that imports agents) and
   `packages/muse/{ycc-mcp,ycc-rules}` (native `.muse-plugin` manifest; the rules ship as
-  relevance-loaded skills) and installs them from ycc-owned copies. Hooks are not shipped. The rows stay `experimental` until a live gate.
+  relevance-loaded skills) and installs them from ycc-owned copies. Hooks are not shipped. Verified live
+  (skill helpers, subagents, HTTP and stdio MCP, `/ycc:` in the TUI) on a real profile.
 
 ---
 
