@@ -23,12 +23,26 @@ ROOTS = {
     "cursor": Path("packages/cursor"),
     "codex": Path(".codex-plugin"),
     "antigravity": Path("packages/antigravity"),
+    "muse": Path("packages/muse"),
 }
-# Antigravity reads plugin.json at the plugin root (no dot-folder).
-MANIFESTS = {
-    runtime: Path("plugin.json") if runtime == "antigravity" else Path(f".{runtime}-plugin/plugin.json")
+# Antigravity reads plugin.json at the plugin root (no dot-folder). Muse reads either
+# family: ycc ships the claude-compatible manifest (the only one that imports agents),
+# every other Muse package the native .muse-plugin manifest.
+MUSE_CLAUDE_FAMILY = frozenset({"ycc"})
+MANIFESTS: dict[str, tuple[Path, ...]] = {
+    runtime: (Path("plugin.json"),) if runtime == "antigravity" else (Path(f".{runtime}-plugin/plugin.json"),)
     for runtime in ROOTS
 }
+MANIFESTS["muse"] = (Path(".claude-plugin/plugin.json"), Path(".muse-plugin/plugin.json"))
+
+
+def manifest_rel(runtime: str, key: str) -> Path:
+    """The manifest path of package ``key`` relative to its root on ``runtime``."""
+    if runtime == "muse":
+        return MANIFESTS["muse"][0 if key in MUSE_CLAUDE_FAMILY else 1]
+    return MANIFESTS[runtime][0]
+
+
 CLAUDE_CATALOG = Path(".claude-plugin/marketplace.json")
 CURSOR_CATALOG = Path(".cursor-plugin/marketplace.json")
 
@@ -72,10 +86,28 @@ def package_root(key: str, runtime: str) -> Path:
 
 def component_path(component: str, runtime: str) -> str:
     if component == "mcp":
-        return {"cursor": "mcp.json", "antigravity": "mcp_config.json"}.get(runtime, ".mcp.json")
+        mcp = {"cursor": "mcp.json", "antigravity": "mcp_config.json", "muse": ".muse-plugin/plugin.json"}
+        return mcp.get(runtime, ".mcp.json")
     if component == "shared":
-        return {"codex": "shared", "antigravity": "ycc-shared"}.get(runtime, "skills/_shared")
+        return {"codex": "shared", "antigravity": "ycc-shared", "muse": "ycc-shared"}.get(runtime, "skills/_shared")
     return component
+
+
+def component_present(target: Path, component: str, runtime: str) -> bool:
+    """Whether ``component`` exists at ``target`` (its :func:`component_path`).
+
+    Every Muse native package has ``.muse-plugin/plugin.json``, so on Muse the MCP
+    component is present only when that manifest declares at least one server.
+    """
+    if component != "mcp":
+        return target.is_dir()
+    if runtime != "muse":
+        return target.is_file()
+    try:
+        servers = load_object(target).get("capabilities", {}).get("mcpServers")
+    except (ValueError, AttributeError):
+        return False
+    return isinstance(servers, list) and bool(servers)
 
 
 def _native_tree_errors(root: Path, model: PackageModel) -> list[str]:
@@ -87,19 +119,22 @@ def _native_tree_errors(root: Path, model: PackageModel) -> list[str]:
             for entry in package.runtimes
             if entry.runtime == runtime and entry.mechanism == "native" and entry.status == "included"
         }
-        expected = {package_root(key, runtime) / MANIFESTS[runtime] for key in included}
+        expected = {package_root(key, runtime) / manifest_rel(runtime, key) for key in included}
         actual = {
-            path.relative_to(root) for path in (root / container).glob(f"*/{MANIFESTS[runtime]}") if path.is_file()
+            path.relative_to(root)
+            for candidate in MANIFESTS[runtime]
+            for path in (root / container).glob(f"*/{candidate}")
+            if path.is_file()
         }
-        if runtime == "claude" and (root / "ycc" / MANIFESTS[runtime]).is_file():
-            actual.add(Path("ycc") / MANIFESTS[runtime])
+        if runtime == "claude" and (root / "ycc" / manifest_rel(runtime, "ycc")).is_file():
+            actual.add(Path("ycc") / manifest_rel(runtime, "ycc"))
         for path in sorted(expected - actual):
             errors.append(f"{path}: missing included native manifest")
         for path in sorted(actual - expected):
             errors.append(f"{path}: unexpected or ineligible native package")
         for key, entry in included.items():
             rel = package_root(key, runtime)
-            manifest = root / rel / MANIFESTS[runtime]
+            manifest = root / rel / manifest_rel(runtime, key)
             if manifest.is_file():
                 try:
                     if load_object(manifest).get("name") != key:
@@ -108,8 +143,7 @@ def _native_tree_errors(root: Path, model: PackageModel) -> list[str]:
                     errors.append(str(exc))
             for component in entry.components:
                 target = root / rel / component_path(component, runtime)
-                exists = target.is_file() if component == "mcp" else target.is_dir()
-                if not exists:
+                if not component_present(target, component, runtime):
                     errors.append(f"{rel}: missing modeled {component} component ({target.relative_to(root)})")
             modeled = set(entry.components)
             allowed_extra = UNMODELED_COMPONENT_EXCEPTIONS.get((key, runtime), frozenset())
@@ -119,8 +153,7 @@ def _native_tree_errors(root: Path, model: PackageModel) -> list[str]:
                 if component in modeled or component in allowed_extra:
                     continue
                 target = root / rel / component_path(component, runtime)
-                present = target.is_file() if component == "mcp" else target.is_dir()
-                if present:
+                if component_present(target, component, runtime):
                     errors.append(f"{rel}: unmodeled {component} component present ({target.relative_to(root)})")
     return errors
 

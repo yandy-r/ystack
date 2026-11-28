@@ -28,7 +28,7 @@ from package_model import (  # noqa: E402
 
 MANIFEST = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
 SCHEMA = json.loads(DEFAULT_SCHEMA_PATH.read_text(encoding="utf-8"))
-RUNTIME = ("claude", "codex", "cursor", "opencode", "agents", "omp", "pi", "antigravity")
+RUNTIME = ("claude", "codex", "cursor", "opencode", "agents", "omp", "pi", "antigravity", "muse")
 
 
 def clone() -> dict:
@@ -142,7 +142,7 @@ class CheckedInModelTests(unittest.TestCase):
 
     def test_installer_fallback_file_copy_unlisted(self) -> None:
         package = next(p for p in load_package_model().packages if p.key == "installer-fallback")
-        self.assertEqual(len(package.runtimes), 8)
+        self.assertEqual(len(package.runtimes), 9)
         for entry in package.runtimes:
             self.assertEqual(entry.mechanism, "file-copy")
             self.assertFalse(entry.listed)

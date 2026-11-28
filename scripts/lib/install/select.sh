@@ -6,7 +6,7 @@
 # selection with its ycc:<name> dependencies the target ships
 # (expand_with_deps, called by run_target).
 #
-# Native-package targets (claude, codex, cursor, omp, opencode, antigravity) install whole
+# Native-package targets (claude, codex, cursor, omp, opencode, antigravity, muse) install whole
 # packages, so NATIVE_UNSELECTABLE_KINDS cannot narrow them:
 # preflight_native_selections rejects such a selection when only native
 # targets run, and skips those targets with one notice otherwise.
@@ -29,7 +29,7 @@ declare -gA SELECTION_NOUN=([skills]=skill [plugins]=plugin [mods]=mod)
 declare -gA SELECTION_NOUNS=([skills]=skills [plugins]=plugins [mods]=mods)
 # Kinds (plus --with-deps) that narrow only the agents target.
 NATIVE_UNSELECTABLE_KINDS=(skills)
-NATIVE_TARGETS=(claude codex cursor omp opencode antigravity)
+NATIVE_TARGETS=(claude codex cursor omp opencode antigravity muse)
 declare -gA SELECTION_STEP_HINT=(
     [skills]="it narrows the agents target's skills slice; use --intent skills or --only skills"
     [plugins]="it narrows the plugins config group; use --intent plugins, or install --only settings"

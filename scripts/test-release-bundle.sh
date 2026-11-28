@@ -577,6 +577,9 @@ MODEL_GENERATED=(
   "packages/antigravity/ycc/plugin.json"
   "packages/antigravity/ycc-mcp/plugin.json"
   "packages/antigravity/ycc-rules/plugin.json"
+  "packages/muse/ycc/.claude-plugin/plugin.json"
+  "packages/muse/ycc-mcp/.muse-plugin/plugin.json"
+  "packages/muse/ycc-rules/.muse-plugin/plugin.json"
 )
 new_fixture model
 write_source_fixture "5.3.0"

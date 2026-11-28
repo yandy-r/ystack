@@ -61,7 +61,7 @@
           "minProperties": 1,
           "description": "Runtime to per-runtime package entry; a runtime appears only where the package exists there.",
           "propertyNames": {
-            "enum": ["claude", "codex", "cursor", "opencode", "agents", "omp", "pi", "antigravity"]
+            "enum": ["claude", "codex", "cursor", "opencode", "agents", "omp", "pi", "antigravity", "muse"]
           },
           "additionalProperties": {
             "$ref": "#/$defs/RuntimePackage"

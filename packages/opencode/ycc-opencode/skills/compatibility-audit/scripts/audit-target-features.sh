@@ -7,7 +7,7 @@
 #
 # Flags:
 #   --target=<t>|all      Restrict findings to one target: claude, cursor, codex,
-#                         opencode, omp, pi, antigravity, or all (default: all). `--target <t>` also works.
+#                         opencode, omp, pi, antigravity, muse, or all (default: all). `--target <t>` also works.
 #   --format=human|json   Output format (default: human)
 #   --strict              Exit 1 if any verdict is "unsupported"
 #   --help                Show this help and exit 0
@@ -22,7 +22,7 @@
 #
 # The parser reads ONE markdown table from the matrix file. Rules:
 #   - The header row must be exactly (after per-cell whitespace trim):
-#       capability | claude | cursor | codex | opencode | omp | pi | antigravity
+#       capability | claude | cursor | codex | opencode | omp | pi | antigravity | muse
 #   - Separator rows (cells of dashes) are skipped.
 #   - Each data cell must be one of: supported | partial | unsupported
 #   - The "As of <date>" line is expected anywhere in the file as:
@@ -47,7 +47,7 @@ verdict lines.
 
 Flags:
   --target=<t>|all      Restrict findings to one target: claude, cursor, codex,
-                        opencode, omp, pi, antigravity, or all (default: all). `--target <t>` also works.
+                        opencode, omp, pi, antigravity, muse, or all (default: all). `--target <t>` also works.
   --format=human|json   Output format (default: human)
   --strict              Exit 1 if any verdict is "unsupported"
   --help                Show this help and exit 0
@@ -64,7 +64,7 @@ EOF
 # ---------------------------------------------------------------------------
 
 # Canonical target order; must match the matrix header after `capability`.
-ALL_TARGETS=("claude" "cursor" "codex" "opencode" "omp" "pi" "antigravity")
+ALL_TARGETS=("claude" "cursor" "codex" "opencode" "omp" "pi" "antigravity" "muse")
 
 FORMAT="human"
 STRICT=0
@@ -114,7 +114,7 @@ case "$FORMAT" in
 esac
 
 case "$TARGET" in
-  all|claude|cursor|codex|opencode|omp|pi|antigravity) ;;
+  all|claude|cursor|codex|opencode|omp|pi|antigravity|muse) ;;
   *)
     echo "audit-target-features.sh: unknown --target value: $TARGET" >&2
     usage >&2
@@ -182,7 +182,7 @@ fi
 # ---------------------------------------------------------------------------
 # Parse the capability matrix via Python
 # Outputs: one line per capability row in the form:
-#   <capability>|<claude>|<cursor>|<codex>|<opencode>|<omp>|<pi>|<antigravity>
+#   <capability>|<claude>|<cursor>|<codex>|<opencode>|<omp>|<pi>|<antigravity>|<muse>
 # First line is the "As of ..." date (prefixed with "AS_OF:").
 # ---------------------------------------------------------------------------
 
@@ -193,7 +193,7 @@ matrix_path = sys.argv[1]
 matrix_rel  = sys.argv[2]
 
 VOCABULARY = {"supported", "partial", "unsupported"}
-EXPECTED_HEADER = ["capability", "claude", "cursor", "codex", "opencode", "omp", "pi", "antigravity"]
+EXPECTED_HEADER = ["capability", "claude", "cursor", "codex", "opencode", "omp", "pi", "antigravity", "muse"]
 
 lines = open(matrix_path).read().splitlines()
 
@@ -281,7 +281,7 @@ fi
 AS_OF_LINE="$(echo "$PARSE_RESULT" | grep "^AS_OF:" | sed 's/^AS_OF://')"
 
 # Build parallel arrays: CAPS, VERDICTS_CLAUDE, VERDICTS_CURSOR, VERDICTS_CODEX,
-# VERDICTS_OPENCODE, VERDICTS_OMP, VERDICTS_PI, VERDICTS_ANTIGRAVITY
+# VERDICTS_OPENCODE, VERDICTS_OMP, VERDICTS_PI, VERDICTS_ANTIGRAVITY, VERDICTS_MUSE
 declare -a CAPS=()
 declare -a VERDICTS_CLAUDE=()
 declare -a VERDICTS_CURSOR=()
@@ -290,8 +290,9 @@ declare -a VERDICTS_OPENCODE=()
 declare -a VERDICTS_OMP=()
 declare -a VERDICTS_PI=()
 declare -a VERDICTS_ANTIGRAVITY=()
+declare -a VERDICTS_MUSE=()
 
-while IFS='|' read -r cap cl cu co oc om pi ag; do
+while IFS='|' read -r cap cl cu co oc om pi ag mu; do
   [[ "$cap" == AS_OF:* ]] && continue
   [[ -z "$cap" ]] && continue
   CAPS+=("$cap")
@@ -302,6 +303,7 @@ while IFS='|' read -r cap cl cu co oc om pi ag; do
   VERDICTS_OMP+=("$om")
   VERDICTS_PI+=("$pi")
   VERDICTS_ANTIGRAVITY+=("$ag")
+  VERDICTS_MUSE+=("$mu")
 done < <(echo "$PARSE_RESULT" | grep -v "^AS_OF:")
 
 # ---------------------------------------------------------------------------
@@ -417,6 +419,7 @@ lookup_verdict() {
         omp)      echo "${VERDICTS_OMP[$i]}";      return ;;
         pi)       echo "${VERDICTS_PI[$i]}";       return ;;
         antigravity) echo "${VERDICTS_ANTIGRAVITY[$i]}"; return ;;
+        muse)     echo "${VERDICTS_MUSE[$i]}";     return ;;
         *)
           echo "audit-target-features.sh: lookup_verdict: unknown target '$target'" >&2
           exit 2

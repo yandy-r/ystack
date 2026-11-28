@@ -3,7 +3,7 @@
 #
 # Verifies, against every generated bundle's own worktree-paths.sh /
 # setup-worktree.sh / list-worktrees.sh, using throwaway scratch repos:
-#   - default root per bundle (claude/codex/cursor/opencode/omp/agents/antigravity)
+#   - default root per bundle (claude/codex/cursor/opencode/omp/agents/antigravity/muse)
 #   - agents bundle runtime selection + .agents fallback (nested/unknown);
 #     OMPCODE=1 wins over the CLAUDECODE=1 marker OMP also sets (YAN-1170)
 #   - YCC_WORKTREE_ROOT override (absolute, relative, ~, spaces)
@@ -59,9 +59,10 @@ declare -A BUNDLES=(
   [omp]="${REPO_ROOT}/packages/omp/ycc/skills/_shared/scripts"
   [agents]="${REPO_ROOT}/.agents-plugin/ycc-shared/scripts"
   [antigravity]="${REPO_ROOT}/packages/antigravity/ycc/ycc-shared/scripts"
+  [muse]="${REPO_ROOT}/packages/muse/ycc/ycc-shared/scripts"
 )
 # bundle-name -> expected default root dir name
-declare -A EXPECTED=([claude]=.claude [codex]=.codex [cursor]=.cursor [opencode]=.opencode [omp]=.omp [agents]=.agents [antigravity]=.antigravity)
+declare -A EXPECTED=([claude]=.claude [codex]=.codex [cursor]=.cursor [opencode]=.opencode [omp]=.omp [agents]=.agents [antigravity]=.antigravity [muse]=.muse)
 
 CLEAN_ENV=(env -u YCC_WORKTREE_ROOT -u OPENCODE -u OMPCODE -u CLAUDECODE -u CODEX_THREAD_ID)
 
@@ -78,7 +79,7 @@ default_root() { # <bundle> <repo> [extra env assignments...]
   (cd "$repo" && "${CLEAN_ENV[@]}" "$@" bash -c 'source "$1"; ycc_worktree_root' _ "${BUNDLES[$bundle]}/worktree-paths.sh")
 }
 
-for bundle in claude codex cursor opencode omp agents antigravity; do
+for bundle in claude codex cursor opencode omp agents antigravity muse; do
   [[ -f "${BUNDLES[$bundle]}/worktree-paths.sh" ]] || { fail "$bundle: worktree-paths.sh missing"; continue; }
   repo="${SCRATCH}/repo-${bundle}"
   make_repo "$repo"
@@ -103,7 +104,7 @@ assert_eq "agents: empty CODEX_THREAD_ID -> .agents" "${canon}/.agents/worktrees
 assert_eq "agents: unsupported CURSOR_AGENT -> .agents" "${canon}/.agents/worktrees" "$(default_root agents "$repo" CURSOR_AGENT=1)"
 
 # Non-agents bundles must NOT be influenced by runtime markers.
-for bundle in claude codex cursor opencode omp antigravity; do
+for bundle in claude codex cursor opencode omp antigravity muse; do
   [[ -f "${BUNDLES[$bundle]}/worktree-paths.sh" ]] || continue
   repo="${SCRATCH}/repo-${bundle}"
   canon="$(cd "$repo" && pwd -P)"
@@ -111,7 +112,7 @@ for bundle in claude codex cursor opencode omp antigravity; do
 done
 
 # setup-worktree.sh / list-worktrees.sh / override / spaces / idempotency.
-for bundle in claude codex cursor opencode omp agents antigravity; do
+for bundle in claude codex cursor opencode omp agents antigravity muse; do
   scripts="${BUNDLES[$bundle]}"
   [[ -f "${scripts}/setup-worktree.sh" ]] || { fail "$bundle: setup-worktree.sh missing"; continue; }
   repo="${SCRATCH}/with space/repo-${bundle}"

@@ -42,9 +42,9 @@ modifies any file.
 Parse `$ARGUMENTS` for:
 
 - **--target** (optional, default `all`) — restrict the audit to a single
-  target. Accepted values: `claude`, `cursor`, `codex`, `opencode`, `omp`, `pi`, `antigravity`, `all`.
+  target. Accepted values: `claude`, `cursor`, `codex`, `opencode`, `omp`, `pi`, `antigravity`, `muse`, `all`.
   When `all` is specified, phases 2–5 run once per target in the set
-  `{claude, cursor, codex, opencode, omp, pi, antigravity}`.
+  `{claude, cursor, codex, opencode, omp, pi, antigravity, muse}`.
   `omp` has no generated tree or generator yet: skip Phases 2 and 3 for it and
   report them as `not generated yet` rather than failures.
   `pi` is modeled but has no generated `packages/pi/` tree or generator yet (ADR 0003,
@@ -52,6 +52,8 @@ Parse `$ARGUMENTS` for:
   still runs its `PI1` check.
   `antigravity` has no `report-bundle-drift.sh` entry: skip Phase 2 for it and report
   `drift covered by Phase 3` (`validate.sh --only antigravity` runs the generator `--check`).
+  `muse` likewise has no `report-bundle-drift.sh` entry: skip Phase 2 for it and report
+  `drift covered by Phase 3` (`validate.sh --only muse` runs the generator `--check`).
 - **--json** (flag, default off) — emit the final triage report as a
   machine-readable JSON envelope instead of Markdown. Per-target sections are
   preserved inside the envelope as structured objects.
@@ -78,7 +80,7 @@ required for Phase 5.
 
 Parse `$ARGUMENTS` as described above. Resolve `--target` to a concrete list:
 
-- `all` → `[claude, cursor, codex, opencode, omp, pi, antigravity]`
+- `all` → `[claude, cursor, codex, opencode, omp, pi, antigravity, muse]`
 - any single value → a one-element list
 
 If `--dry-run` was passed, print the resolved target list, the scripts that

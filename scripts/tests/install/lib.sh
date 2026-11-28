@@ -47,6 +47,27 @@ on_exit() {
 trap on_exit EXIT
 
 # new_home — create an isolated HOME and echo its path.
+# without_command <name> <cmd...> — run <cmd...> with no <name> reachable on PATH.
+# A PATH directory holding <name> is swapped for a sandbox shim that links every
+# other entry, so its other tools (bash, python3, ...) stay reachable.
+without_command() {
+    local name="$1" dir entry shim kept=() path_dirs
+    shift
+    IFS=: read -r -a path_dirs <<< "${PATH}"
+    for dir in "${path_dirs[@]}"; do
+        if [[ -x "${dir}/${name}" ]]; then
+            shim="$(mktemp -d "${SANDBOX_ROOT}/no-${name}-bin.XXXXXX")"
+            for entry in "${dir}"/*; do
+                [[ "${entry##*/}" == "${name}" ]] || ln -s "${entry}" "${shim}/"
+            done
+            kept+=("${shim}")
+        else
+            kept+=("${dir}")
+        fi
+    done
+    PATH="$(IFS=:; echo "${kept[*]}")" "$@"
+}
+
 new_home() {
     local home
     home="$(mktemp -d "${SANDBOX_ROOT}/home.XXXXXX")"

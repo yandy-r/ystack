@@ -9,7 +9,7 @@
 - Artifact store
 - How to Update This Document
 
-As of 2026-11-24
+As of 2026-11-27
 
 This file is the authoritative source for which ycc bundle capabilities are supported on each
 deployment target. Downstream scripts parse the table below; read the Parser Grammar section
@@ -22,7 +22,7 @@ before editing the table.
 The first table below (Capability Matrix) is parsed by `ycc/skills/compatibility-audit/scripts/audit-target-features.sh`.
 Follow these rules exactly or the parser will misread cells:
 
-- **Column order**: `capability, claude, cursor, codex, opencode, omp, pi, antigravity` — do not reorder.
+- **Column order**: `capability, claude, cursor, codex, opencode, omp, pi, antigravity, muse` — do not reorder.
 - **Cell vocabulary**: exactly one of `supported`, `partial`, or `unsupported` — no other tokens,
   no trailing punctuation, no parenthetical notes inside the cell.
 - **Notes** belong in the Notes section below the table, keyed as `capability:target`.
@@ -44,19 +44,19 @@ Follow these rules exactly or the parser will misread cells:
 
 ## Capability Matrix
 
-| capability        | claude    | cursor      | codex       | opencode    | omp         | pi          | antigravity |
-| ----------------- | --------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- |
-| SKILLS            | supported | supported   | supported   | supported   | partial     | unsupported | partial     |
-| COMMANDS          | supported | partial     | unsupported | supported   | partial     | unsupported | partial     |
-| AGENTS            | supported | partial     | supported   | supported   | partial     | unsupported | partial     |
-| HOOKS.PreToolUse  | supported | partial     | unsupported | partial     | unsupported | unsupported | unsupported |
-| HOOKS.PostToolUse | supported | partial     | unsupported | partial     | unsupported | unsupported | unsupported |
-| HOOKS.Stop        | supported | partial     | unsupported | partial     | unsupported | unsupported | unsupported |
-| MCP               | supported | supported   | partial     | supported   | partial     | unsupported | partial     |
-| INSTALL_PATH      | supported | supported   | supported   | supported   | partial     | unsupported | partial     |
-| DANGEROUS_MODE    | supported | unsupported | unsupported | unsupported | unsupported | unsupported | unsupported |
-| WORKTREE          | supported | partial     | partial     | partial     | partial     | unsupported | partial     |
-| MODS              | supported | unsupported | unsupported | unsupported | unsupported | unsupported | unsupported |
+| capability        | claude    | cursor      | codex       | opencode    | omp         | pi          | antigravity | muse        |
+| ----------------- | --------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- |
+| SKILLS            | supported | supported   | supported   | supported   | partial     | unsupported | partial     | partial     |
+| COMMANDS          | supported | partial     | unsupported | supported   | partial     | unsupported | partial     | supported   |
+| AGENTS            | supported | partial     | supported   | supported   | partial     | unsupported | partial     | partial     |
+| HOOKS.PreToolUse  | supported | partial     | unsupported | partial     | unsupported | unsupported | unsupported | unsupported |
+| HOOKS.PostToolUse | supported | partial     | unsupported | partial     | unsupported | unsupported | unsupported | unsupported |
+| HOOKS.Stop        | supported | partial     | unsupported | partial     | unsupported | unsupported | unsupported | unsupported |
+| MCP               | supported | supported   | partial     | supported   | partial     | unsupported | partial     | partial     |
+| INSTALL_PATH      | supported | supported   | supported   | supported   | partial     | unsupported | partial     | partial     |
+| DANGEROUS_MODE    | supported | unsupported | unsupported | unsupported | unsupported | unsupported | unsupported | unsupported |
+| WORKTREE          | supported | partial     | partial     | partial     | partial     | unsupported | partial     | partial     |
+| MODS              | supported | unsupported | unsupported | unsupported | unsupported | unsupported | unsupported | unsupported |
 
 ---
 
@@ -67,16 +67,17 @@ from installer-managed artifacts and gated work in `ycc/settings/packages.json`.
 `listed: false` packages are not published catalog entries; generated trees and successful spikes
 alone do not make them shipping user install paths. This does not revise the capability verdicts above.
 
-| target        | native, listed today                                                                                                                          | install.sh today                                                                                                                                                                                                                                            | unlisted or gated native packages                                                                             |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Claude        | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-hooks@ycc` (2.1.300+), `ycc-all@ycc`; `status-bar@ycc-mods`                                                    | Installs the native plugins via `claude plugin` (`mcp`/`hooks` at project scope by default, user scope with `--global`); rules, settings, statusline                                                                                                        | `ycc-agents@ycc` in v7.0.0                                                                                    |
-| Cursor        | `ycc`, `ycc-rules`, `ycc-mcp`, `ycc-hooks` via the root `.cursor-plugin/marketplace.json` (interactive `/plugins`); hooks `sessionStart` only | Registers the marketplace and prints the `/plugins` step; `cli-config.json` settings (`--global`)                                                                                                                                                           | None                                                                                                          |
-| Codex         | `ycc@ycc`, `ycc-mcp@ycc` via the root `.agents/plugins/marketplace.json`                                                                      | Installs both via `codex plugin add` (codex 0.160+ required); agent TOMLs, `AGENTS.md`, `config.toml`                                                                                                                                                       | `ycc-hooks` excluded (YAN-1149)                                                                               |
-| opencode      | `@yandy-r/ycc-opencode` npm V2 plugin (opencode `>=2.0.30`), not catalog-listed                                                               | Writes its `plugins` entry (local: `file://` checkout; repo: pinned release), retires the old file copy; `opencode.json` settings, `AGENTS.md` link                                                                                                         | None                                                                                                          |
-| `agents`      | None                                                                                                                                          | Skills and `ycc-shared` copied into `~/.agents/`                                                                                                                                                                                                            | None planned                                                                                                  |
-| `omp`         | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-rules@ycc` via the root `.omp-plugin/marketplace.json` (omp `>=18.12.2`)                                       | `install.sh --target omp`: local export (`--mode local`) or the repository catalog (`--mode repo`) installed through `omp plugin` (user or project scope); opt-in `--rules` (`AGENTS.md`) and `--settings` (`config.yml`), user scope only                  | `ycc-hooks` and `ycc-all` excluded (herdr: `herdr integration install omp`)                                   |
-| `pi`          | None                                                                                                                                          | None                                                                                                                                                                                                                                                        | `ycc`, `ycc-mcp`, `ycc-rules` deferred to v6.3.0 (ADR 0003, pi `>=1.2.0`); `ycc-hooks` and `ycc-all` excluded |
-| `antigravity` | None (Antigravity publishes no marketplace format)                                                                                            | `install.sh --target antigravity`: the generated `ycc`, `ycc-mcp` and `ycc-rules` plugins via `agy plugin install <path>`, or owned copies in `~/.gemini/config/plugins/` without `agy`; opt-in `--rules` (`~/.gemini/config/AGENTS.md`); global scope only | `ycc-hooks` and `ycc-all` not modeled (Claude-specific hooks; no plugin dependencies)                         |
+| target        | native, listed today                                                                                                                          | install.sh today                                                                                                                                                                                                                                                                                                            | unlisted or gated native packages                                                                                                   |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Claude        | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-hooks@ycc` (2.1.300+), `ycc-all@ycc`; `status-bar@ycc-mods`                                                    | Installs the native plugins via `claude plugin` (`mcp`/`hooks` at project scope by default, user scope with `--global`); rules, settings, statusline                                                                                                                                                                        | `ycc-agents@ycc` in v7.0.0                                                                                                          |
+| Cursor        | `ycc`, `ycc-rules`, `ycc-mcp`, `ycc-hooks` via the root `.cursor-plugin/marketplace.json` (interactive `/plugins`); hooks `sessionStart` only | Registers the marketplace and prints the `/plugins` step; `cli-config.json` settings (`--global`)                                                                                                                                                                                                                           | None                                                                                                                                |
+| Codex         | `ycc@ycc`, `ycc-mcp@ycc` via the root `.agents/plugins/marketplace.json`                                                                      | Installs both via `codex plugin add` (codex 0.160+ required); agent TOMLs, `AGENTS.md`, `config.toml`                                                                                                                                                                                                                       | `ycc-hooks` excluded (YAN-1149)                                                                                                     |
+| opencode      | `@yandy-r/ycc-opencode` npm V2 plugin (opencode `>=2.0.30`), not catalog-listed                                                               | Writes its `plugins` entry (local: `file://` checkout; repo: pinned release), retires the old file copy; `opencode.json` settings, `AGENTS.md` link                                                                                                                                                                         | None                                                                                                                                |
+| `agents`      | None                                                                                                                                          | Skills and `ycc-shared` copied into `~/.agents/`                                                                                                                                                                                                                                                                            | None planned                                                                                                                        |
+| `omp`         | `ycc@ycc`, `ycc-mcp@ycc`, `ycc-rules@ycc` via the root `.omp-plugin/marketplace.json` (omp `>=18.12.2`)                                       | `install.sh --target omp`: local export (`--mode local`) or the repository catalog (`--mode repo`) installed through `omp plugin` (user or project scope); opt-in `--rules` (`AGENTS.md`) and `--settings` (`config.yml`), user scope only                                                                                  | `ycc-hooks` and `ycc-all` excluded (herdr: `herdr integration install omp`)                                                         |
+| `pi`          | None                                                                                                                                          | None                                                                                                                                                                                                                                                                                                                        | `ycc`, `ycc-mcp`, `ycc-rules` deferred to v6.3.0 (ADR 0003, pi `>=1.2.0`); `ycc-hooks` and `ycc-all` excluded                       |
+| `antigravity` | None (Antigravity publishes no marketplace format)                                                                                            | `install.sh --target antigravity`: the generated `ycc`, `ycc-mcp` and `ycc-rules` plugins via `agy plugin install <path>`, or owned copies in `~/.gemini/config/plugins/` without `agy`; opt-in `--rules` (`~/.gemini/config/AGENTS.md`); global scope only                                                                 | `ycc-hooks` and `ycc-all` not modeled (Claude-specific hooks; no plugin dependencies)                                               |
+| `muse`        | None (Muse reads only `.agents/plugins/marketplace.json`, the Codex catalog here)                                                             | `install.sh --target muse`: owned copies of the generated `ycc` (claude-compatible manifest), `ycc-mcp` and `ycc-rules` (native manifest) in `~/.local/share/ycc/muse/`, registered with `muse plugins install` (user scope, or project scope with `--project`) and approved; opt-in `--rules` (`~/.config/muse/AGENTS.md`) | `ycc-hooks` excluded (no `WorktreeCreate` event); `ycc-rules` ships rules as skills (no plugin rules family); `ycc-all` not modeled |
 
 Native dependency resolution is a Claude platform feature, not a cross-runtime guarantee.
 The Claude `ycc-all` meta plugin's automatic dependency install was verified on Claude Code 2.1.301 and in the v6.0.0 maintainer clean-host verification; Cursor and Codex have no
@@ -119,6 +120,12 @@ The recommendation in `docs/research/ystack/recommendation.md` is qualified by
   run against a live `agy`. The App, IDE and CLI share `~/.gemini/config/`; ycc generates
   `packages/antigravity/{ycc,ycc-mcp,ycc-rules}` (root `plugin.json`) and installs them globally.
   Hooks, settings and workflows are not shipped. The rows stay `experimental` until a live gate.
+- `muse-runtime-contract.md`: verified against the `muse` 1.4.25 CLI (`muse plugins validate`,
+  `install`, `approve`, `remove`), not yet in an authenticated model session. ycc generates
+  `packages/muse/ycc` (claude-compatible manifest, the only family that imports agents) and
+  `packages/muse/{ycc-mcp,ycc-rules}` (native `.muse-plugin` manifest; the rules ship as
+  relevance-loaded skills) and installs them from ycc-owned copies. Hooks are not shipped. Verified live
+  (skill helpers, subagents, HTTP and stdio MCP, `/ycc:` in the TUI) on a real profile.
 
 ---
 
@@ -664,6 +671,68 @@ folder). `YCC_WORKTREE_ROOT` still overrides it. Source: `worktree-strategy.md` 
 
 **MODS:antigravity**
 Unsupported by design. The Claude Code mod API has no Antigravity equivalent.
+
+**SKILLS:muse**
+Partial. The generated `ycc` plugin
+(`packages/muse/ycc`, `.claude-plugin/plugin.json`) ships `skills/<name>/SKILL.md` with `name`,
+`description`, `disable-model-invocation` (listed by Muse as `user-invocable-only`) and
+`argument-hint`; Muse ids are `plugin:ycc:<name>` and the TUI runs each as `/ycc:<name>`, so
+`/ycc:<name>` references are kept. A live session ran a skill and its `ycc-shared` helper. Partial
+because Muse caches each install under a content digest, so `${CLAUDE_PLUGIN_ROOT}` paths are
+rewritten to the ycc-owned copy `~/.local/share/ycc/muse/ycc/` (`_shared` ships as `ycc-shared/`).
+`allowed-tools` grants nothing on Muse and is dropped. Source:
+`docs/internal/spikes/muse-runtime-contract.md` decisions 2–5.
+
+**COMMANDS:muse**
+Supported. Muse lists every plugin skill as the slash command `/ycc:<name>` (the Claude spelling,
+verified in the interactive TUI), so `/ycc:<skill>` references are kept and no separate `commands/`
+wrappers ship: they would list each command twice. Source: spike decision 4.
+
+**AGENTS:muse**
+Partial. Agents ship as `agents/<name>.md` through the claude-compatible manifest (the native one
+rejects `agents`) with `name`, `description` and `tools`; Muse names them `ycc/<name>` (skill text names them that way) and holds
+them for review until `muse plugins approve ycc`, which the installer runs. `tools` use Muse's
+native names (`read_file`, `search`, `write_file`, `edit_file`, `bash`, `web_fetch` and `web_search`); Claude names validate but are refused at spawn time
+(verified live). `Glob` and `Grep` map to `search`, `Bash(...)` to `bash`, `mcp__*` tools are
+dropped, and `color` is never emitted (an unknown color silently disables an agent). `ycc/settings/models.json` `targets.muse.agentModels` maps every
+model to `inherit`. Source: spike decision 6.
+
+**HOOKS.PreToolUse:muse**
+Unsupported. Muse runs plugin hooks (`PreToolUse`, `PostToolUse`, `Stop`, `SessionStart` and others),
+but ycc's hooks are Claude-specific (`WorktreeCreate` has no Muse event; herdr ships its own Muse
+hooks plugin), so no hooks ship. Source: spike decision 9.
+
+**HOOKS.PostToolUse:muse**
+Same constraint as HOOKS.PreToolUse:muse.
+
+**HOOKS.Stop:muse**
+Same constraint as HOOKS.PreToolUse:muse.
+
+**MCP:muse**
+Partial. The `ycc-mcp` plugin ships native `capabilities.mcpServers`: remote servers as
+`transport: http`, stdio servers through generated `mcp/<id>.sh` launchers (Muse resolves any argv
+element containing `/` as a plugin file), with kebab-case ids. Muse holds plugin servers for review;
+the installer approves them. Source: spike decision 7.
+
+**INSTALL_PATH:muse**
+Partial. `install.sh --target muse` copies `ycc`, `ycc-mcp` and `ycc-rules` to `~/.local/share/ycc/muse/`, then
+runs `muse plugins install <copy> --scope user` (`--scope project` with `--project`) and
+`muse plugins approve <name>`; the owned copies stay per user either way;
+no `--mode repo` (Muse reads only `.agents/plugins/marketplace.json`, which is the Codex catalog
+here). Opt-in `--rules` links Muse's user rules file `~/.config/muse/AGENTS.md`. Source: spike
+decisions 1, 8 and 10.
+
+**DANGEROUS_MODE:muse**
+Unsupported. ycc emits no approval-bypass configuration; Muse keeps its default approval mode and
+sandbox (`--yolo` stays a user choice).
+
+**WORKTREE:muse**
+Partial. No `WorktreeCreate` event; skills run `git worktree add` through the shared helpers, whose
+Muse build pins `<repo-root>/.muse/worktrees/`. `YCC_WORKTREE_ROOT` still overrides it. Source:
+`worktree-strategy.md` §1.
+
+**MODS:muse**
+Unsupported by design. The Claude Code mod API has no Muse equivalent.
 
 ---
 

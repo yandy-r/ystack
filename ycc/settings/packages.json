@@ -109,6 +109,19 @@
           "evidence": ["docs/internal/spikes/antigravity-runtime-contract.md"],
           "gates": ["Live install, sync and remove against agy and the Antigravity App on a clean profile"],
           "notes": "Generated Antigravity plugin under packages/antigravity/ycc (plugin.json at the root): skills/<name>/SKILL.md, the sibling ycc-shared/ helpers and agents/<name>.md with Antigravity tool names and inherit/flash/pro models. ${CLAUDE_PLUGIN_ROOT} rewrites to ~/.gemini/config/plugins/ycc, so installs are global only. install.sh --target antigravity runs 'agy plugin install <path>' or, without agy, places an owned copy in ~/.gemini/config/plugins/. No catalog: Antigravity publishes no marketplace format."
+        },
+        "muse": {
+          "status": "included",
+          "listed": false,
+          "mechanism": "native",
+          "components": ["skills", "agents", "shared"],
+          "requires": [],
+          "target_release": "v6.6.0",
+          "experimental": false,
+          "opt_in": false,
+          "evidence": ["docs/internal/spikes/muse-runtime-contract.md"],
+          "gates": [],
+          "notes": "Generated Muse Code plugin under packages/muse/ycc with the claude-compatible manifest (.claude-plugin/plugin.json; Muse's native manifest rejects agents): skills/<name>/SKILL.md, the sibling ycc-shared/ helpers and agents/<name>.md with Muse's native tool names (Claude names validate but are refused at spawn time; no color). Muse lists every plugin skill as the slash command /ycc:<name>, so /ycc:<skill> references stay and ycc:<agent> references become the Muse agent id ycc/<agent>; no commands/ wrappers ship (they would duplicate each skill). ${CLAUDE_PLUGIN_ROOT} rewrites to the per-user owned copy ~/.local/share/ycc/muse/ycc. install.sh --target muse copies the package there, runs 'muse plugins install <copy> --scope user' (--scope project with --project) and approves the agents. No catalog: Muse reads only .agents/plugins/marketplace.json, which belongs to Codex."
         }
       }
     },
@@ -208,6 +221,19 @@
           "evidence": ["docs/internal/spikes/antigravity-runtime-contract.md"],
           "gates": ["Live install, sync and remove against agy and the Antigravity App on a clean profile"],
           "notes": "Generated Antigravity plugin under packages/antigravity/ycc-mcp: mcp_config.json with serverUrl for Streamable HTTP servers and stdio servers as-is; identity ${VAR} env pass-throughs dropped. Servers surface as ycc-mcp_<server>."
+        },
+        "muse": {
+          "status": "included",
+          "listed": false,
+          "mechanism": "native",
+          "components": ["mcp"],
+          "requires": [],
+          "target_release": "v6.6.0",
+          "experimental": false,
+          "opt_in": false,
+          "evidence": ["docs/internal/spikes/muse-runtime-contract.md"],
+          "gates": [],
+          "notes": "Generated Muse Code plugin under packages/muse/ycc-mcp with the native manifest (.muse-plugin/plugin.json): capabilities.mcpServers with transport http for remote servers and stdio servers through generated mcp/<id>.sh launchers (Muse resolves any argv element containing '/' as a plugin file). Ids are kebab-case (openaiDeveloperDocs -> openai-developer-docs). install.sh approves the servers after install."
         }
       }
     },
@@ -298,6 +324,19 @@
           "evidence": ["docs/internal/adr/0003-pi-runtime-contract.md", "docs/internal/spikes/pi-runtime-contract.md"],
           "gates": [],
           "notes": "Excluded: Pi never runs shell hooks or hooks.json, and WorktreeCreate has no Pi event. herdr reporting is herdr's own integration (herdr integration install pi), and ycc ships no Pi hook extension (ADR 0003)."
+        },
+        "muse": {
+          "status": "excluded",
+          "listed": false,
+          "mechanism": "native",
+          "components": ["hooks"],
+          "requires": [],
+          "target_release": "v6.6.0",
+          "experimental": false,
+          "opt_in": false,
+          "evidence": ["docs/internal/spikes/muse-runtime-contract.md"],
+          "gates": [],
+          "notes": "Excluded: Muse has no WorktreeCreate event (its hook events are PreToolUse, PostToolUse, PostToolUseFailure, SessionStart, SessionEnd, UserPromptSubmit, Stop, Notification, PermissionRequest, Interrupt, SessionFork, ToolUseStart), and herdr ships its own Muse hooks plugin."
         }
       }
     },
@@ -442,6 +481,19 @@
           "evidence": ["docs/internal/spikes/antigravity-runtime-contract.md"],
           "gates": ["Live install, sync and remove against agy and the Antigravity App on a clean profile"],
           "notes": "Generated Antigravity plugin under packages/antigravity/ycc-rules: the flat ycc-<family>-<stem>.md rules with trigger frontmatter (glob + comma-separated globs, always_on, or model_decision for common rules). OMP-only TTSR trigger rules are omitted."
+        },
+        "muse": {
+          "status": "included",
+          "listed": false,
+          "mechanism": "native",
+          "components": ["rules"],
+          "requires": [],
+          "target_release": "v6.6.0",
+          "experimental": false,
+          "opt_in": false,
+          "evidence": ["docs/internal/spikes/muse-runtime-contract.md"],
+          "gates": [],
+          "notes": "Generated Muse Code plugin under packages/muse/ycc-rules with the native manifest (.muse-plugin/plugin.json). Muse plugins have no rules family, so each flat ycc rule ships as a skill (rules/<rule>/SKILL.md) whose description is the rule's 'When ...' trigger plus its file globs; Muse loads it on relevance, like a model_decision or glob rule elsewhere. OMP-only edit-trigger rules are omitted; install.sh --rules also links the shared ycc AGENTS.md to $XDG_CONFIG_HOME/muse/AGENTS.md."
         }
       }
     },
@@ -593,6 +645,19 @@
           "evidence": ["docs/internal/spikes/antigravity-runtime-contract.md"],
           "gates": ["Live install, sync and remove against agy and the Antigravity App on a clean profile"],
           "notes": "install.sh --target antigravity --rules links the shared ycc AGENTS.md to ~/.gemini/config/AGENTS.md (global rules for the App, IDE and agy CLI). No managed settings: settings.json carries no ycc-managed keys."
+        },
+        "muse": {
+          "status": "included",
+          "listed": false,
+          "mechanism": "file-copy",
+          "components": ["instructions"],
+          "requires": [],
+          "target_release": "v6.6.0",
+          "experimental": false,
+          "opt_in": false,
+          "evidence": ["docs/internal/spikes/muse-runtime-contract.md"],
+          "gates": ["Live skill, agent and MCP use in an authenticated Muse session (muse login) on a clean profile"],
+          "notes": "install.sh --target muse --rules links the shared ycc AGENTS.md to Muse's user rules file $XDG_CONFIG_HOME/muse/AGENTS.md (YCC_MUSE_CONFIG_DIR overrides the folder). No managed settings: MCP servers ship in the ycc-mcp plugin."
         }
       }
     }

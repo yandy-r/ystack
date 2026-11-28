@@ -19,8 +19,8 @@ other runtime bundles are generated from it. Keep the plugin name `ycc` stable.
 
 - Add workflow logic under `ycc/`, not generated bundles. Do not hand-edit generated
   `.codex-plugin/`, `.opencode-plugin/`, `.omp-plugin/`, `.agents-plugin/`, `packages/claude/`,
-  `packages/cursor/`, `packages/omp/`, `packages/opencode/`, `packages/pi/`, or
-  `packages/antigravity/` files; change their source/generator, then regenerate.
+  `packages/cursor/`, `packages/omp/`, `packages/opencode/`, `packages/pi/`,
+  `packages/antigravity/`, or `packages/muse/` files; change their source/generator, then regenerate.
 - Do not add top-level workflow plugins. Extend `ycc` or use the sibling-repo decision
   gate in `CONTRIBUTING.md`. Claude-only mods are the documented exception in `CLAUDE.md`.
 - Skills use `kebab-case` directories under `ycc/skills/`; agents use `kebab-case.md`
@@ -35,17 +35,18 @@ other runtime bundles are generated from it. Keep the plugin name `ycc` stable.
 The capability contract is `ycc/skills/_shared/references/target-capability-matrix.md`;
 this table records install ownership, not a claim of runtime feature parity:
 
-| Target                     | Generated / managed surface                                                            | User install destination                                                                                 |
-| -------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Cursor settings            | `packages/cursor/installer-fallback/config/cli-config.json`                            | `~/.cursor/cli-config.json` via `install.sh` (`--global`)                                                |
-| Codex                      | `.codex-plugin/ycc/`, `ycc-mcp/`; listed in root `.agents/plugins/marketplace.json`    | `codex plugin add ycc@ycc ycc-mcp@ycc` (via `install.sh`); custom agents in `~/.codex/agents/`           |
-| opencode npm plugin        | `packages/opencode/ycc-opencode/` (`@yandy-r/ycc-opencode`, from `.opencode-plugin/`)  | `plugins` entry in `~/.config/opencode/opencode.json` via `install.sh install --target opencode`         |
-| opencode settings          | `.opencode-plugin/opencode.json`, `AGENTS.md`                                          | `opencode.json` and `~/.config/opencode/AGENTS.md` via `install.sh` (`--settings`, `--rules`)            |
-| Cross-tool `agents`        | `.agents-plugin/skills/`, `ycc-shared/`                                                | `~/.agents/skills/`, `~/.agents/ycc-shared/`                                                             |
-| Claude native add-ons      | `packages/claude/` MCP, hooks, dependency bundle                                       | Listed in root `.claude-plugin/marketplace.json`; `install.sh` installs them via `claude plugin`         |
-| Cursor native packages     | `packages/cursor/{ycc,ycc-rules,ycc-mcp,ycc-hooks}/`                                   | Listed in root `.cursor-plugin/marketplace.json`; installed in Cursor's `/plugins`                       |
-| OMP native packages        | `packages/omp/{ycc,ycc-mcp,ycc-rules}/`; listed in root `.omp-plugin/marketplace.json` | `omp plugin install <pkg>@ycc`, or `install.sh install --target omp` (user or `--project` scope)         |
-| Antigravity (experimental) | `packages/antigravity/{ycc,ycc-mcp,ycc-rules}/`                                        | `~/.gemini/config/plugins/` via `install.sh install --target antigravity` (`agy plugin install` or copy) |
+| Target                     | Generated / managed surface                                                            | User install destination                                                                                   |
+| -------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Cursor settings            | `packages/cursor/installer-fallback/config/cli-config.json`                            | `~/.cursor/cli-config.json` via `install.sh` (`--global`)                                                  |
+| Codex                      | `.codex-plugin/ycc/`, `ycc-mcp/`; listed in root `.agents/plugins/marketplace.json`    | `codex plugin add ycc@ycc ycc-mcp@ycc` (via `install.sh`); custom agents in `~/.codex/agents/`             |
+| opencode npm plugin        | `packages/opencode/ycc-opencode/` (`@yandy-r/ycc-opencode`, from `.opencode-plugin/`)  | `plugins` entry in `~/.config/opencode/opencode.json` via `install.sh install --target opencode`           |
+| opencode settings          | `.opencode-plugin/opencode.json`, `AGENTS.md`                                          | `opencode.json` and `~/.config/opencode/AGENTS.md` via `install.sh` (`--settings`, `--rules`)              |
+| Cross-tool `agents`        | `.agents-plugin/skills/`, `ycc-shared/`                                                | `~/.agents/skills/`, `~/.agents/ycc-shared/`                                                               |
+| Claude native add-ons      | `packages/claude/` MCP, hooks, dependency bundle                                       | Listed in root `.claude-plugin/marketplace.json`; `install.sh` installs them via `claude plugin`           |
+| Cursor native packages     | `packages/cursor/{ycc,ycc-rules,ycc-mcp,ycc-hooks}/`                                   | Listed in root `.cursor-plugin/marketplace.json`; installed in Cursor's `/plugins`                         |
+| OMP native packages        | `packages/omp/{ycc,ycc-mcp,ycc-rules}/`; listed in root `.omp-plugin/marketplace.json` | `omp plugin install <pkg>@ycc`, or `install.sh install --target omp` (user or `--project` scope)           |
+| Antigravity (experimental) | `packages/antigravity/{ycc,ycc-mcp,ycc-rules}/`                                        | `~/.gemini/config/plugins/` via `install.sh install --target antigravity` (`agy plugin install` or copy)   |
+| Muse Code                  | `packages/muse/{ycc,ycc-mcp,ycc-rules}/`                                               | Owned copies in `~/.local/share/ycc/muse/` via `install.sh install --target muse` (`muse plugins install`) |
 
 - The `agents` target is skills-only; never write `~/.agents/plugins/` (owned by Codex).
 - Project rules here are not user-global plugin rules. opencode's generated `AGENTS.md`
@@ -77,6 +78,8 @@ this table records install ownership, not a claim of runtime feature parity:
 | `./scripts/validate.sh --only omp`                            | OMP drift, policy, catalog/lockstep/closure, golden tests           |
 | `./scripts/sync.sh --only antigravity`                        | Regenerate Antigravity plugins (`packages/antigravity`)             |
 | `./scripts/validate.sh --only antigravity`                    | Antigravity drift, generator and installer tests                    |
+| `./scripts/sync.sh --only muse`                               | Regenerate Muse Code plugins (`packages/muse`)                      |
+| `./scripts/validate.sh --only muse`                           | Muse drift, generator, live `muse plugins validate`, installer      |
 | `./scripts/validate.sh --only practices`                      | Authoring ratchet, including `.claude/rules` `paths` frontmatter    |
 | `./scripts/validate.sh --only types`                          | `mypy --strict` over pyproject.toml `[tool.mypy]` files             |
 | `python3 scripts/test_validate_practices.py`                  | Authoring-validator regression tests                                |
@@ -113,6 +116,7 @@ this table records install ownership, not a claim of runtime feature parity:
   | Cursor      | `<repo-root>/.cursor/worktrees/`      |
   | OMP         | `<repo-root>/.omp/worktrees/`         |
   | Antigravity | `<repo-root>/.antigravity/worktrees/` |
+  | Muse        | `<repo-root>/.muse/worktrees/`        |
 
 - Each worktree is named `<repo>-<branch-or-feature>/`; the out-of-repo
   `~/.claude-worktrees/` rule is retired (legacy worktrees are left in place).

@@ -17,6 +17,7 @@ import shutil
 import stat
 import sys
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -43,13 +44,15 @@ class SkillLayout:
 
     The agents target and the Antigravity ycc plugin share one layout shape:
     ``<root>/skills/<name>/`` plus the sibling ``<root>/ycc-shared/``. Only the
-    install root, the worktree default and the emitted skill keys differ.
+    install root, the worktree default, the emitted skill keys and (for a runtime
+    that keeps a ycc namespace) the namespace rewrite differ.
     """
 
     install_root: str = HOME_INSTALL_AGENTS_ROOT
     worktree_default_line: str = WORKTREE_DEFAULT_AGENTS_LINE
     optional_keys: tuple[str, ...] = AGENTS_SKILL_KEYS
     emit_invocation_flag: bool = False
+    namespace_rewrite: Callable[[str], str] | None = None
 
 
 AGENTS_LAYOUT = SkillLayout()
@@ -176,6 +179,7 @@ def write_tree(dest_root: Path, dry_run: bool, layout: SkillLayout = AGENTS_LAYO
                     emit_invocation_flag=layout.emit_invocation_flag,
                     install_root=layout.install_root,
                     worktree_default_line=layout.worktree_default_line,
+                    namespace_rewrite=layout.namespace_rewrite,
                 )
             else:
                 transformed = apply_agents_text_transforms(
@@ -184,6 +188,7 @@ def write_tree(dest_root: Path, dry_run: bool, layout: SkillLayout = AGENTS_LAYO
                     output_suffix=out.suffix,
                     install_root=layout.install_root,
                     worktree_default_line=layout.worktree_default_line,
+                    namespace_rewrite=layout.namespace_rewrite,
                 )
             if rel.parts and rel.parts[0] == "bundle-release":
                 for old, new in BUNDLE_RELEASE_RESTORE:

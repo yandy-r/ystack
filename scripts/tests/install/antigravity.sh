@@ -11,25 +11,8 @@ AG_PACKAGES=(ycc ycc-mcp ycc-rules)
 
 # Run "$@" with no agy reachable and the override cleared. The no-agy cases
 # assert the owned-copy route and the 'all' gate, which a host agy on PATH would
-# otherwise change. A PATH directory holding agy is swapped for a sandbox shim
-# that links every other entry, so its other tools (bash, python3, ...) stay
-# reachable.
-without_agy() {
-    local dir entry shim kept=() path_dirs
-    IFS=: read -r -a path_dirs <<< "${PATH}"
-    for dir in "${path_dirs[@]}"; do
-        if [[ -x "${dir}/agy" ]]; then
-            shim="$(mktemp -d "${SANDBOX_ROOT}/no-agy-bin.XXXXXX")"
-            for entry in "${dir}"/*; do
-                [[ "${entry##*/}" == agy ]] || ln -s "${entry}" "${shim}/"
-            done
-            kept+=("${shim}")
-        else
-            kept+=("${dir}")
-        fi
-    done
-    PATH="$(IFS=:; echo "${kept[*]}")" YCC_ANTIGRAVITY_AGY="" "$@"
-}
+# otherwise change.
+without_agy() { YCC_ANTIGRAVITY_AGY="" without_command agy "$@"; }
 
 echo "== install.sh sync: antigravity (owned copies, no agy) =="
 

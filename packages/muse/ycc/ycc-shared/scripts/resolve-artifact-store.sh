@@ -1,0 +1,636 @@
+#!/usr/bin/env bash
+# Resolve the artifact store without writing files or contacting Linear.
+# Usage: source resolve-artifact-store.sh; get_feature_artifact_dir feature-name
+# See ../references/artifact-store.md for the exported API and sync protocol.
+# Like resolve-plans-dir.sh, leave errexit under the sourcing caller's control.
+set -uo pipefail
+
+# shellcheck source=resolve-plans-dir.sh
+source "$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd -P)/resolve-plans-dir.sh" 2>/dev/null || {
+  if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then exit 1; else return 1; fi
+}
+
+# Unlike _parse_config, a defined but empty value is still a hit. In particular,
+# an empty store must fail validation rather than silently inherit a default.
+_artifact_config_value() {
+  local key="$1" file="$2"
+  [[ -f "$file" ]] || return 1
+  grep -qE "^${key}[[:space:]]*[:=]" "$file" || return 1
+  _parse_config "$key" "$file" || printf '%s' ''
+}
+
+# Each key inherits independently, but never from outside this repository.
+_artifact_find_config_value() {
+  local key="$1" dir="$2" boundary="$3" value
+  # A boundary that is not an ancestor cannot bound a walk: inspect only start.
+  if [[ "$dir" != "$boundary" && "$dir" != "${boundary%/}/"* ]]; then boundary=$dir; fi
+  while :; do
+    if value=$(_artifact_config_value "$key" "${dir}/.plans-config"); then
+      printf '%s' "$value"
+      return 0
+    fi
+    [[ "$dir" != "$boundary" && "$dir" != / ]] || break
+    dir=$(dirname "$dir")
+  done
+  return 1
+}
+
+_artifact_branch_hint() {
+  local start_dir="$1" team="$2" branch prefix regex
+  branch=$(git -C "$start_dir" branch --show-current 2>/dev/null) || return 0
+  [[ -n "$branch" ]] || return 0
+  branch=$(printf '%s' "$branch" | tr '[:lower:]' '[:upper:]')
+  prefix='[A-Z][A-Z0-9]{1,9}'
+  if [[ -n "$team" ]]; then
+    team=$(printf '%s' "$team" | tr '[:lower:]' '[:upper:]')
+    [[ "$team" =~ ^[A-Z0-9]+$ ]] || return 0
+    prefix=$team
+  fi
+  regex="(^|[/_-])(${prefix})-([0-9]+)([/_-]|$)"
+  if [[ "$branch" =~ $regex ]]; then
+    printf '%s-%s' "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+  fi
+  return 0
+}
+
+resolve_artifact_store() {
+  unset ARTIFACT_STORE ARTIFACT_STORE_SOURCE ARTIFACT_ROOT ARTIFACT_DIR \
+    ARTIFACT_LINEAR_WORKSPACE ARTIFACT_LINEAR_TEAM ARTIFACT_LINEAR_PROJECT \
+    ARTIFACT_LINEAR_LABEL ARTIFACT_LINEAR_HINT ARTIFACT_REPO_ROOT
+  local start_dir='' store='' source_name='' flag_set=0 global_config git_root boundary
+  local phys_start phys_plans_root
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --store=*) store=${1#--store=}; source_name=flag; flag_set=1 ;;
+      --*) _error "Unknown artifact-store option: $1"; return 1 ;;
+      *)
+        if [[ -n "$start_dir" || -z "$1" ]]; then
+          _error 'Expected one start directory'; return 1
+        fi
+        start_dir=$1
+        ;;
+    esac
+    shift
+  done
+  start_dir=${start_dir:-$PWD}
+  start_dir=$(CDPATH='' cd -- "$start_dir" >/dev/null 2>&1 && pwd) || {
+    _error 'Artifact-store start directory does not exist'; return 1
+  }
+  resolve_plans_dir "$start_dir" || return 1
+  phys_start=$(CDPATH='' cd -- "$start_dir" >/dev/null && pwd -P) || return 1
+  phys_plans_root=$(CDPATH='' cd -- "$PLANS_ROOT" >/dev/null 2>&1 && pwd -P) || phys_plans_root=$PLANS_ROOT
+  git_root=$(git -C "$phys_start" rev-parse --show-toplevel 2>/dev/null) || git_root=''
+  boundary=${git_root:-$phys_plans_root}
+  if [[ "$flag_set" == 0 ]]; then
+    if store=$(_artifact_find_config_value store "$phys_start" "$boundary"); then
+      source_name=config
+    else
+      global_config="${XDG_CONFIG_HOME:-${HOME}/.config}/ycc/config"
+      if store=$(_artifact_config_value store "$global_config"); then
+        source_name=global
+      else
+        store=linear
+        source_name=default
+      fi
+    fi
+  fi
+  case "$store" in
+    linear|local) ;;
+    *)
+      if [[ "${_ARTIFACT_AUTO_RESOLVE:-}" == 1 ]]; then
+        _warn "Invalid artifact store '${store}' (${source_name}); expected linear or local"
+      else
+        _error "Invalid artifact store '${store}' (${source_name}); expected linear or local"
+      fi
+      return 1
+      ;;
+  esac
+
+  export ARTIFACT_STORE="$store" ARTIFACT_STORE_SOURCE="$source_name"
+  # Current checkout for repo-level kinds (prd, spec, prp-plan, prp-research,
+  # prp-report, blueprint) in local mode; not part of the --shell output.
+  export ARTIFACT_REPO_ROOT="${git_root:-$phys_start}"
+  export ARTIFACT_ROOT="$PLANS_ROOT"
+  if [[ "$store" == linear ]]; then
+    if [[ -n "$git_root" && "$phys_plans_root" != "$git_root" && "$phys_plans_root" != "$git_root/"* ]]; then
+      ARTIFACT_ROOT=$git_root
+    fi
+    export ARTIFACT_DIR="${ARTIFACT_ROOT}/.ycc/artifacts"
+  else
+    export ARTIFACT_DIR="$PLANS_DIR"
+  fi
+  ARTIFACT_LINEAR_WORKSPACE=$(_artifact_find_config_value linear_workspace "$phys_start" "$boundary") || ARTIFACT_LINEAR_WORKSPACE=''
+  ARTIFACT_LINEAR_TEAM=$(_artifact_find_config_value linear_team "$phys_start" "$boundary") || ARTIFACT_LINEAR_TEAM=''
+  ARTIFACT_LINEAR_PROJECT=$(_artifact_find_config_value linear_project "$phys_start" "$boundary") || ARTIFACT_LINEAR_PROJECT=''
+  ARTIFACT_LINEAR_LABEL=$(_artifact_find_config_value linear_label "$phys_start" "$boundary") || ARTIFACT_LINEAR_LABEL=''
+  export ARTIFACT_LINEAR_WORKSPACE ARTIFACT_LINEAR_TEAM ARTIFACT_LINEAR_PROJECT ARTIFACT_LINEAR_LABEL
+  export ARTIFACT_LINEAR_HINT
+  ARTIFACT_LINEAR_HINT=$(_artifact_branch_hint "$start_dir" "$ARTIFACT_LINEAR_TEAM")
+  _debug "Artifact store: $ARTIFACT_STORE ($ARTIFACT_STORE_SOURCE), directory: $ARTIFACT_DIR"
+  return 0
+}
+
+get_feature_artifact_dir() {
+  local slug="${1:-}"
+  if [[ ! "$slug" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    _error 'Artifact feature slug must start with a letter or digit and contain only letters, digits, ., _, or -'
+    return 1
+  fi
+  [[ -n "${ARTIFACT_DIR:-}" ]] || resolve_artifact_store || return 1
+  printf '%s/%s\n' "$ARTIFACT_DIR" "$slug"
+}
+
+get_artifact_path() {
+  local kind="${1:-}" slug="${2:-}" base lens name repo
+  [[ -n "${ARTIFACT_STORE:-}" && -n "${ARTIFACT_DIR:-}" ]] || resolve_artifact_store || return 1
+  base=$(get_feature_artifact_dir "$slug") || return 1
+  # Repo-level kinds stay relative to the current checkout in local mode (not
+  # PLANS_ROOT), matching the cwd-relative docs/prps/... paths used before.
+  repo=${ARTIFACT_REPO_ROOT:-$ARTIFACT_ROOT}
+  case "$kind" in
+    prd|spec|prp-plan)
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/%s.md\n' "$base" "$kind"
+      else
+        case "$kind" in
+          prd) printf '%s/docs/prps/prds/%s.prd.md\n' "$repo" "$slug" ;;
+          spec) printf '%s/docs/prps/specs/%s.spec.md\n' "$repo" "$slug" ;;
+          prp-plan) printf '%s/docs/prps/plans/%s.plan.md\n' "$repo" "$slug" ;;
+        esac
+      fi
+      ;;
+    feature-spec|parallel-plan|shared|report)
+      printf '%s/%s.md\n' "$base" "$kind"
+      ;;
+    prp-report)
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/report.md\n' "$base"
+      else
+        printf '%s/docs/prps/reports/%s-report.md\n' "$repo" "$slug"
+      fi
+      ;;
+    code-report)
+      # Local parity: code-report keeps <PLANS_DIR>/<slug>/report.md. Linear
+      # gets its own Document so it never replaces the run report.
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/code-report.md\n' "$base"
+      else
+        printf '%s/report.md\n' "$base"
+      fi
+      ;;
+    review-fixes-*|review-*)
+      # review-fixes-* first: its id never starts with fixes-, so the strip is
+      # unambiguous. Local paths match code-review/review-fix before the store.
+      name=${kind#review-fixes-}
+      [[ "$name" != "$kind" ]] || name=${kind#review-}
+      if [[ ! "$name" =~ ^(pr-[1-9][0-9]*|local-[0-9]{8}-[0-9]{6}|quick-[0-9]{8}-[0-9]{6})$ ]]; then
+        _error 'Review id must be pr-<N>, local-<YYYYMMDD-HHMMSS>, or quick-<YYYYMMDD-HHMMSS>'
+        return 1
+      fi
+      if [[ "$kind" == review-fixes-* ]]; then
+        if [[ "$ARTIFACT_STORE" == linear ]]; then
+          printf '%s/reviews/%s-fixes.md\n' "$base" "$name"
+        else
+          printf '%s/docs/prps/reviews/fixes/%s-fixes.md\n' "$repo" "$name"
+        fi
+      elif [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/reviews/%s-review.md\n' "$base" "$name"
+      else
+        printf '%s/docs/prps/reviews/%s-review.md\n' "$repo" "$name"
+      fi
+      ;;
+    pr-autofix-report-*)
+      # Local-only scratch in both modes: never pushed to Linear.
+      name=${kind#pr-autofix-report-}
+      if [[ ! "$name" =~ ^[1-9][0-9]*-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z$ ]]; then
+        _error 'pr-autofix report id must be <PR>-<YYYY-MM-DD>T<HHMMSS>Z'
+        return 1
+      fi
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/reports/pr-autofix-%s.md\n' "$base" "$name"
+      else
+        printf '%s/docs/prps/reports/pr-autofix-%s.md\n' "$repo" "$name"
+      fi
+      ;;
+    research-dir)
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/research\n' "$base"
+      else
+        printf '%s\n' "$base"
+      fi
+      ;;
+    research-*)
+      lens=${kind#research-}
+      if [[ ! "$lens" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+        _error 'Artifact research lens must contain only lowercase letters, digits, or - and start with a letter or digit'
+        return 1
+      fi
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/research/research-%s.md\n' "$base" "$lens"
+      else
+        printf '%s/research-%s.md\n' "$base" "$lens"
+      fi
+      ;;
+    analysis-*)
+      name=${kind#analysis-}
+      if [[ ! "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+        _error 'Artifact analysis name must contain only lowercase letters, digits, or - and start with a letter or digit'
+        return 1
+      fi
+      printf '%s/analysis-%s.md\n' "$base" "$name"
+      ;;
+    prp-research)
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/.prp-research\n' "$base"
+      else
+        printf '%s/docs/prps/plans/.prp-research/%s\n' "$repo" "$slug"
+      fi
+      ;;
+    deep-research)
+      if [[ "$ARTIFACT_STORE" == local ]]; then
+        _error "local mode keeps the skill's own output dir"
+        return 1
+      fi
+      printf '%s/deep-research\n' "$base"
+      ;;
+    blueprint)
+      if [[ "$ARTIFACT_STORE" == linear ]]; then
+        printf '%s/blueprint.md\n' "$base"
+      else
+        printf '%s/docs/blueprint.md\n' "$repo"
+      fi
+      ;;
+    feature-dir) printf '%s\n' "$base" ;;
+    *)
+      _error "Unknown artifact kind: ${kind:-<empty>}"
+      return 1
+      ;;
+  esac
+}
+
+# Feature directory for the read-only planning checks (check-prerequisites,
+# check-state). Linear mode uses the strict artifact slug. Local mode keeps the
+# legacy ${PLANS_DIR}/<name> resolution so every name accepted before still
+# works, except empty names and names with a .. path segment, which would
+# escape the plans directory.
+get_plans_feature_dir() {
+  local name="${1:-}"
+  [[ -n "${ARTIFACT_STORE:-}" && -n "${ARTIFACT_DIR:-}" ]] || resolve_artifact_store || return 1
+  if [[ "$ARTIFACT_STORE" == linear ]]; then
+    get_artifact_path feature-dir "$name"
+    return
+  fi
+  if [[ -z "$name" || "$name" == /* || "$name" == .. || "$name" == ../* || "$name" == */.. || "$name" == */../* ]]; then
+    _error "Invalid feature name: ${name:-<empty>}"
+    return 1
+  fi
+  printf '%s/%s\n' "$PLANS_DIR" "$name"
+}
+
+# Read-only planning checks: under the default store only, an existing local
+# feature directory keeps local mode (artifact-store.md Implementation skills >
+# Inputs). Uses the legacy local name rules, so names such as team/auth work.
+# Prints the selection line when it switches; returns 1 only on resolver errors.
+select_local_plan_store() {
+  local name="${1:-}" local_dir
+  [[ "${ARTIFACT_STORE_SOURCE:-}" == default ]] || return 0
+  local_dir=$( (resolve_artifact_store --store=local && get_plans_feature_dir "$name") 2>/dev/null) || return 0
+  [[ -d "$local_dir" ]] || return 0
+  resolve_artifact_store --store=local || return 1
+  printf 'Using local plan at %s; pin with store: local in .plans-config\n' "$local_dir"
+}
+
+# Check before either write entry point so a non-repository cannot gain a cache.
+_artifact_require_git_root() {
+  local git_root inside phys_root
+  if [[ -L "${ARTIFACT_ROOT}/.gitignore" || -L "${ARTIFACT_ROOT}/.ycc" || -L "$ARTIFACT_DIR" ]]; then
+    _error 'Artifact writes refuse symlinked .gitignore, .ycc, or artifact directory'
+    return 1
+  fi
+  phys_root=$(CDPATH='' cd -- "$ARTIFACT_ROOT" >/dev/null 2>&1 && pwd -P) || phys_root=''
+  inside=$(git -C "$ARTIFACT_ROOT" rev-parse --is-inside-work-tree 2>/dev/null) || inside=''
+  git_root=$(git -C "$ARTIFACT_ROOT" rev-parse --show-toplevel 2>/dev/null) || git_root=''
+  if [[ "$inside" != true || -z "$git_root" || ( "$phys_root" != "$git_root" && "$phys_root" != "$git_root/"* ) ]]; then
+    _error 'Linear artifact writes require ARTIFACT_ROOT inside a Git work tree'
+    return 1
+  fi
+}
+
+# Write NUL-terminated `check-ignore -v -z` records for the cache probes to
+# OUT. With GIT_ROOT, only that work tree's .gitignore files are consulted: an
+# empty scratch Git dir drops .git/info/exclude and core.excludesFile=/dev/null
+# drops global excludes, so a non-repository parent rule (for example a global
+# `.ycc/`) cannot hide a deeper repository rule or negation.
+_artifact_probe_ignores() {
+  local out="$1" git_root="${2:-}" status=0 ignorecase
+  local -a git_args=(-C "$ARTIFACT_ROOT")
+  if [[ -n "$git_root" ]]; then
+    git init -q --bare --template= "${out}.git" >/dev/null 2>&1 || return 1
+    # The scratch Git dir detects case folding from TMPDIR; match the repo's.
+    ignorecase=$(git -C "$ARTIFACT_ROOT" config --type=bool core.ignorecase 2>/dev/null) || ignorecase=false
+    git_args+=(--git-dir="${out}.git" --work-tree="$git_root" -c core.excludesFile=/dev/null -c core.ignoreCase="$ignorecase")
+  fi
+  # check-ignore exits 1 when nothing matches; only >1 is an error.
+  printf '.ycc/artifacts/probe\0.ycc/artifacts/probe-dir/probe\0.ycc/artifacts/feat/cache\0' | git "${git_args[@]}" check-ignore -v -z --no-index --stdin >"$out" 2>/dev/null || status=$?
+  [[ "$status" -le 1 ]]
+}
+
+# 0 when FILE has a negated (!) line, 1 when not, >1 when unreadable. A leading
+# space makes `!` literal. A BOM is accepted on any line, broader than Git
+# (which skips it only at file start), so this fails safe.
+_artifact_has_negation() {
+  LC_ALL=C grep -qE $'^(\xef\xbb\xbf)?!' "$1"
+}
+
+# check-ignore -v reports only each probe's deciding pattern, so a negation in
+# a .gitignore under .ycc can go unreported. Scan working-tree files (without
+# following symlinks) and index blobs, since a tracked file deleted locally
+# still applies in a clone. Returns 0 when none, 2 when negated, 3 on failure.
+# OUT is a scratch path prefix.
+_artifact_ycc_negation() {
+  local out="$1" file entry mode hash rc
+  if [[ -d "${ARTIFACT_ROOT}/.ycc" ]]; then
+    find -P "${ARTIFACT_ROOT}/.ycc" -name .gitignore -type f -print0 >"${out}.tree" 2>/dev/null || return 3
+    while IFS= read -r -d '' file; do
+      rc=0; _artifact_has_negation "$file" || rc=$?
+      [[ "$rc" == 0 ]] && return 2
+      [[ "$rc" == 1 ]] || return 3
+    done <"${out}.tree"
+  fi
+  git -C "$ARTIFACT_ROOT" ls-files -s -z -- .ycc >"${out}.index" 2>/dev/null || return 3
+  # Entries are "<mode> <hash> <stage>\t<path>"; symlinks are never read.
+  while IFS= read -r -d '' entry; do
+    [[ "${entry##*/}" == .gitignore ]] || continue
+    read -r mode hash _ <<<"${entry%%$'\t'*}"
+    [[ "$mode" == 100644 || "$mode" == 100755 ]] || continue
+    git -C "$ARTIFACT_ROOT" cat-file blob "$hash" >"${out}.blob" 2>/dev/null || return 3
+    rc=0; _artifact_has_negation "${out}.blob" || rc=$?
+    [[ "$rc" == 0 ]] && return 2
+    [[ "$rc" == 1 ]] || return 3
+  done <"${out}.index"
+  return 0
+}
+
+# 0 when the negated pattern PAT (without `!`) may re-include REL, the path
+# from its .gitignore directory to .ycc/artifacts. Unanchored patterns, `\` or
+# `(` (Bash and Git globs differ there), bracket expressions spanning `/`
+# (segment splitting would cut them), and `**` once earlier segments match all
+# count; an anchored pattern counts unless a leading segment cannot match.
+_artifact_negation_relevant() {
+  local LC_ALL=C pat="${1%/}" rel="$2" pseg rseg
+  [[ "$pat" == */* ]] || return 0
+  [[ "$pat" != *[\\\(]* && "$pat" != *'['*'/'*']'* ]] || return 0
+  pat=${pat#/}
+  while [[ -n "$pat" && -n "$rel" ]]; do
+    pseg=${pat%%/*} rseg=${rel%%/*}
+    [[ "$pseg" != *'**'* ]] || return 0
+    # shellcheck disable=SC2053 # The gitignore segment is a glob.
+    [[ "$rseg" == $pseg ]] || return 1
+    if [[ "$pat" == */* ]]; then pat=${pat#*/}; else pat=''; fi
+    if [[ "$rel" == */* ]]; then rel=${rel#*/}; else rel=''; fi
+  done
+  return 0
+}
+
+# 0 when the negated pattern PAT (without `!`) may match the REL directory
+# itself, the only way to undo an earlier `.ycc/artifacts/` rule in the same
+# file. `\` or `(`, bracket expressions spanning `/`, and unanchored `**` match
+# conservatively.
+_artifact_negation_matches_dir() {
+  local LC_ALL=C pat="${1%/}" rel="$2" pseg rseg
+  [[ "$pat" != *[\\\(]* && "$pat" != *'['*'/'*']'* ]] || return 0
+  if [[ "$pat" != */* ]]; then
+    [[ "$pat" != *'**'* ]] || return 0
+    # shellcheck disable=SC2053 # The gitignore pattern is a glob.
+    [[ "${rel##*/}" == $pat ]]
+    return
+  fi
+  pat=${pat#/}
+  while [[ -n "$pat" && -n "$rel" ]]; do
+    pseg=${pat%%/*} rseg=${rel%%/*}
+    [[ "$pseg" != *'**'* ]] || return 0
+    # shellcheck disable=SC2053 # The gitignore segment is a glob.
+    [[ "$rseg" == $pseg ]] || return 1
+    if [[ "$pat" == */* ]]; then pat=${pat#*/}; else pat=''; fi
+    if [[ "$rel" == */* ]]; then rel=${rel#*/}; else rel=''; fi
+  done
+  [[ -z "$pat" && -z "$rel" ]]
+}
+
+# Print "BROAD STRICT": the numbers of FILE's last `!` line relevant to REL and
+# last one matching the REL directory itself (0 if none); fails when
+# unreadable. A BOM is accepted on any line, as in _artifact_has_negation.
+# FOLD=true matches case-insensitively; call only in a subshell.
+_artifact_last_negation() {
+  local file="$1" rel="$2" fold="${3:-false}" line n=0 last=0 strict=0
+  [[ -r "$file" ]] || return 1
+  [[ "$fold" != true ]] || shopt -s nocasematch
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    n=$((n + 1))
+    line=${line#$'\xef\xbb\xbf'}
+    [[ "$line" == '!'* ]] || continue
+    line=${line%$'\r'}
+    while [[ "$line" == *' ' && "$line" != *'\ ' ]]; do line=${line% }; done
+    if _artifact_negation_relevant "${line#!}" "$rel"; then last=$n; fi
+    if _artifact_negation_matches_dir "${line#!}" "$rel"; then strict=$n; fi
+  done <"$file" || return 1
+  printf '%s %s\n' "$last" "$strict"
+}
+
+# Scan repository .gitignore files from GIT_ROOT down to ARTIFACT_ROOT, in the
+# working tree (regular files only; Git skips symlinks) and the index, for `!`
+# lines that may re-include .ycc/artifacts. Prints the last line number in the
+# working-tree ${ARTIFACT_ROOT}/.gitignore whose `!` can match the
+# .ycc/artifacts directory itself (0 if none). Returns 0 when any file has a
+# relevant `!` line, 1 when none, 3 on failure. OUT is a scratch path prefix.
+_artifact_chain_negation() {
+  local out="$1" git_root="$2" phys_root dir sub path entry mode hash last strict fold found=1 root_last=0
+  local -a paths=()
+  phys_root=$(CDPATH='' cd -- "$ARTIFACT_ROOT" >/dev/null 2>&1 && pwd -P) || return 3
+  fold=$(git -C "$ARTIFACT_ROOT" config --type=bool core.ignorecase 2>/dev/null) || fold=false
+  dir="$phys_root"
+  while :; do
+    sub=${dir#"$git_root"}; sub=${sub#/}
+    paths+=("${sub:+$sub/}.gitignore")
+    [[ "$dir" != "$git_root" ]] || break
+    [[ "$dir" == "$git_root"/* ]] || return 3
+    dir=$(dirname "$dir")
+  done
+  sub=${phys_root#"$git_root"}; sub=${sub#/}; sub=${sub:+$sub/}
+  for path in "${paths[@]}"; do
+    [[ -f "${git_root}/${path}" && ! -L "${git_root}/${path}" ]] || continue
+    last=$(_artifact_last_negation "${git_root}/${path}" "${sub#"${path%.gitignore}"}.ycc/artifacts" "$fold") || return 3
+    strict=${last#* } last=${last%% *}
+    [[ "$last" == 0 ]] || found=0
+    [[ "$path" != "${sub}.gitignore" ]] || root_last=$strict
+  done
+  git --literal-pathspecs -C "$git_root" ls-files -s -z -- "${paths[@]}" >"${out}.index" 2>/dev/null || return 3
+  # Entries are "<mode> <hash> <stage>\t<path>"; symlinks are never read.
+  while IFS= read -r -d '' entry; do
+    path=${entry#*$'\t'}
+    read -r mode hash _ <<<"${entry%%$'\t'*}"
+    [[ "$mode" == 100644 || "$mode" == 100755 ]] || continue
+    git -C "$git_root" cat-file blob "$hash" >"${out}.blob" 2>/dev/null || return 3
+    last=$(_artifact_last_negation "${out}.blob" "${sub#"${path%.gitignore}"}.ycc/artifacts" "$fold") || return 3
+    [[ "${last%% *}" == 0 ]] || found=0
+  done <"${out}.index"
+  printf '%s\n' "$root_last"
+  return "$found"
+}
+
+# Coverage check (never edits the repository; uses TMPDIR scratch): 0 means
+# present, 1 means append, 2 means a negated rule makes it unsafe, 3 means the
+# ignore probe or a .gitignore scan failed.
+_artifact_gitignore_present() {
+  local file="${ARTIFACT_ROOT}/.gitignore" ignore_source ignore_pattern git_root count scratch made status=0 root_neg short=0
+  git_root=$(git -C "$ARTIFACT_ROOT" rev-parse --show-toplevel) || return 1
+  made=$(mktemp -d "${TMPDIR:-/tmp}/ycc-ignore.XXXXXX") || return 3
+  # Git resolves --git-dir after -C, so the scratch path must be absolute.
+  scratch=$(CDPATH='' cd -- "$made" >/dev/null && pwd -P) || { rm -rf "$made"; return 3; }
+  _artifact_ycc_negation "${scratch}/ycc" || status=$?
+  if [[ "$status" != 0 ]]; then
+    rm -rf "$scratch"
+    return "$status"
+  fi
+  if ! _artifact_probe_ignores "${scratch}/all" || ! _artifact_probe_ignores "${scratch}/repo" "$git_root"; then
+    rm -rf "$scratch"
+    return 3
+  fi
+  # Any negated (!) match that re-includes a probed cache path is unsafe to
+  # override and refuses, from repository, info, or global excludes alike.
+  # Only committed-style ignores within this repo are portable, so coverage is
+  # counted from repository .gitignore files alone; global or info excludes
+  # never count and the repository rule is appended. A non-negated repo rule
+  # must cover direct, nested, and representative feature-cache probes so
+  # partial exceptions cannot leave later cache files visible.
+  # Fields are NUL-terminated: source, line number (discarded into _), pattern,
+  # and path.
+  while IFS= read -r -d '' _ && IFS= read -r -d '' _ && IFS= read -r -d '' ignore_pattern && IFS= read -r -d '' _; do
+    [[ "$ignore_pattern" != '!'* ]] || { rm -rf "$scratch"; return 2; }
+  done <"${scratch}/all"
+  count=0
+  while IFS= read -r -d '' ignore_source && IFS= read -r -d '' _ && IFS= read -r -d '' ignore_pattern && IFS= read -r -d '' _; do
+    [[ "$ignore_pattern" != '!'* ]] || { rm -rf "$scratch"; return 2; }
+    [[ "$ignore_source" == /* ]] || ignore_source="${git_root}/${ignore_source}"
+    ignore_source="$(CDPATH='' cd -- "$(dirname "$ignore_source")" >/dev/null 2>&1 && pwd -P)/${ignore_source##*/}"
+    [[ "$ignore_source" == "$git_root/"* && "${ignore_source##*/}" == .gitignore ]] || continue
+    count=$((count + 1))
+  done <"${scratch}/repo"
+  # check-ignore misses rules that re-include paths beyond the probes, so a
+  # relevant `!` line from the Git root down voids probe coverage. The exact
+  # rule still counts when it follows every `!` line in its own file that can
+  # match the .ycc/artifacts directory itself: that directory rule excludes
+  # the cache, and Git cannot re-include files under an excluded directory.
+  status=0
+  root_neg=$(_artifact_chain_negation "${scratch}/chain" "$git_root") || status=$?
+  rm -rf "$scratch"
+  [[ "$status" -le 1 ]] || return 3
+  if [[ -f "$file" ]]; then
+    short=$(grep -anxE '/?\.ycc/artifacts/?' "$file") || short=''
+    short=${short##*$'\n'}; short=${short%%:*}
+  fi
+  [[ "${short:-0}" -gt "$root_neg" ]] && return 0
+  [[ "$status" == 1 && "$count" == 3 ]] && return 0
+  return 1
+}
+
+ensure_artifact_gitignore() {
+  [[ -n "${ARTIFACT_STORE:-}" ]] || resolve_artifact_store || return 1
+  [[ "$ARTIFACT_STORE" == linear ]] || return 0
+  _artifact_require_git_root || return 1
+  local file="${ARTIFACT_ROOT}/.gitignore" last_byte status=0
+  _artifact_gitignore_present || status=$?
+  case "$status" in
+    0) return 0 ;;
+    2) _error 'A negated (!) ignore rule re-includes .ycc/artifacts/ paths; refusing to override it'; return 1 ;;
+    3) _error 'Cannot check .ycc/artifacts/ ignore coverage (git check-ignore, .gitignore scan, or TMPDIR scratch failed)'; return 1 ;;
+  esac
+  if [[ -s "$file" ]]; then
+    # Command substitution strips a final newline, leaving an empty last byte.
+    last_byte=$(tail -c 1 "$file") || return 1
+    if [[ -n "$last_byte" ]]; then printf '\n' >>"$file" || return 1; fi
+  fi
+  printf '.ycc/artifacts/\n' >>"$file"
+}
+
+ensure_artifact_dir() {
+  [[ -n "${ARTIFACT_DIR:-}" ]] || resolve_artifact_store || return 1
+  # Check the ignore rule first so a refusal leaves no empty cache behind.
+  ensure_artifact_gitignore || return 1
+  mkdir -p "$ARTIFACT_DIR"
+}
+
+# Local --ensure creates only what the resolved artifact needs: the parent
+# directory of a file kind, or the directory itself for a directory kind.
+# Linear mode keeps the cache directory and its .gitignore rule.
+_artifact_ensure_for() {
+  local kind="$1" artifact_path="$2"
+  if [[ "$ARTIFACT_STORE" == linear ]]; then
+    ensure_artifact_dir
+    return
+  fi
+  case "$kind" in
+    research-dir|feature-dir|prp-research|deep-research) mkdir -p -- "$artifact_path" ;;
+    *) mkdir -p -- "$(dirname "$artifact_path")" ;;
+  esac
+}
+
+_artifact_store_cli() {
+  local shell_output=0 ensure=0 kind='' slug='' kind_set=0 slug_set=0 key artifact_path=''
+  local -a args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help|-h)
+        printf '%s\n' 'Usage: resolve-artifact-store.sh [--store=linear|local] [--debug] [--shell] [--kind=<kind> --slug=<slug>] [--ensure] [start-dir]' \
+          'Resolve paths and Linear hints without writing files. Default output: ARTIFACT_DIR.' \
+          '--kind and --slug print an artifact path. --ensure creates what that path needs before printing' \
+          '(linear: the cache directory and its .gitignore rule; local: the parent directory, or the directory itself for directory kinds).' \
+          '--ensure without --kind and --slug creates ARTIFACT_DIR.' \
+          'Kinds: prd spec prp-plan feature-spec parallel-plan shared report prp-report code-report research-dir' \
+          'research-<lens> analysis-<name> prp-research deep-research blueprint feature-dir' \
+          'review-<id> review-fixes-<id> (id: pr-<N>, local-<YYYYMMDD-HHMMSS>, quick-<YYYYMMDD-HHMMSS>)' \
+          'pr-autofix-report-<N>-<YYYY-MM-DD>T<HHMMSS>Z.' \
+          '--shell prints shell-quoted ARTIFACT_* assignments. PLANS_DEBUG=1 enables debug output.'
+        return 0
+        ;;
+      --debug) export PLANS_DEBUG=1 ;;
+      --shell) shell_output=1 ;;
+      --ensure) ensure=1 ;;
+      --kind=*) kind=${1#--kind=}; kind_set=1 ;;
+      --slug=*) slug=${1#--slug=}; slug_set=1 ;;
+      *) args+=("$1") ;;
+    esac
+    shift
+  done
+  if [[ "$kind_set" != "$slug_set" ]]; then
+    _error 'Artifact path output requires both --kind and --slug'
+    return 1
+  fi
+  resolve_artifact_store ${args[@]+"${args[@]}"} || return 1
+  if [[ "$kind_set" == 1 ]]; then
+    artifact_path=$(get_artifact_path "$kind" "$slug") || return 1
+  fi
+  if [[ "$ensure" == 1 ]]; then
+    if [[ "$kind_set" == 1 ]]; then
+      _artifact_ensure_for "$kind" "$artifact_path" || return 1
+    else
+      ensure_artifact_dir || return 1
+    fi
+  fi
+  if [[ "$kind_set" == 1 ]]; then
+    printf '%s\n' "$artifact_path"
+  elif [[ "$shell_output" == 1 ]]; then
+    for key in ARTIFACT_STORE ARTIFACT_STORE_SOURCE ARTIFACT_ROOT ARTIFACT_DIR \
+      ARTIFACT_LINEAR_WORKSPACE ARTIFACT_LINEAR_TEAM ARTIFACT_LINEAR_PROJECT \
+      ARTIFACT_LINEAR_LABEL ARTIFACT_LINEAR_HINT; do
+      printf '%s=%q\n' "$key" "${!key}"
+    done
+  else
+    printf '%s\n' "$ARTIFACT_DIR"
+  fi
+}
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  _artifact_store_cli "$@"
+else
+  _ARTIFACT_AUTO_RESOLVE=1 resolve_artifact_store || :
+fi

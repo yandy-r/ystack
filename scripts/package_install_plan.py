@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass
 from build_package_graph import package_sets
 from package_model import PackageModel, PackageModelError, load_package_model
 
-TARGETS = ("claude", "cursor", "codex", "opencode", "agents", "omp", "antigravity")
+TARGETS = ("claude", "cursor", "codex", "opencode", "agents", "omp", "antigravity", "muse")
 STEP_ORDER = ("base", "dedupe", "agents", "settings", "rules", "mcp", "hooks")
 CARRIERS: dict[str, dict[str, str]] = {
     "claude": {
@@ -74,6 +74,16 @@ CARRIERS: dict[str, dict[str, str]] = {
     # owned copy in ~/.gemini/config/plugins/. Hooks never get a carrier (ycc's hooks are
     # Claude-specific); the AGENTS.md link (instructions) is opt-in via --rules, like OMP.
     "antigravity": {
+        "skills": "base",
+        "agents": "base",
+        "shared": "base",
+        "mcp": "base",
+        "rules": "base",
+    },
+    # Muse: ycc, ycc-mcp and ycc-rules are each an owned copy registered with `muse plugins
+    # install`. Hooks never get a carrier (no WorktreeCreate event); the AGENTS.md link
+    # (instructions) is opt-in via --rules.
+    "muse": {
         "skills": "base",
         "agents": "base",
         "shared": "base",
@@ -163,8 +173,8 @@ def plan_install(
                 else:
                     # The installer-fallback package never delivers hooks or MCP servers.
                     selected = set(pair.install_set) - ({"hooks", "mcp"} - set(pair.provides))
-                    if target in ("omp", "opencode", "antigravity"):
-                        # OMP, opencode and Antigravity fallback payloads (instructions, settings) are opt-in
+                    if target in ("omp", "opencode", "antigravity", "muse"):
+                        # OMP, opencode, Antigravity and Muse fallback payloads (instructions, settings) are opt-in
                         # via --rules/--settings, never package-implied.
                         selected &= set(pair.provides)
                     components.update(selected)

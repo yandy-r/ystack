@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # audit-install-assumptions.sh — validate install-path assumptions for each
-# generated compatibility target (Claude, Cursor, Codex, opencode, omp, pi, antigravity).
+# generated compatibility target (Claude, Cursor, Codex, opencode, omp, pi, antigravity, muse).
 #
 # Flags:
-#   --target=<claude|cursor|codex|opencode|omp|pi|antigravity|all>  (default: all)
+#   --target=<claude|cursor|codex|opencode|omp|pi|antigravity|muse|all>  (default: all)
 #   --format=<human|json>                        (default: human)
 #   --help, -h                                   print usage and exit 0
 #
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 usage() { cat <<'EOF'
-Usage: audit-install-assumptions.sh [--target=<claude|cursor|codex|opencode|omp|pi|antigravity|all>]
+Usage: audit-install-assumptions.sh [--target=<claude|cursor|codex|opencode|omp|pi|antigravity|muse|all>]
                                     [--format=<human|json>] [--help|-h]
                                     [repo-root]
 
@@ -42,7 +42,7 @@ for arg in "$@"; do
       ;;
   esac
 done
-case "$TARGET" in all|claude|cursor|codex|opencode|omp|pi|antigravity) ;;
+case "$TARGET" in all|claude|cursor|codex|opencode|omp|pi|antigravity|muse) ;;
   *) echo "audit-install-assumptions.sh: unknown --target: $TARGET" >&2; usage >&2; exit 2 ;; esac
 case "$FORMAT" in human|json) ;;
   *) echo "audit-install-assumptions.sh: unknown --format: $FORMAT" >&2; usage >&2; exit 2 ;; esac
@@ -442,6 +442,45 @@ run_antigravity_checks() {
 }
 
 # ---------------------------------------------------------------------------
+# Muse checks
+# ---------------------------------------------------------------------------
+run_muse_checks() {
+  local mdir="${REPO_ROOT}/packages/muse" pkg manifest hits
+  # MU1: ycc carries the claude-compatible manifest (the only family that imports
+  # agents) and no native one (which would win and hide them); ycc-mcp the native one.
+  if [[ ! -d "$mdir" ]]; then
+    record "muse" "MU1" "FAIL" "${mdir} does not exist (run ./scripts/sync.sh --only muse)"; return
+  fi
+  for pkg in ycc:.claude-plugin ycc-mcp:.muse-plugin ycc-rules:.muse-plugin; do
+    manifest="${mdir}/${pkg%%:*}/${pkg#*:}/plugin.json"
+    if ! json_ok "$manifest"; then
+      record "muse" "MU1" "FAIL" "${manifest} is missing or not valid JSON"; continue
+    fi
+    if [[ "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("name",""))' "$manifest")" != "${pkg%%:*}" ]]; then
+      record "muse" "MU1" "FAIL" "${manifest} name must be ${pkg%%:*}"; continue
+    fi
+    record "muse" "MU1" "PASS" "${pkg%%:*}"
+  done
+  if [[ -e "${mdir}/ycc/.muse-plugin/plugin.json" ]]; then
+    record "muse" "MU1" "FAIL" "${mdir}/ycc/.muse-plugin/plugin.json would hide the ycc agents"
+  fi
+  # MU2: skills and agents carry no Claude plugin-root variable (Muse caches by digest).
+  hits="$(grep -rl --include=SKILL.md --include='*.md' 'CLAUDE_PLUGIN_ROOT' "${mdir}/ycc/skills"/*/SKILL.md "${mdir}/ycc/agents" 2>/dev/null || true)"
+  if [[ -n "$hits" ]]; then
+    record "muse" "MU2" "FAIL" "CLAUDE_PLUGIN_ROOT left in: $(tr '\n' ' ' <<<"$hits")"
+  else
+    record "muse" "MU2" "PASS" ""
+  fi
+  # MU3: agent frontmatter avoids what Muse refuses (an off-palette color) or cannot project (Glob).
+  hits="$(grep -lE '^(color:|  - Glob$)' "${mdir}/ycc/agents"/*.md 2>/dev/null || true)"
+  if [[ -n "$hits" ]]; then
+    record "muse" "MU3" "FAIL" "color or Glob in: $(tr '\n' ' ' <<<"$hits")"
+  else
+    record "muse" "MU3" "PASS" ""
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
 case "$TARGET" in
@@ -452,7 +491,8 @@ case "$TARGET" in
   omp)      run_omp_checks ;;
   pi)       run_pi_checks ;;
   antigravity) run_antigravity_checks ;;
-  all)      run_claude_checks; run_cursor_checks; run_codex_checks; run_opencode_checks; run_omp_checks; run_pi_checks; run_antigravity_checks ;;
+  muse)     run_muse_checks ;;
+  all)      run_claude_checks; run_cursor_checks; run_codex_checks; run_opencode_checks; run_omp_checks; run_pi_checks; run_antigravity_checks; run_muse_checks ;;
 esac
 
 OVERALL_RC=0

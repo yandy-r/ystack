@@ -37,7 +37,7 @@
         "effort": "high",
         "textVerbosity": "low"
       },
-      "$agentsComment": "Per-agent model pins emitted as opencode.json `agents`. Keys must cover every ycc/agents/*.md basename plus the built-in subagents general and explore — no more, no less; scripts/generate_opencode_plugin.py fails fast on a gap or a stale key. Values are full OpenCode V2 'provider/model' references (https://opencode.ai/v2/docs/models); bare model names are rejected.",
+      "$agentsComment": "Per-agent model pins emitted as opencode.json `agents`. Keys must cover every ycc/agents/*.md basename plus the built-in subagents general and explore \u2014 no more, no less; scripts/generate_opencode_plugin.py fails fast on a gap or a stale key. Values are full OpenCode V2 'provider/model' references (https://opencode.ai/v2/docs/models); bare model names are rejected.",
       "agents": {
         "general": "openai/gpt-5.6-sol",
         "explore": "openai/gpt-5.6-sol",
@@ -143,6 +143,14 @@
         "opus": "pro",
         "sonnet": "inherit",
         "haiku": "flash",
+        "inherit": "inherit"
+      }
+    },
+    "muse": {
+      "agentModels": {
+        "opus": "inherit",
+        "sonnet": "inherit",
+        "haiku": "inherit",
         "inherit": "inherit"
       }
     }
