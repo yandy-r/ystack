@@ -40,6 +40,10 @@
 - **Stdio environment:** Muse starts stdio servers with `HOME`, `PATH`, `USER`, `LANG`, `LOGNAME`, `SHELL`, `PWD` and the plugin variables (`MUSE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT`, `PLUGIN_ROOT`, `MUSE_PLUGIN_DATA_DIR`, `MUSE_SESSION_ID`). It runs the launcher by absolute path from the workspace cwd **[LIVE]**. A mise/asdf shim then needs a global tool version, or the server exits ("transport closed unexpectedly").
 - **Catalog budget:** with ycc and ycc-rules installed (108 skills), Muse trims its 32 KB `skills_catalog` by compacting 85 descriptions. No skill is omitted **[LIVE]**.
 
+## Real-profile check (2026-11-28)
+
+`./install.sh install --target muse` into the maintainer's real Muse profile, then one session: the `ycc-shared` helper resolved, `ycc/code-finder` was accepted and answered, and context7 returned `/reactjs/react.dev` **[LIVE]**. The package rows are no longer experimental.
+
 ## Remaining checks
 
 - Re-run the live checks above on each new Muse release, along with `muse plugins validate` (below).
